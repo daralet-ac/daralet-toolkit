@@ -229,6 +229,9 @@ namespace DaraletPlayer.Ui {
                     settings.Data.HideUiKey = new HotkeyBinding(key, Hotkeys.Ctrl, Hotkeys.Shift, Hotkeys.Alt);
                     settings.Changed();
                 }
+                else {
+                    EscapeCloses.Taken();
+                }
 
                 capturing = false;
 

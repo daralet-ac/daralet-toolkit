@@ -542,6 +542,13 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   or reloading shows it again. Its key is read straight from Windows on Decal's RenderFrame, not through
   `Hotkeys.Pressed`, which only runs when some window draws, and with every window hidden nothing would. `/dap hideui`
   toggles it and `/dap showui` only shows. `[hide-ui]` lines in log.txt.
+- **Escape closes windows** (`Ui/EscapeCloses.cs`, the Config tab's Escape key section, `SettingsData.EscapeClosesWindows`,
+  on to start): the /dap window and the Inventory, Bank (a Use of the bank, as its X), Character and Quests windows, all at
+  once; Target, Fellowship, Loot, hotbars, map and the rest stay (the user's call). Read from Windows on Decal's
+  RenderFrame like Hide game UI's key, and acted on a frame later, once an ImGui frame has run: what uses Escape itself (a
+  tool up, the hotbars' key capture, Bind keys and Move, Hide game UI's key capture) reads it in that frame, in whatever
+  order the windows draw, and calls `EscapeCloses.Taken`. A press with the chat bar, a text box or a popup menu active on
+  that frame or the one before does nothing, as Escape's job there is leaving it.
 
 - **Arena and Leaderboards tabs** (`Ui/ArenaTab.cs`, `Ui/LeaderboardsTab.cs`, `Feed/ArenaCommands.cs`,
   `Feed/Leaderboards.cs`): the leaderboards are the website's (`leaderboards.js`), read from `/api/leaderboards/...` with
@@ -607,6 +614,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   The server puts the new stack at the place sent, but Decal gives a new item no place of its own, so the lists showed it
   by the old stack or first: once it shows up it's moved there again with `MoveItem` (`StackSplit.Step`), which Decal
   follows. The menu line goes by `StackCount` alone: Decal doesn't always know `StackMax` without an appraisal.
+  A number typed in the stack bar's box (`0x100001A3`) only counts once the box loses focus (gmToolbarUI reads it on
+  message 0x2F into the split size at `0x81D7EC`, which the slider sets straight away), and a click on an ImGui window never
+  takes focus from it, so a drag (and Drag them) first does what a click in the game would: `ClientElements.Unfocus`,
+  `UIElementManager::SetFocusElement(null)` (`0x45B970`) while the box is `m_focusElement` (`+0x328`).
   `[split]` lines in log.txt. **Onto the game's shortcut bar** (`Ui/GameShortcuts.cs`): let go over one of its 18 slots
   (`0x100001A7`-`AF`, `0x100006B7`-`BF`, the order `gmToolbarUI::InitShortcutArray` lists them), an item goes there, as
   `gmToolbarUI::HandleDropRelease` does it: `RemoveShortcutInSlotNum`, `CreateShortcutToItem(item, slot, 1, 0)`, and what

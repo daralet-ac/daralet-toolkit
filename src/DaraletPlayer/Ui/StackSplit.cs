@@ -38,6 +38,13 @@ namespace DaraletPlayer.Ui {
                 return 0;
             }
 
+            // a number typed in the stack bar's box only counts once the box loses focus (gmToolbarUI takes it then, on
+            // message 0x2F), which a click on a plugin window never makes it do: the drag would carry the slider's old
+            // number, the whole stack. So the drag takes focus from it, as a drag in the game's pack would.
+            if (ClientElements.Unfocus(ClientElements.StackSizeEntry)) {
+                PluginCore.LogFile($"[split] took the typed amount from the stack box: {actions.SelectedStackCount}");
+            }
+
             var stack = StackOf(id);
             var count = actions.SelectedStackCount;
             return count > 0 && count < stack ? count : 0;
@@ -64,6 +71,8 @@ namespace DaraletPlayer.Ui {
                 actions.SelectItem(id);
             }
 
+            // first, or the box would put its own number back when it next loses focus (see Amount)
+            ClientElements.Unfocus(ClientElements.StackSizeEntry);
             actions.SelectedStackCount = amount;
         }
 

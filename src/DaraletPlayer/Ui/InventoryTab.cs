@@ -64,6 +64,8 @@ namespace DaraletPlayer.Ui {
 
         public FloatingWindow CarriedWindow => carriedWindow;
 
+        public FloatingWindow BankWindow => bankWindow;
+
         /// <summary>Bank window is on, and the server can do it.</summary>
         private bool UsesWindow => settings.Data.BankWindow && feed.Supports(PlayerFeed.KindBankWindow);
 

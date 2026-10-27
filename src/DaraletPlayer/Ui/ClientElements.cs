@@ -36,6 +36,12 @@ namespace DaraletPlayer.Ui {
         public const uint VendorSellingTab = 0x100000BB;
         public const uint VendorSellingList = 0x100000CE;
 
+        /// <summary>The number box beside the toolbar's stack slider (gmToolbarUI's m_pStackSizeEntryBox).</summary>
+        public const uint StackSizeEntry = 0x100001A3;
+
+        /// <summary>UIElementManager.m_focusElement, as AcClient lays it out: the element typed into.</summary>
+        private const int FocusOffset = 0x328;
+
         /// <summary>Set once a call has failed: logged once, and nothing is looked up again until the next start.</summary>
         private static bool broken;
 
@@ -109,6 +115,39 @@ namespace DaraletPlayer.Ui {
             catch (Exception ex) {
                 broken = true;
                 PluginCore.Log("The game's panels can't be reached, so the plugin's lookups are off until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Takes the keyboard from the element if it has it, as a click anywhere else in the game does:
+        /// UIElementManager::SetFocusElement(null), which tells the element it's lost focus (message 0x2F, 0). A click on
+        /// an ImGui window never reaches the game, so a box typed into keeps it. True when it had it.
+        /// </summary>
+        public static unsafe bool Unfocus(uint id) {
+            if (broken) {
+                return false;
+            }
+
+            try {
+                var manager = *(byte**)ManagerAddress;
+
+                if (manager == null) {
+                    return false;
+                }
+
+                var focus = *(void**)(manager + FocusOffset);
+
+                if (focus == null || focus != GetElement(manager, id)) {
+                    return false;
+                }
+
+                ((delegate* unmanaged[Thiscall]<void*, void*, void>)0x45B970)(manager, null);
+                return true;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be reached, so the plugin's lookups are off until it next starts: " + ex);
                 return false;
             }
         }

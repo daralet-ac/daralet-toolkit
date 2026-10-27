@@ -29,6 +29,7 @@ namespace DaraletPlayer.Ui {
         private readonly LeaderboardsTab leaderboardsTab;
         private readonly ToolbarButtons toolbarButtons;
         private readonly HideGameUi hideGameUi;
+        private readonly EscapeCloses escapeCloses;
         private readonly MarketApi api = new MarketApi();
 
         /// <summary>
@@ -60,6 +61,9 @@ namespace DaraletPlayer.Ui {
             leaderboardsTab = new LeaderboardsTab(feed, api);
             toolbarButtons = new ToolbarButtons(settings, icons, inventoryTab.CarriedWindow, questsTab.Window,
                 worldTab.MapWindow, characterTab.Window);
+            // the hud is made below: these read the field when called
+            escapeCloses = new EscapeCloses(settings, () => hud.Visible, () => hud.Visible = false,
+                inventoryTab.CarriedWindow, inventoryTab.BankWindow, characterTab.Window, questsTab.Window);
 
             Appraisal.Start(feed, settings, icons);
 
@@ -251,7 +255,7 @@ namespace DaraletPlayer.Ui {
 
             // the game's UI back first, whatever fails after
             var pieces = new IDisposable[] {
-                hideGameUi, hud, toolbarButtons, fellowshipTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
+                hideGameUi, escapeCloses, hud, toolbarButtons, fellowshipTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
                 lootTab, api, icons,
             };
 

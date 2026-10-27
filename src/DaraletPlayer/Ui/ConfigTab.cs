@@ -72,6 +72,7 @@ namespace DaraletPlayer.Ui {
 
             ImGui.Spacing();
             RenderText();
+            RenderEscape();
 
             ImGui.Spacing();
             clientUiOverride.Render();
@@ -113,6 +114,26 @@ namespace DaraletPlayer.Ui {
                 SetTextScale(1);
             }
             Widgets.Tip("Puts the text size back to 100%.");
+
+            ImGui.EndTable();
+        }
+
+        private void RenderEscape() {
+            Form.Section("Escape key");
+
+            if (!Form.BeginForm("config-escape")) {
+                return;
+            }
+
+            Form.Label("Windows", "What Escape does to this plugin's windows.");
+
+            if (Form.Check("Escape closes windows", ref settings.Data.EscapeClosesWindows, "Escape closes this window and "
+                + "the Inventory, Bank, Character and Quests windows (closing the Bank window closes the bank). The Target, "
+                + "Fellowship, Loot, hotbar, map and other windows that follow what you're doing stay. Escape does only its "
+                + "other job while you're typing in chat or a text box, have a menu open, are using a tool on something or "
+                + "are setting a key. The game hears Escape too.")) {
+                settings.Changed();
+            }
 
             ImGui.EndTable();
         }

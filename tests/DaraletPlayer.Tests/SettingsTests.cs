@@ -57,6 +57,7 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual(2, loaded.Data.ThreatRows);
             Assert.IsTrue(loaded.Data.TargetShowThreat);
             Assert.IsTrue(loaded.Data.FellowshipShowMana);
+            Assert.IsTrue(loaded.Data.EscapeClosesWindows);
             Assert.IsNotNull(loaded.Data.Windows);
             Assert.IsTrue(loaded.Window("new").Visible);
         }

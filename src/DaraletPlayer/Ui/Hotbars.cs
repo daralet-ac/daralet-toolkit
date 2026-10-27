@@ -263,6 +263,9 @@ namespace DaraletPlayer.Ui {
                         captureInto(binding);
                         settings.Changed();
                     }
+                    else {
+                        EscapeCloses.Taken();
+                    }
 
                     captureInto = null;
                     continue;
@@ -271,6 +274,7 @@ namespace DaraletPlayer.Ui {
                 if (bindMode) {
                     if (key == Feed.Keys.Escape) {
                         BindMode = false;
+                        EscapeCloses.Taken();
                     }
                     else if (hoveredFrame >= ImGui.GetFrameCount() - 1 && hovered.Window != null) {
                         Data.Forget(binding);
@@ -282,7 +286,11 @@ namespace DaraletPlayer.Ui {
                 }
 
                 if (key == Feed.Keys.Escape) {
-                    moving = null;
+                    if (moving != null) {
+                        moving = null;
+                        EscapeCloses.Taken();
+                    }
+
                     continue;
                 }
 

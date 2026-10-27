@@ -148,6 +148,19 @@ namespace DaraletPlayer.Ui {
         /// <summary>Shown only while in use: always for some windows, by choice (Only when needed) for the rest.</summary>
         private bool OnlyInUse => inUse != null && (alwaysOnlyInUse || Placement.OnlyInUse);
 
+        /// <summary>Whether it's on screen now.</summary>
+        public bool Shown => hud.Visible;
+
+        /// <summary>What its close button does: Close for a window with onClose, otherwise hidden like unticking it.</summary>
+        public void Dismiss() {
+            if (onClose != null) {
+                Close();
+                return;
+            }
+
+            Visible = false;
+        }
+
         /// <summary>Closes the window for what it's showing now (onClose); it stays away until it shows something else.</summary>
         public void Close() {
             closedFor = inUse?.Invoke();
@@ -538,7 +551,7 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>The window's own close button: Close for a window with onClose, otherwise hidden like unticking it.</summary>
+        /// <summary>The window's own close button.</summary>
         private void Hud_OnHide(object sender, EventArgs e) {
             try {
                 // hidden by Core_RenderFrame or Close, not the close button
@@ -546,12 +559,7 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
-                if (onClose != null) {
-                    Close();
-                    return;
-                }
-
-                Visible = false;
+                Dismiss();
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);

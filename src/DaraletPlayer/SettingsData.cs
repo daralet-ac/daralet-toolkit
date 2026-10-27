@@ -132,6 +132,9 @@ namespace DaraletPlayer {
         /// <summary>Hiding the game's UI leaves the plugin's own windows showing.</summary>
         [DataMember(Name = "hideUiKeepPluginWindows")] public bool HideUiKeepPluginWindows;
 
+        /// <summary>Escape closes the /dap, Inventory, Bank, Character and Quests windows (EscapeCloses).</summary>
+        [DataMember(Name = "escapeClosesWindows")] public bool EscapeClosesWindows;
+
         [DataMember(Name = "loot")] public LootData Loot;
 
         /// <summary>The hotbars (the Combat tab's Hotbars): their layout, looks and hotkeys, and each character's items.</summary>
@@ -214,6 +217,7 @@ namespace DaraletPlayer {
             Hotbars = new HotbarData();
             OneClickHeal = true;
             LfgChatLinks = true;
+            EscapeClosesWindows = true;
             // F1: the game ignores Ctrl and Shift on its own keys (Ctrl+Shift+F12 opened the inventory, any S stopped running)
             HideUiKey = new HotkeyBinding(0x70);
         }
