@@ -220,14 +220,15 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>A paperdoll square as a place to drop an item: it's worn, as a double-click in the game would.</summary>
-        private unsafe void EquipTarget(uint slotMask) {
+        private unsafe void EquipTarget(EquipSlot slot) {
             if (!ImGui.BeginDragDropTarget()) {
                 return;
             }
 
+            var slotMask = slot.Mask;
             var held = dragged == 0 ? null : CoreManager.Current.WorldFilter[dragged];
             var equipable = held == null ? 0 : unchecked((uint)held.Values(LongValueKey.EquipableSlots, 0));
-            var allowed = (equipable & slotMask) != 0;
+            var allowed = EquipSlots.Fits(slot, equipable);
 
             if (Accepted(allowed, $"paperdoll square 0x{slotMask:X8}") && dragged != 0) {
                 var item = CoreManager.Current.WorldFilter[dragged];
@@ -376,7 +377,7 @@ namespace DaraletPlayer.Ui {
             }
 
             var item = CoreManager.Current.WorldFilter[itemId];
-            var merge = item != null && target.Name == item.Name && (target.Stack > 1 || item.Values(LongValueKey.StackCount, 1) > 1);
+            var merge = item != null && target.Name == item.Name && (target.Stack > 1 || StackText.FromDecal(item.Values(LongValueKey.StackCount, 1)) > 1);
             var amount = StackSplit.Amount(itemId);
 
             if (amount > 0 && merge) {

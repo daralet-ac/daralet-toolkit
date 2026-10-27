@@ -37,6 +37,12 @@ namespace DaraletPlayer.Feed {
             return "/bank deposit " + Clean(what);
         }
 
+        /// <summary>A pack tag of its own: /bank deposit packs empties the pack, and withdrawals never fill it.</summary>
+        public const string DepositTag = "deposit";
+
+        /// <summary>A pack tag of its own: deposits of a kind and /sort leave the pack alone.</summary>
+        public const string KeepTag = "keep";
+
         /// <summary>/bank deposit packs: empties the packs you carry inscribed "deposit".</summary>
         public const string DepositPacks = "/bank deposit packs";
 

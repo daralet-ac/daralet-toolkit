@@ -263,7 +263,7 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>
         /// An icon's texture, made the first time it's asked for. With an outline colour, the icon's white outline is
-        /// recoloured, as the website does.
+        /// recoloured, as the website does, but only at the icon's edge (AtEdge).
         /// </summary>
         private ManagedTexture Texture(uint id, (byte R, byte G, byte B)? outline) {
             if (id == 0) {
@@ -374,12 +374,23 @@ namespace DaraletPlayer.Ui {
 
             using (var bitmap = new Bitmap(original.Bitmap)) {
                 var color = Color.FromArgb(outline.R, outline.G, outline.B);
+                var width = bitmap.Width;
+                var height = bitmap.Height;
 
-                for (var y = 0; y < bitmap.Height; y++) {
-                    for (var x = 0; x < bitmap.Width; x++) {
+                // see-through pixels, read before any is changed
+                var clear = new bool[width, height];
+
+                for (var y = 0; y < height; y++) {
+                    for (var x = 0; x < width; x++) {
+                        clear[x, y] = bitmap.GetPixel(x, y).A == 0;
+                    }
+                }
+
+                for (var y = 0; y < height; y++) {
+                    for (var x = 0; x < width; x++) {
                         var pixel = bitmap.GetPixel(x, y);
 
-                        if (pixel.A > 0 && IsOutline(pixel)) {
+                        if (pixel.A > 0 && IsOutline(pixel) && AtEdge(clear, x, y)) {
                             bitmap.SetPixel(x, y, Color.FromArgb(pixel.A, color));
                         }
                     }
@@ -390,6 +401,29 @@ namespace DaraletPlayer.Ui {
                 recolored.Add(texture);
                 return texture;
             }
+        }
+
+        /// <summary>
+        /// Whether a pixel is on the icon's edge: next to a see-through one (diagonals too) or the picture's border. The
+        /// outline is the white line round the item, so only there is white the outline: an item's own white parts (a
+        /// shovel's blade, a whisk) are inside it, and recolouring every white pixel turned them black.
+        /// </summary>
+        private static bool AtEdge(bool[,] clear, int x, int y) {
+            var width = clear.GetLength(0);
+            var height = clear.GetLength(1);
+
+            for (var dy = -1; dy <= 1; dy++) {
+                for (var dx = -1; dx <= 1; dx++) {
+                    var nx = x + dx;
+                    var ny = y + dy;
+
+                    if (nx < 0 || ny < 0 || nx >= width || ny >= height || clear[nx, ny]) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static bool IsOutline(Color pixel) {

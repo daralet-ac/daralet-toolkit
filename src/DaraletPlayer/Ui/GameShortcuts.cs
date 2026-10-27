@@ -8,7 +8,7 @@ namespace DaraletPlayer.Ui {
     /// gmToolbarUI::InitShortcutArray lists them. The drop is gmToolbarUI::HandleDropRelease's, step for step: what's in the
     /// slot comes out (RemoveShortcutInSlotNum), the item goes in (CreateShortcutToItem, which says so in chat when it
     /// can't be put on the bar, and tells the server), and what came out moves to the first empty slot to its right.
-    /// Called on the toolbar element itself, which is the gmToolbarUI, checked by its vtable.
+    /// Called on the gmToolbarUI found above the slot, checked by its vtable.
     /// </summary>
     internal static class GameShortcuts {
         private static readonly uint[] Slots = {
@@ -18,6 +18,15 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>gmToolbarUI's vtable, set by its constructor: the toolbar element is one.</summary>
         private const int ToolbarUiVtable = 0x7B5650;
+
+        /// <summary>
+        /// UIRegion.m_parent, as AcClient lays it out (Marshal.OffsetOf): every element's parent. A UIRegion is the first
+        /// thing in a UIElement, and a UIElement the first in a gmToolbarUI, so the pointer is to the parent itself.
+        /// </summary>
+        private const int ParentOffset = 0xAC;
+
+        /// <summary>How far up from a slot to look: the toolbar's layout is only a few levels deep.</summary>
+        private const int MaxDepth = 8;
 
         /// <summary>Set once a call has failed: logged once, and drops go to the world as before until the next start.</summary>
         private static bool broken;
@@ -49,10 +58,9 @@ namespace DaraletPlayer.Ui {
             }
 
             try {
-                var toolbar = ClientElements.FindElement(ClientElements.Toolbar);
+                var toolbar = FindToolbarUi(slot);
 
-                if (toolbar == null || *(int*)toolbar != ToolbarUiVtable) {
-                    PluginCore.LogFile("[shortcut] the toolbar isn't the game's gmToolbarUI: left alone");
+                if (toolbar == null) {
                     return false;
                 }
 
@@ -78,6 +86,30 @@ namespace DaraletPlayer.Ui {
                     + "next starts: " + ex);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// The gmToolbarUI that owns a slot: the slot's element and its parents, up to the one with gmToolbarUI's vtable.
+        /// Not the TBAR element itself, which turned out to be some other element (its vtable wasn't gmToolbarUI's).
+        /// Null, with the vtables passed logged, when there's none.
+        /// </summary>
+        private static unsafe void* FindToolbarUi(int slot) {
+            var element = ClientElements.FindElement(Slots[slot]);
+            var seen = "";
+
+            for (var depth = 0; element != null && depth < MaxDepth; depth++) {
+                var vtable = *(int*)element;
+
+                if (vtable == ToolbarUiVtable) {
+                    return element;
+                }
+
+                seen += $" 0x{vtable:X6}";
+                element = *(void**)((byte*)element + ParentOffset);
+            }
+
+            PluginCore.LogFile($"[shortcut] no gmToolbarUI above slot 0x{Slots[slot]:X8} (vtables{seen}): left alone");
+            return null;
         }
 
         // gmToolbarUI's own functions (thiscall), at the addresses AcClient's Entrypoint names

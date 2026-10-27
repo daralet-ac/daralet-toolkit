@@ -40,8 +40,15 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>A stack's size in an icon's bottom right corner.</summary>
         public static void StackCount(ImDrawListPtr drawList, int stack, Vector2 at, float cell) {
-            var text = stack >= 10000 ? $"{stack / 1000}k" : stack.ToString();
+            var text = StackText.Short(stack);
             var size = Widgets.SquareTextSize(text);
+
+            // "50.1k" too wide for a small square: whole thousands
+            if (size.X > cell - 3) {
+                text = StackText.Short(stack, tenths: false);
+                size = Widgets.SquareTextSize(text);
+            }
+
             var spot = new Vector2(at.X + cell - size.X - 2, at.Y + cell - size.Y - 1);
             OutlinedText(drawList, text, spot, new Vector4(1, 1, 1, 1));
         }

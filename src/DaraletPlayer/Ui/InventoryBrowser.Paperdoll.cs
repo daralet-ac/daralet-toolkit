@@ -94,7 +94,7 @@ namespace DaraletPlayer.Ui {
                 var guid = EquipSlots.ItemIn(slot, wornBy);
                 var item = guid == 0 ? null : worn.FirstOrDefault(i => i.Guid == guid);
                 DrawPaperdollSquare(drawList, origin + offset, slot, item);
-                EquipTarget(slot.Mask);
+                EquipTarget(slot);
 
                 if (item == null) {
                     Widgets.Tip(slot.Name + ": nothing worn.");

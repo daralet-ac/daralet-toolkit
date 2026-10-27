@@ -50,6 +50,10 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
   fired when a reload starts, so check `CharacterFilter.LoginStatus == 3` instead.
 - **A plugin running in the game locks `bin\*.dll`** (acclient and DenAgent). To check a build while it runs, build to
   another folder (`-p:OutputPath=...`), or develop with the loader.
+- **The loader must build the same every time.** The game holds `bin\DaraletToolkit.Loader.dll` open, and the SDK writes
+  the git commit into a build's version and pdb by default, so after every commit Visual Studio couldn't copy the
+  rebuilt loader over it (MSB3027, "locked by acclient.exe"). The loader's csproj turns both off
+  (`IncludeSourceRevisionInInformationalVersion`, `EnableSourceLink`).
 - **A local ACE server locks daralet-ACE's `dist\apps\server`**, so `dotnet test` there fails to copy `ACE.Server.exe`.
   Build the tests somewhere else instead: `-p:BaseOutputPath=<dir>/ -p:OutputPath=<dir>/`. Built that way, the
   `StartupTests` and physics tests fail for want of `Config.js` and the dat files; the rest are meaningful.
@@ -556,7 +560,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   items in each, and in the Bank window: one bar, shared, so its "what" box carries over. Deposit with the box empty
   is Deposit packs (your "deposit"-tagged packs), with words in it a deposit of those. A bank pack, or a side pack you
   carry (`Holder.CarriedPack`, in the Retail view too), has a **Tags**
-  drop-down of every `/bank` word, ticked when the pack has it (`BankCommands.HasTag` / `ToggleTag`, comma-separated
+  drop-down of every `/bank` word (first **Deposit** and **Keep**, `BankCommands.DepositTag` / `KeepTag`, what the pack is
+  for rather than what goes in it, each always a tag of its own: deposit packs are what `/bank deposit packs` empties
+  and withdrawals never fill, keep packs are left alone by deposits of a kind and `/sort`), ticked when the pack has it (`BankCommands.HasTag` / `ToggleTag`, comma-separated
   groups), each tick sending `/bank inscribe` at once (the plugin keeps what it sent until the next bank reply). A carried
   pack has no number, so the plugin appraises it (`Actions.RequestId`) and sends the command without one: the server
   takes the pack last examined (`FindPack` with `carriedToo`, which `/bank inscribe` only allows since daralet-ACE's
@@ -583,7 +589,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   pack when the client isn't told) and its name on hover, then an empty square for each side pack slot left (`LongValueKey.PackSlots`, 7 when the client isn't told; drop a pack on one to put it there), with a burden bar down its right (`CharacterFilter.Burden`; hover it for the percent and `BurdenUnits`, full at 300%, the most you can carry, and yellow past 100%, with faint lines at 100% and 200%). The pop-out's **Reset width** makes it just wide enough, in Retail, for the paperdoll (with a little room) and the packs beside it, leaving the grid a little over seven columns (`RetailWidthShort`); in the plain view, for six columns of items (`InventoryBrowser.RetailColumns`, `GridWidthShort`). `FloatingWindow.SetWidth` sizes the window. No `/bank` bar in Retail: its top line has Loot highlights and Sort (`/sort`) instead, and the chosen pack is framed with the selection frame and a light brown arrow on its left edge, pointing in (`DrawChosenPack`). Packs (not the main pack) are dragged onto another pack, in any pack list, to take its place (`MoveItem` to that pack's container and slot, `Holder.Parent`/`Slot`): packs can't go inside packs, so that's how they're reordered, or moved between yours and the bank's at a place.
   `PlayerFeed.SendCommand` keeps the System and Help chat (types 5 and 15, Decal's `e.Color`) that comes back within three
   seconds as the command's reply. The items show as a list or, with **Grid** (`SettingsData.InventoryGrid`), as icons only, as
-  many to a row as fit, each with the list's hover, drag and right-click; a stack shows its size in the corner. A drag shows
+  many to a row as fit, each with the list's hover, drag and right-click; a stack shows its size in the corner
+  (`StackText.Short`: from 10,000 in thousands to the hundred below, 50.1k, or whole thousands where that doesn't fit).
+  Stack sizes are read through `StackText.FromDecal`, which reads a negative one as the unsigned 16-bit number the game
+  sends: a 50,000 pyreal stack showed no count, likely read as -15,536. A drag shows
   only the item's icon, centred on the mouse and drawn on the foreground draw list (no preview tooltip, which ImGui fades).
   Dropped on another item, it goes to that item's container and slot (`InventoryBrowser.MoveTo`, `MoveItem` without stacking,
   unless it's a stack of the same thing), which is how items are reordered within a pack. **Splitting stacks**
@@ -593,17 +602,22 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   is sent as the client's own split, through AcClient's `CM_Inventory`: `Event_StackableSplitToContainer`,
   `Event_StackableMerge` (onto a stack like it), `Event_StackableSplitTo3D`, `Event_GiveObjectRequest` with the amount;
   Decal's `MoveItem` always moves the whole stack, which is why a split on the bar did nothing before. `WorldDrop` takes
-  the amount before its click clears the selection. Right-click **Split...** opens a slider (the modal opened next frame,
-  from `Render`): Split puts that many at the end of the same pack, Drag them sets the game's stack bar for the next drag.
+  the amount before its click clears the selection. Right-click **Split...** opens a slider (a plain popup, not a modal,
+  which greys out the whole screen; opened next frame from `Render`, its slider centred where Split... was picked): Split puts that many at the end of the same pack, Drag them sets the game's stack bar for the next drag.
+  The server puts the new stack at the place sent, but Decal gives a new item no place of its own, so the lists showed it
+  by the old stack or first: once it shows up it's moved there again with `MoveItem` (`StackSplit.Step`), which Decal
+  follows. The menu line goes by `StackCount` alone: Decal doesn't always know `StackMax` without an appraisal.
   `[split]` lines in log.txt. **Onto the game's shortcut bar** (`Ui/GameShortcuts.cs`): let go over one of its 18 slots
   (`0x100001A7`-`AF`, `0x100006B7`-`BF`, the order `gmToolbarUI::InitShortcutArray` lists them), an item goes there, as
   `gmToolbarUI::HandleDropRelease` does it: `RemoveShortcutInSlotNum`, `CreateShortcutToItem(item, slot, 1, 0)`, and what
-  was there to `GetFirstEmptyShortcutToTheRightOf` with `AddShortcut`, called on the toolbar element (TBAR), which is the
-  gmToolbarUI (vtable `0x7B5650`). Before this, `WorldDrop`'s click used the shortcut there and the item went on the
+  was there to `GetFirstEmptyShortcutToTheRightOf` with `AddShortcut`, called on the gmToolbarUI (vtable `0x7B5650`),
+  found by climbing from the slot's element through its parents (`UIRegion.m_parent`, `+0xAC`): the TBAR element itself
+  isn't it, which left the first build's drops unanswered. Before this, `WorldDrop`'s click used the shortcut there and the item went on the
   ground. The slot gets the green ring while it's held there. `[shortcut]` lines in log.txt. **Worn**
   (`SettingsData.InventoryShowWorn`) slides out a paperdoll of what you're wearing on the right (`InventoryBrowser.RenderWorn`), laid
   out as the game's equipment panel by `EquipSlots` (the game's EquipMask bits, one square per slot; an item covering
-  several shows in each; Pants leave out AbdomenWear, which shirts have too; an empty one shows the game's own picture of it, `EquipSlot.EmptyIcon`, found in portal.dat by the
+  several shows in each; Pants leave out AbdomenWear, which shirts have too, and anything worn on the feet
+  (`EquipSlot.Except`): boots are worn on the lower legs as well, and showed as pants while none were on; an empty one shows the game's own picture of it, `EquipSlot.EmptyIcon`, found in portal.dat by the
   bevelled blue frame they share and drawn as it is, `ItemIcons.DrawPlain`). The window grows by the panel's width when
   Worn is turned on and shrinks when it's off, once per window (`wornShownAs`, by host), and the Worn checkbox is above the
   packs, where it can't be squeezed out. Its items have the list's hover and right-click; dragging one onto a pack or onto
@@ -611,7 +625,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   use).
 
 - **Use** (`Ui/ItemUser.cs`, `Feed/UseRules.cs`): double-clicking an item you carry or wear in the Inventory tab's lists,
-  or Use in its right-click menu, does what a double-click in the game's inventory does. Gear goes on with the game's own
+  or Use in its right-click menu, does what a double-click in the game's inventory does. A double-click is every
+  second click of a quick run, as Windows counts them (`Widgets.DoubleClicked`): ImGui's `IsMouseDoubleClicked` is only
+  the second, so clicking away at the top of a pack put on only the first item where the game's pack puts on each. Gear goes on with the game's own
   auto-wield (`Actions.AutoWield`), or comes off into the main pack. The server won't put anything over a taken slot
   ("You must remove your..."), and a plugin's AutoWield doesn't take anything off first the way the client's double-click
   does, so `ItemUser.Wield` takes off what's in the way (`UseRules.ToTakeOff`: armor and clothing sharing a layer of its
@@ -639,7 +655,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   opening a full bank doesn't stall the game. Items the client has come from Decal (`LongValueKey.Icon`, `IconOverlay`,
   `IconUnderlay`); listings from the Market API's hex ids, and your own listings, sales and expired items from the
   `icon` `@playerui market` sends (read from each listing's snapshot by the Market API's `Describe`). Underlay tiles by
-  kind, and the outline colour by effect (white outline pixels recoloured, black for none), are the website's
+  kind, and the outline colour by effect (white outline pixels recoloured, black for none; only white at the icon's edge,
+  next to a see-through pixel, `ItemIcons.AtEdge`, or an item's own white parts turned black), are the website's
   (`IconLayers.Underlays`, `OutlineColors`, from market.js). Hovering an icon shows the item's tooltip. **Compact** on the
   window's top line (`SettingsData.CompactLists`) hides them; a loot mark still shows, on its own.
 

@@ -89,6 +89,16 @@ namespace DaraletPlayer.Ui {
         /// <summary>CalcTextSize at SquareFontSize.</summary>
         public static Vector2 SquareTextSize(string text) => ImGui.CalcTextSize(text) / TextScale;
 
+        /// <summary>
+        /// A double-click as Windows (and so the game) counts them: every second click of a quick run, the 2nd, 4th, 6th.
+        /// ImGui's IsMouseDoubleClicked is only the 2nd, its count going on up while the clicks keep coming, so clicking
+        /// away at the top of a pack to put on one item after another put on only the first.
+        /// </summary>
+        public static bool DoubleClicked() {
+            var count = ImGui.GetMouseClickedCount(ImGuiMouseButton.Left);
+            return ImGui.IsMouseClicked(ImGuiMouseButton.Left) && count >= 2 && count % 2 == 0;
+        }
+
         /// <summary>A small (?) on the same line, explaining what's next to it when hovered.</summary>
         public static void HelpMarker(string text) {
             ImGui.SameLine();

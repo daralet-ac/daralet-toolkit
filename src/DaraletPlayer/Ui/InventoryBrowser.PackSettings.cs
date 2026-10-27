@@ -116,6 +116,9 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip($"Takes every tag off this pack: {BankCommands.Inscribe(holder.PackNumber, "")}.");
             ImGui.Separator();
 
+            RenderPackRoles(holder);
+            ImGui.Separator();
+
             RenderTagMode(holder);
             ImGui.Separator();
 
@@ -127,6 +130,32 @@ namespace DaraletPlayer.Ui {
 
             TagSection(holder, "Tiers (alone: any gear of that tier; with AND, \"swords t6\": tier 6 swords)", BankCommands.Tiers);
             ImGui.EndCombo();
+        }
+
+        /// <summary>
+        /// The words that say what a pack is for rather than what goes in it (BankCategories.KeepTag and DepositTag in
+        /// daralet-ACE). Each is always a tag of its own, OR or AND: the server reads them anywhere in the inscription.
+        /// </summary>
+        private void RenderPackRoles(Holder holder) {
+            Widgets.TextDisabled("What the pack is for");
+            RenderRole(holder, BankCommands.DepositTag, "Deposit",
+                $"Marks the pack for emptying: {BankCommands.DepositPacks} (Deposit with the box empty) moves everything "
+                + "in your packs tagged deposit into your bank, so fill one as you go and empty it in one go. Withdrawals "
+                + "never put anything in it.");
+            ImGui.SameLine(ImGui.GetFontSize() * 8 + ImGui.GetStyle().WindowPadding.X);
+            RenderRole(holder, BankCommands.KeepTag, "Keep",
+                "Keeps the pack out of the way: a deposit of a category, type or tier doesn't take from it, /sort leaves "
+                + "it as it is, and withdrawals only put what its other tags name in it.");
+            ImGui.Spacing();
+        }
+
+        private void RenderRole(Holder holder, string tag, string label, string tip) {
+            var has = BankCommands.HasTag(inscription, tag);
+
+            if (ImGui.Checkbox($"{label}##tag-role-{tag}", ref has)) {
+                SetTags(holder, BankCommands.ToggleTag(inscription, tag));
+            }
+            Widgets.Tip($"{tip} ({BankCommands.Inscribe(holder.PackNumber, tag)})" + CarriedNote(holder));
         }
 
         /// <summary>

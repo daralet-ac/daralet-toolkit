@@ -7,6 +7,8 @@ namespace DaraletPlayer.Feed {
         public string Name;
         /// <summary>The game's equip locations (EquipMask in daralet-ACE): an item worn in any of these is drawn here.</summary>
         public uint Mask;
+        /// <summary>Locations that keep an item out of this place even though it's worn in Mask too (boots out of Pants).</summary>
+        public uint Except;
         public int Column;
         public int Row;
 
@@ -82,8 +84,9 @@ namespace DaraletPlayer.Feed {
             Slot("Hands", HandWear, 1, 5, 0x06006D7D),
             Slot("Upper legs", UpperLegArmor, 2, 5, 0x06006D89),
             Slot("Right ring", FingerWearRight, 3, 5, 0x06000F6B),
-            // not AbdomenWear: shirts are worn there too, and pants always cover a leg
-            Slot("Pants", UpperLegWear | LowerLegWear, 4, 5, 0x060032C4),
+            // not AbdomenWear: shirts are worn there too, and pants always cover a leg. Boots are worn on the lower legs as
+            // well as the feet, so anything on the feet is left to Feet: boots showed here while no pants were on.
+            Slot("Pants", UpperLegWear | LowerLegWear, 4, 5, 0x060032C4, except: FootWear),
 
             Slot("Lower legs", LowerLegArmor, 2, 6, 0x06006D83),
 
@@ -93,8 +96,13 @@ namespace DaraletPlayer.Feed {
             Slot("Ammo", MissileAmmo, 4, 7, 0x06000F5E),
         };
 
-        private static EquipSlot Slot(string name, uint mask, int column, int row, uint emptyIcon) {
-            return new EquipSlot { Name = name, Mask = mask, Column = column, Row = row, EmptyIcon = emptyIcon };
+        private static EquipSlot Slot(string name, uint mask, int column, int row, uint emptyIcon, uint except = 0) {
+            return new EquipSlot { Name = name, Mask = mask, Except = except, Column = column, Row = row, EmptyIcon = emptyIcon };
+        }
+
+        /// <summary>Whether something worn (or wearable) in these locations belongs in a slot.</summary>
+        public static bool Fits(EquipSlot slot, uint locations) {
+            return (locations & slot.Mask) != 0 && (locations & slot.Except) == 0;
         }
 
         /// <summary>
@@ -102,7 +110,7 @@ namespace DaraletPlayer.Feed {
         /// suit of clothing worn as both shirt and pants shows in both.
         /// </summary>
         public static uint ItemIn(EquipSlot slot, IEnumerable<(uint Guid, uint Worn)> worn) {
-            return worn.FirstOrDefault(w => (w.Worn & slot.Mask) != 0).Guid;
+            return worn.FirstOrDefault(w => Fits(slot, w.Worn)).Guid;
         }
     }
 }

@@ -46,5 +46,31 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual(0u, EquipSlots.ItemIn(EquipSlots.All.Single(s => s.Name == "Pants"), new[] { shirt }));
             Assert.AreEqual(8u, EquipSlots.ItemIn(EquipSlots.All.Single(s => s.Name == "Pants"), new[] { shirt, pants }));
         }
+
+        [TestMethod]
+        public void BootsOnlyShowAsFeet() {
+            // boots are worn on the lower legs too, which Pants shows
+            var boots = (Guid: 9u, Worn: EquipSlots.FootWear | EquipSlots.LowerLegWear);
+            var pantsSlot = EquipSlots.All.Single(s => s.Name == "Pants");
+
+            Assert.AreEqual(9u, EquipSlots.ItemIn(EquipSlots.All.Single(s => s.Name == "Feet"), new[] { boots }));
+            Assert.AreEqual(0u, EquipSlots.ItemIn(pantsSlot, new[] { boots }));
+            Assert.IsFalse(EquipSlots.Fits(pantsSlot, boots.Worn), "boots can't be dropped on Pants");
+        }
+
+        [TestMethod]
+        public void StackSizesShortenToTenthsOfAThousand() {
+            Assert.AreEqual("9999", StackText.Short(9999));
+            Assert.AreEqual("50k", StackText.Short(50000));
+            Assert.AreEqual("50.1k", StackText.Short(50100));
+            Assert.AreEqual("50.1k", StackText.Short(50199));
+            Assert.AreEqual("50k", StackText.Short(50100, tenths: false));
+        }
+
+        [TestMethod]
+        public void StackSizesOverAShortAreReadUnsigned() {
+            Assert.AreEqual(50000, StackText.FromDecal(-15536));
+            Assert.AreEqual(25, StackText.FromDecal(25));
+        }
     }
 }

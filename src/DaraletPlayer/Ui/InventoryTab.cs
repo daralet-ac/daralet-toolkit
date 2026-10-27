@@ -310,6 +310,9 @@ namespace DaraletPlayer.Ui {
                 // an item dragged out into the world: given or dropped once the game has said what was under it
                 WorldDrop.Step();
 
+                // a split's new stack, moved to where it was let go once it shows up
+                StackSplit.Step();
+
                 if (feed.Status != FeedStatus.Ready || !feed.Supports(PlayerFeed.KindBankWindow)) {
                     return;
                 }

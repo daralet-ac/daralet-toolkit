@@ -55,6 +55,13 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void DepositIsATagOfItsOwn() {
+            Assert.AreEqual("gems, deposit", BankCommands.ToggleTag("gems", BankCommands.DepositTag));
+            Assert.AreEqual("gems", BankCommands.ToggleTag("gems, deposit", BankCommands.DepositTag));
+            Assert.IsTrue(BankCommands.HasTag("gems, Deposit", BankCommands.DepositTag));
+        }
+
+        [TestMethod]
         public void TagListAddsAndRemovesWordsKeepingTheRest() {
             Assert.AreEqual("weapons", BankCommands.ToggleTag("", "weapons"));
             Assert.AreEqual("weapons", BankCommands.ToggleTag("clear", "weapons"));

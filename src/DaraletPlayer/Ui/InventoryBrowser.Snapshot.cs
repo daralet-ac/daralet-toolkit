@@ -174,7 +174,7 @@ namespace DaraletPlayer.Ui {
                 .Select(o => new Item {
                     Id = o.Id,
                     Name = o.Name ?? "",
-                    Stack = o.Values(LongValueKey.StackCount, 1),
+                    Stack = StackText.FromDecal(o.Values(LongValueKey.StackCount, 1)),
                     Value = o.Values(LongValueKey.Value, 0),
                     Burden = o.Values(LongValueKey.Burden, 0),
                     Slot = o.Values(LongValueKey.Slot, 0),

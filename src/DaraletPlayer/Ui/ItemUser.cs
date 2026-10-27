@@ -258,7 +258,7 @@ namespace DaraletPlayer.Ui {
                     CoreManager.Current.Actions.SelectItem(id);
                 }
 
-                if (usable && hovered && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
+                if (usable && hovered && Widgets.DoubleClicked()) {
                     Use(id);
                 }
 

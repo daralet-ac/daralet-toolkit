@@ -69,7 +69,7 @@ namespace DaraletPlayer.Ui {
                 mine.Add(item);
                 var kind = KindOf(item);
                 counts.TryGetValue(kind, out var count);
-                counts[kind] = count + Math.Max(1, item.Values(LongValueKey.StackCount, 1));
+                counts[kind] = count + Math.Max(1, StackText.FromDecal(item.Values(LongValueKey.StackCount, 1)));
             }
         }
 
@@ -103,7 +103,7 @@ namespace DaraletPlayer.Ui {
             // the fullest, so a used-up stack is followed by a whole one
             var next = mine
                 .Where(o => slot.SameKind(o.Type, o.Name))
-                .OrderByDescending(o => o.Values(LongValueKey.StackCount, 1))
+                .OrderByDescending(o => StackText.FromDecal(o.Values(LongValueKey.StackCount, 1)))
                 .FirstOrDefault();
 
             if (next == null) {

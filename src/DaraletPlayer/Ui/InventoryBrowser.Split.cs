@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
@@ -10,6 +11,11 @@ namespace DaraletPlayer.Ui {
         private int splitting;
         private bool splitOpenPending;
         private int splitAmount;
+
+        /// <summary>Where Split... was picked, which the slider's middle is put over, for this many frames more.</summary>
+        private Vector2 splitAt;
+        private int splitPlaceFrames;
+        private const int PlaceFrames = 3;
 
         /// <summary>The menu line: the dialog opens next frame at the window's level, where popups are found by ID.</summary>
         private void SplitMenuItem(Item item) {
@@ -30,12 +36,14 @@ namespace DaraletPlayer.Ui {
         private void RenderSplitDialog() {
             if (splitOpenPending) {
                 splitOpenPending = false;
+                splitAt = ImGui.GetMousePos();
+                splitPlaceFrames = PlaceFrames;
                 ImGui.OpenPopup(SplitDialogId);
             }
 
-            var open = true;
-
-            if (!ImGui.BeginPopupModal(SplitDialogId, ref open, ImGuiWindowFlags.AlwaysAutoResize)) {
+            // a plain popup, not a modal: a modal greys out the whole screen, which ImGui draws at the end of the frame with
+            // the style's colour then, so it can't be turned off for one window. A click outside it cancels.
+            if (!ImGui.BeginPopup(SplitDialogId, ImGuiWindowFlags.AlwaysAutoResize)) {
                 return;
             }
 
@@ -56,6 +64,7 @@ namespace DaraletPlayer.Ui {
             ImGui.SetNextItemWidth(Math.Max(200, ImGui.CalcTextSize("0000000").X * 3));
             ImGui.SliderInt("##split-amount", ref splitAmount, 1, stack - 1);
             Widgets.Tip("How many to take off. Ctrl+click to type a number.");
+            PlaceOverMouse();
 
             if (ImGui.Button("Split")) {
                 // a new item comes in after the pack's last
@@ -80,6 +89,28 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.EndPopup();
+        }
+
+        /// <summary>
+        /// Moves the dialog so the slider just drawn is centred where Split... was picked, kept on screen. For its first
+        /// few frames only: the slider's place is only known once it's drawn, and an auto-sized window settles its size over
+        /// a frame or two. After that it's left where it is.
+        /// </summary>
+        private void PlaceOverMouse() {
+            if (splitPlaceFrames <= 0) {
+                return;
+            }
+
+            splitPlaceFrames--;
+
+            var slider = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+            var size = ImGui.GetWindowSize();
+            var display = ImGui.GetIO().DisplaySize;
+            var pos = ImGui.GetWindowPos() + splitAt - slider;
+
+            pos.X = Math.Max(0, Math.Min(pos.X, display.X - size.X));
+            pos.Y = Math.Max(0, Math.Min(pos.Y, display.Y - size.Y));
+            ImGui.SetWindowPos(pos);
         }
 
         private Item FindItem(int id) {
