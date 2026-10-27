@@ -14,7 +14,8 @@ namespace DaraletPlayer.Ui {
     /// </summary>
     /// <remarks>
     /// Split across files: <c>.Retail</c> (the game's inventory layout), <c>.Paperdoll</c> (worn items),
-    /// <c>.PackSettings</c> (bank pack tags and icons), <c>.Drag</c> (drag and drop) and <c>.Snapshot</c> (reading Decal).
+    /// <c>.PackSettings</c> (bank pack tags and icons), <c>.Drag</c> (drag and drop), <c>.Split</c> (the Split dialog) and
+    /// <c>.Snapshot</c> (reading Decal).
     /// </remarks>
     internal partial class InventoryBrowser {
         /// <summary>An item dragged from a list: the payload is empty, the item is DraggedItem.</summary>
@@ -125,6 +126,7 @@ namespace DaraletPlayer.Ui {
 
             CheckWorldDrop();
             ItemUser.Render();
+            RenderSplitDialog();
 
             if (Retail) {
                 RenderRetail();
@@ -490,7 +492,7 @@ namespace DaraletPlayer.Ui {
             ItemUser.Item(item.Id, PlaceOf(item), usable: !InBank(item));
         }
 
-        /// <summary>Right-clicking an item: use it, appraise it, or move it.</summary>
+        /// <summary>Right-clicking an item: use it, appraise it, split it or move it.</summary>
         private void ItemMenu(Item item) {
             // a right-click that puts a tool down isn't one for the menu
             if (ItemUser.TakesClicks || !ImGui.BeginPopupContextItem($"item-menu-{item.Id}")) {
@@ -518,6 +520,8 @@ namespace DaraletPlayer.Ui {
 
             Appraisal.MenuItems(item.Guid);
             ImGui.Separator();
+
+            SplitMenuItem(item);
 
             var bankGuid = feed.Bank?.Open == true && feed.Bank.Loaded ? unchecked((int)feed.Bank.Guid) : 0;
 

@@ -48,9 +48,24 @@ namespace DaraletPlayer.Ui {
                 drawList.AddText(at, ImGui.GetColorU32(ImGuiCol.Text), name);
             }
 
+            // how many go with it: part of the stack when the game's stack bar says so
+            var amount = StackSplit.Amount(id);
+            var carrying = amount > 0 ? amount : StackSplit.StackOf(id);
+
+            if (carrying > 1) {
+                ItemIcons.StackCount(drawList, carrying, at, size);
+            }
+
             // held over the vendor's window, it turns to Selling and rings the slot under the mouse, as the game does
             if (WillWorldDrop(id) && WorldDrop.OverVendor(ImGui.GetMousePos())) {
                 VendorDrop.Hover(icons);
+            }
+
+            // held over the game's shortcut bar, the slot it'd go in has the green ring
+            var shortcut = WillWorldDrop(id) ? GameShortcuts.SlotAt(ImGui.GetMousePos()) : -1;
+
+            if (shortcut >= 0 && GameShortcuts.SlotBox(shortcut, out var slotMin, out var slotMax)) {
+                icons.DrawDropArt(drawList, slotMin, slotMax, true);
             }
 
             ImGui.EndDragDropSource();
@@ -329,6 +344,14 @@ namespace DaraletPlayer.Ui {
             }
 
             var item = CoreManager.Current.WorldFilter[itemId];
+            var amount = StackSplit.Amount(itemId);
+
+            // part of a stack is a new stack in that pack, first, even the pack it came from
+            if (amount > 0) {
+                StackSplit.ToContainer(itemId, containerId, 0, amount);
+                SnapshotSoon();
+                return;
+            }
 
             // dropped back on the pack it's already in: nothing to do, unless it's worn
             if (item != null && item.Values(LongValueKey.Container, 0) == containerId && item.Values(LongValueKey.EquippedSlots, 0) == 0) {
@@ -354,8 +377,18 @@ namespace DaraletPlayer.Ui {
 
             var item = CoreManager.Current.WorldFilter[itemId];
             var merge = item != null && target.Name == item.Name && (target.Stack > 1 || item.Values(LongValueKey.StackCount, 1) > 1);
+            var amount = StackSplit.Amount(itemId);
 
-            CoreManager.Current.Actions.MoveItem(itemId, target.Container, target.Slot, merge);
+            if (amount > 0 && merge) {
+                StackSplit.Merge(itemId, target.Id, amount);
+            }
+            else if (amount > 0) {
+                StackSplit.ToContainer(itemId, target.Container, target.Slot, amount);
+            }
+            else {
+                CoreManager.Current.Actions.MoveItem(itemId, target.Container, target.Slot, merge);
+            }
+
             SnapshotSoon();
         }
 
@@ -371,6 +404,15 @@ namespace DaraletPlayer.Ui {
             }
 
             var count = ItemsIn(containerId).Count;
+            var amount = StackSplit.Amount(itemId);
+
+            // part of a stack is a new item, coming in after the last even in its own pack
+            if (amount > 0) {
+                StackSplit.ToContainer(itemId, containerId, count, amount);
+                SnapshotSoon();
+                return;
+            }
+
             var alreadyHere = item.Values(LongValueKey.Container, 0) == containerId && item.Values(LongValueKey.EquippedSlots, 0) == 0;
             var slot = alreadyHere ? Math.Max(0, count - 1) : count;
 

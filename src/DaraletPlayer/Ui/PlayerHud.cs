@@ -124,6 +124,9 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
+                ImGui.SetWindowFontScale(settings.Data.ClampedTextScale);
+                Widgets.TextScale = settings.Data.ClampedTextScale;
+
                 // a drag from the game's pack let go over this window mustn't drop the item on the ground
                 GameDrag.Cover();
 

@@ -104,7 +104,7 @@ namespace DaraletPlayer.Map {
             var selfZ = scene.Self?.Z;
 
             if (marker != null) {
-                ImGui.BeginTooltip();
+                Widgets.BeginTooltip();
                 Widgets.Text(marker.Name);
                 Widgets.TextDisabled(Style(marker.Kind).Label.TrimEnd('s'));
                 Widgets.TextDisabled("Click to select it. Right-click for the way there.");
@@ -128,7 +128,7 @@ namespace DaraletPlayer.Map {
                 return;
             }
 
-            ImGui.BeginTooltip();
+            Widgets.BeginTooltip();
             Widgets.Text($"Cell 0x{found.Cell:X8}");
             Widgets.TextDisabled(FloorWords(FloorOf(found.Z, selfZ)));
 

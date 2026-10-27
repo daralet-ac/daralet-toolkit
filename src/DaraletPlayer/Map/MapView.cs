@@ -421,7 +421,7 @@ namespace DaraletPlayer.Map {
         }
 
         private static void Tooltip(Vector2 at, Location location, FellowInfo fellow) {
-            ImGui.BeginTooltip();
+            Widgets.BeginTooltip();
 
             if (fellow != null) {
                 Widgets.Text(fellow.Name);

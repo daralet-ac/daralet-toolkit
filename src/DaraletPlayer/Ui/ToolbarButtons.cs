@@ -109,6 +109,13 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            var amount = StackSplit.Amount(id);
+
+            if (amount > 0) {
+                StackSplit.ToContainer(id, me, 0, amount);
+                return;
+            }
+
             if (item.Values(LongValueKey.Container, 0) == me && item.Values(LongValueKey.EquippedSlots, 0) == 0) {
                 return;
             }

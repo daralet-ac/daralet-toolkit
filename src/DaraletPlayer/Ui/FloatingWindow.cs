@@ -142,6 +142,9 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>The window's text size: its own size times the Config tab's Text size.</summary>
+        private float FontScale => Scale * settings.Data.ClampedTextScale;
+
         /// <summary>Shown only while in use: always for some windows, by choice (Only when needed) for the rest.</summary>
         private bool OnlyInUse => inUse != null && (alwaysOnlyInUse || Placement.OnlyInUse);
 
@@ -329,7 +332,7 @@ namespace DaraletPlayer.Ui {
             }
 
             // the font's own size, not GetFontSize: that's whichever window is being drawn, at its own scale
-            var line = ImGui.GetFont().FontSize * ImGui.GetIO().FontGlobalScale * Scale;
+            var line = ImGui.GetFont().FontSize * ImGui.GetIO().FontGlobalScale * FontScale;
             return (float)Math.Round(line + ImGui.GetStyle().FramePadding.Y * 2);
         }
 
@@ -489,7 +492,8 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
-                ImGui.SetWindowFontScale(Scale);
+                ImGui.SetWindowFontScale(FontScale);
+                Widgets.TextScale = settings.Data.ClampedTextScale;
 
                 // the contents start below the title bar and the padding, so this is the title bar's height
                 if (!Locked) {

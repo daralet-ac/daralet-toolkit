@@ -11,7 +11,12 @@ namespace DaraletPlayer {
     /// </summary>
     [DataContract]
     public class SettingsData {
+        public const float MinTextScale = 0.5f;
+        public const float MaxTextScale = 2.5f;
+
         [DataMember(Name = "windows")] public Dictionary<string, WindowPlacement> Windows;
+        /// <summary>How big the plugin's text is drawn in every window: 1 is normal. A window's own size multiplies it.</summary>
+        [DataMember(Name = "textScale")] public float TextScale;
 
         [DataMember(Name = "fellowshipShowStamina")] public bool FellowshipShowStamina;
         [DataMember(Name = "fellowshipShowMana")] public bool FellowshipShowMana;
@@ -178,8 +183,11 @@ namespace DaraletPlayer {
             SetDefaults();
         }
 
+        public float ClampedTextScale => Math.Max(MinTextScale, Math.Min(MaxTextScale, TextScale));
+
         private void SetDefaults() {
             Windows = new Dictionary<string, WindowPlacement>();
+            TextScale = 1;
             FellowshipShowStamina = true;
             FellowshipShowMana = true;
             FellowVitals = new Dictionary<string, FellowVitals>(StringComparer.OrdinalIgnoreCase);

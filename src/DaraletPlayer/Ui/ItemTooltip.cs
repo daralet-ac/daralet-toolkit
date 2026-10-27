@@ -34,7 +34,7 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            ImGui.BeginTooltip();
+            Widgets.BeginTooltip();
 
             var wrapWidth = ImGui.GetFontSize() * 30;
             ImGui.PushTextWrapPos(wrapWidth);

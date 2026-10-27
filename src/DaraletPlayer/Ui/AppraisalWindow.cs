@@ -165,7 +165,9 @@ namespace DaraletPlayer.Ui {
             ImGui.EndGroup();
 
             if (iconHovered) {
-                ImGui.SetTooltip("Right-click an item in the Corpse window or the bank to appraise it here.");
+                Widgets.BeginTooltip();
+                ImGui.TextUnformatted("Right-click an item in the Corpse window or the bank to appraise it here.");
+                ImGui.EndTooltip();
             }
         }
 

@@ -15,7 +15,8 @@ namespace DaraletPlayer.Ui {
     ///
     /// The game's own windows aren't in the world, but the click can't tell: one let go over the vendor window went on the
     /// ground. So while a vendor is open (Actions.VendorId), a drop on the panel it's shown in is put on its sell list
-    /// instead (Actions.VendorAddSellList), as the game's pack does.
+    /// instead (Actions.VendorAddSellList), as the game's pack does. And one let go over the game's shortcut bar goes on
+    /// it (GameShortcuts).
     /// </summary>
     internal static class WorldDrop {
         private const int WM_LBUTTONDOWN = 0x0201;
@@ -27,6 +28,9 @@ namespace DaraletPlayer.Ui {
 
         private static int item;
         private static DateTime clickedAt;
+
+        /// <summary>How many of the stack go (StackSplit), taken before the click clears the selection; 0 for all of it.</summary>
+        private static int amount;
 
         [DllImport("user32.dll")]
         private static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
@@ -42,6 +46,14 @@ namespace DaraletPlayer.Ui {
 
             var actions = CoreManager.Current.Actions;
 
+            // the click below would use the shortcut there, and then drop the item on the ground
+            var shortcut = GameShortcuts.SlotAt(at);
+
+            if (shortcut >= 0) {
+                GameShortcuts.Put(id, shortcut);
+                return;
+            }
+
             if (OverVendor(at)) {
                 PluginCore.LogFile($"[drop] 0x{id:X8} put on the vendor's sell list");
                 actions.VendorAddSellList(id);
@@ -49,6 +61,7 @@ namespace DaraletPlayer.Ui {
             }
 
             item = id;
+            amount = StackSplit.Amount(id);
             clickedAt = DateTime.UtcNow;
 
             // cleared, so the click's own selection is what tells something was there, even one already selected
@@ -85,9 +98,15 @@ namespace DaraletPlayer.Ui {
             var id = item;
             item = 0;
 
-            if (target == 0) {
+            if (target == 0 && amount > 0) {
+                StackSplit.Drop(id, amount);
+            }
+            else if (target == 0) {
                 PluginCore.LogFile($"[drop] 0x{id:X8} dropped on the ground");
                 actions.DropItem(id);
+            }
+            else if (target != me && target != id && amount > 0) {
+                StackSplit.Give(id, target, amount);
             }
             else if (target != me && target != id) {
                 PluginCore.LogFile($"[drop] 0x{id:X8} given to 0x{target:X8}");

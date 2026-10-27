@@ -24,6 +24,8 @@ namespace DaraletPlayer.Ui {
         private string message;
         private DateTime messageAt;
         private int deleteArmedFrame = -1;
+        private int textPercent = 100;
+        private bool textSliderActive;
 
         /// <summary>The files From file found when it was pressed.</summary>
         private List<string> exportFiles = new List<string>();
@@ -69,8 +71,59 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.Spacing();
+            RenderText();
+
+            ImGui.Spacing();
             clientUiOverride.Render();
             hideGameUi.Render();
+        }
+
+        private void RenderText() {
+            Form.Section("Text");
+
+            if (!Form.BeginForm("config-text")) {
+                return;
+            }
+
+            Form.Label("Text size", "How big the plugin's text is drawn, in this window and every other one of its "
+                + "windows. A window's own Size (its Settings, or right-click it) goes on top of this.");
+
+            // the slider grows with the text, so a size is only used once it's let go: changing it while dragging would
+            // move the slider out from under the mouse
+            if (!textSliderActive) {
+                textPercent = (int)Math.Round(settings.Data.ClampedTextScale * 100);
+            }
+
+            var style = ImGui.GetStyle();
+            var reset = ImGui.CalcTextSize("Reset").X + style.FramePadding.X * 2 + style.ItemSpacing.X;
+            ImGui.SetNextItemWidth(Math.Max(ImGui.GetFontSize() * 4, Math.Min(Form.ControlWidth,
+                ImGui.GetContentRegionAvail().X - reset)));
+            ImGui.SliderInt("##config-text-size", ref textPercent, (int)(SettingsData.MinTextScale * 100),
+                (int)(SettingsData.MaxTextScale * 100), "%d%%");
+            textSliderActive = ImGui.IsItemActive();
+
+            if (ImGui.IsItemDeactivatedAfterEdit()) {
+                SetTextScale(textPercent / 100f);
+            }
+            Widgets.Tip("How big the plugin's text is drawn. The new size is used once you let go. Ctrl+click to type one.");
+
+            ImGui.SameLine();
+
+            if (ImGui.SmallButton("Reset##config-text-size-reset")) {
+                SetTextScale(1);
+            }
+            Widgets.Tip("Puts the text size back to 100%.");
+
+            ImGui.EndTable();
+        }
+
+        private void SetTextScale(float scale) {
+            scale = Math.Max(SettingsData.MinTextScale, Math.Min(SettingsData.MaxTextScale, scale));
+
+            if (settings.Data.TextScale != scale) {
+                settings.Data.TextScale = scale;
+                settings.Changed();
+            }
         }
 
         private string ProfileTip => $"The settings profile {Me} uses. Picking another swaps every setting at once, and "

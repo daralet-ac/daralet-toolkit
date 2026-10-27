@@ -10,6 +10,11 @@ namespace DaraletPlayer.Ui {
     internal static class Widgets {
         public const float BarWidth = 110;
 
+        /// <summary>
+        /// The Config tab's Text size, as the window being drawn applied it (PlayerHud, FloatingWindow), for SquareFontSize.
+        /// </summary>
+        public static float TextScale = 1;
+
         /// <summary>How every list in the plugin is drawn: striped rows, column lines, columns as wide as what's in them.</summary>
         public const ImGuiTableFlags TableFlags =
             ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingFixedFit;
@@ -56,12 +61,33 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            ImGui.BeginTooltip();
+            BeginTooltip();
             ImGui.PushTextWrapPos(ImGui.GetFontSize() * 28);
             ImGui.TextUnformatted(text);
             ImGui.PopTextWrapPos();
             ImGui.EndTooltip();
         }
+
+        /// <summary>
+        /// ImGui.BeginTooltip, with the text as big as the window it's shown from: a tooltip is a window of its own,
+        /// which ImGui draws at the font's own size, whatever the Text size or the window's size.
+        /// </summary>
+        public static void BeginTooltip() {
+            var font = ImGui.GetFont();
+            var scale = ImGui.GetFontSize() / (font.FontSize * font.Scale * ImGui.GetIO().FontGlobalScale);
+            ImGui.BeginTooltip();
+            ImGui.SetWindowFontScale(scale);
+        }
+
+        /// <summary>
+        /// The window's font size without the Text size, for text drawn in a square that doesn't grow with it (an item
+        /// icon's stack count, a hotbar slot's labels): at a bigger Text size it would spill out of the square. A
+        /// window's own Size still counts, since it grows the squares too.
+        /// </summary>
+        public static float SquareFontSize() => ImGui.GetFontSize() / TextScale;
+
+        /// <summary>CalcTextSize at SquareFontSize.</summary>
+        public static Vector2 SquareTextSize(string text) => ImGui.CalcTextSize(text) / TextScale;
 
         /// <summary>A small (?) on the same line, explaining what's next to it when hovered.</summary>
         public static void HelpMarker(string text) {

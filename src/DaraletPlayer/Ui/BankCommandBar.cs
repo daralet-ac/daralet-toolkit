@@ -218,7 +218,7 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            ImGui.BeginTooltip();
+            Widgets.BeginTooltip();
             ImGui.PushTextWrapPos(ImGui.GetFontSize() * 40);
 
             foreach (var line in reply.Take(MaxReplyLines)) {

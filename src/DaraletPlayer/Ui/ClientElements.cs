@@ -169,6 +169,12 @@ namespace DaraletPlayer.Ui {
                 && at.X >= min.X && at.X < max.X && at.Y >= min.Y && at.Y < max.Y;
         }
 
+        /// <summary>An element anywhere in the UI by its id, or null (before the UI's made, too). May throw.</summary>
+        internal static unsafe void* FindElement(uint id) {
+            var manager = *(void**)ManagerAddress;
+            return manager == null ? null : GetElement(manager, id);
+        }
+
         // An element starts with its region, so the same pointer serves both.
 
         /// <summary>UIElementManager::GetElement: an element anywhere in the UI by its id, or null.</summary>

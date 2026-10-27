@@ -586,7 +586,21 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   many to a row as fit, each with the list's hover, drag and right-click; a stack shows its size in the corner. A drag shows
   only the item's icon, centred on the mouse and drawn on the foreground draw list (no preview tooltip, which ImGui fades).
   Dropped on another item, it goes to that item's container and slot (`InventoryBrowser.MoveTo`, `MoveItem` without stacking,
-  unless it's a stack of the same thing), which is how items are reordered within a pack. **Worn**
+  unless it's a stack of the same thing), which is how items are reordered within a pack. **Splitting stacks**
+  (`Ui/StackSplit.cs`, `InventoryBrowser.Split.cs`): a click selects the item, so the game's stack bar shows, and a drag
+  carries what it says (`Actions.SelectedStackCount`, while the dragged item is `CurrentSelection`), shown on the drag
+  icon. Less than the whole stack, every drop (a pack, an item, an empty slot, the toolbar backpack, the ground, someone)
+  is sent as the client's own split, through AcClient's `CM_Inventory`: `Event_StackableSplitToContainer`,
+  `Event_StackableMerge` (onto a stack like it), `Event_StackableSplitTo3D`, `Event_GiveObjectRequest` with the amount;
+  Decal's `MoveItem` always moves the whole stack, which is why a split on the bar did nothing before. `WorldDrop` takes
+  the amount before its click clears the selection. Right-click **Split...** opens a slider (the modal opened next frame,
+  from `Render`): Split puts that many at the end of the same pack, Drag them sets the game's stack bar for the next drag.
+  `[split]` lines in log.txt. **Onto the game's shortcut bar** (`Ui/GameShortcuts.cs`): let go over one of its 18 slots
+  (`0x100001A7`-`AF`, `0x100006B7`-`BF`, the order `gmToolbarUI::InitShortcutArray` lists them), an item goes there, as
+  `gmToolbarUI::HandleDropRelease` does it: `RemoveShortcutInSlotNum`, `CreateShortcutToItem(item, slot, 1, 0)`, and what
+  was there to `GetFirstEmptyShortcutToTheRightOf` with `AddShortcut`, called on the toolbar element (TBAR), which is the
+  gmToolbarUI (vtable `0x7B5650`). Before this, `WorldDrop`'s click used the shortcut there and the item went on the
+  ground. The slot gets the green ring while it's held there. `[shortcut]` lines in log.txt. **Worn**
   (`SettingsData.InventoryShowWorn`) slides out a paperdoll of what you're wearing on the right (`InventoryBrowser.RenderWorn`), laid
   out as the game's equipment panel by `EquipSlots` (the game's EquipMask bits, one square per slot; an item covering
   several shows in each; Pants leave out AbdomenWear, which shirts have too; an empty one shows the game's own picture of it, `EquipSlot.EmptyIcon`, found in portal.dat by the
@@ -751,6 +765,14 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   A renamed setting keeps its old `DataMember` name, or players lose it: the Inventory tab was the Bank tab, so
   `InventoryGrid`, `InventoryShowWorn` and `InventoryLootMarks` are still `bankGrid`, `bankShowWorn` and `bankLootMarks`
   in the file.
+- **Text size** (`SettingsData.TextScale`, the Config tab's Text section): `SetWindowFontScale` on the main window and
+  every `FloatingWindow` (times the window's own Size, `FloatingWindow.FontScale`). Popups and menus inherit their
+  window's scale, but a tooltip is a window of its own drawn at the font's size, so tooltips open with
+  `Widgets.BeginTooltip`, which scales them to the window they're shown from: never call `ImGui.BeginTooltip` or
+  `SetTooltip` directly. The slider only applies a size once let go, since it grows with the text under the mouse.
+  Text drawn inside a square of a fixed size (stack counts, `ItemIcons.OutlinedText`; every hotbar slot label,
+  `SlotPainter`) leaves the Text size out (`Widgets.SquareFontSize`, `SquareTextSize`, from `Widgets.TextScale`, which
+  `PlayerHud` and `FloatingWindow` set as they apply it), or it spills out of the square; a window's own Size still counts.
 - **Settings profiles** (`Settings.Profiles.cs`, `ProfileChoices.cs`, `Ui/ConfigTab.cs`, the **Config** tab, first):
   a profile is a whole `SettingsData`. Default is `settings.json` itself (so a plugin from before profiles still finds
   its settings), the rest `Settings Profiles\<name>.json`, named by file (`Settings.CleanName`), and which character uses

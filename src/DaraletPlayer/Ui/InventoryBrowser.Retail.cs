@@ -264,7 +264,7 @@ namespace DaraletPlayer.Ui {
         private static void BurdenTooltip(int burden) {
             var units = CoreManager.Current.CharacterFilter.BurdenUnits;
 
-            ImGui.BeginTooltip();
+            Widgets.BeginTooltip();
             Widgets.TextColored(burden > 100 ? Colors.Warning : Colors.Info, $"Burden: {burden}%");
 
             if (burden > 0 && units > 0) {

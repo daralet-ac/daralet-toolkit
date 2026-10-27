@@ -41,21 +41,26 @@ namespace DaraletPlayer.Ui {
         /// <summary>A stack's size in an icon's bottom right corner.</summary>
         public static void StackCount(ImDrawListPtr drawList, int stack, Vector2 at, float cell) {
             var text = stack >= 10000 ? $"{stack / 1000}k" : stack.ToString();
-            var size = ImGui.CalcTextSize(text);
+            var size = Widgets.SquareTextSize(text);
             var spot = new Vector2(at.X + cell - size.X - 2, at.Y + cell - size.Y - 1);
             OutlinedText(drawList, text, spot, new Vector4(1, 1, 1, 1));
         }
 
-        /// <summary>Text on a black outline, so it reads on any icon, at whole pixels.</summary>
+        /// <summary>
+        /// Text on a black outline, so it reads on any icon, at whole pixels. At SquareFontSize: the icons don't grow with
+        /// the Text size.
+        /// </summary>
         public static void OutlinedText(ImDrawListPtr drawList, string text, Vector2 at, Vector4 color) {
             var spot = new Vector2((float)Math.Round(at.X), (float)Math.Round(at.Y));
             var black = ImGui.GetColorU32(new Vector4(0, 0, 0, 1));
+            var font = ImGui.GetFont();
+            var fontSize = Widgets.SquareFontSize();
 
             foreach (var offset in new[] { new Vector2(-1, 0), new Vector2(1, 0), new Vector2(0, -1), new Vector2(0, 1) }) {
-                drawList.AddText(spot + offset, black, text);
+                drawList.AddText(font, fontSize, spot + offset, black, text);
             }
 
-            drawList.AddText(spot, ImGui.GetColorU32(color), text);
+            drawList.AddText(font, fontSize, spot, ImGui.GetColorU32(color), text);
         }
 
         /// <summary>A mark with no icon under it: the symbol, full size, or a dot when the rule has no symbol.</summary>
@@ -236,7 +241,7 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            var textSize = ImGui.CalcTextSize(letter);
+            var textSize = Widgets.SquareTextSize(letter);
             var (r, g, b, a) = PackedColor.Unpack(color);
             OutlinedText(drawList, letter, center - textSize / 2, new Vector4(r, g, b, a));
         }

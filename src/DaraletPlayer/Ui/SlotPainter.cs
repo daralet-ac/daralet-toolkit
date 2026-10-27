@@ -218,8 +218,11 @@ namespace DaraletPlayer.Ui {
             Label(drawList, icons, bar, text, where, bar.KeyColor, bar.KeyScale);
         }
 
-        /// <summary>A slot's text at a share of the window's font, in whole pixels.</summary>
-        private static int Pixels(float scale) => (int)Math.Round(ImGui.GetFontSize() * scale);
+        /// <summary>
+        /// A slot's text at a share of the window's font, in whole pixels. Not the Text size's: the slots don't grow with
+        /// it, so their labels mustn't either.
+        /// </summary>
+        private static int Pixels(float scale) => (int)Math.Round(Widgets.SquareFontSize() * scale);
 
         /// <summary>How big a slot's text is drawn: a sharp label's size, or ImGui's text's if one can't be made.</summary>
         private static Vector2 LabelSize(ItemIcons icons, HotbarBar bar, string text, float scale) {
@@ -248,7 +251,7 @@ namespace DaraletPlayer.Ui {
         public static Vector2 TextSize(HotbarBar bar, string text) => TextSize(bar, text, bar.TextScale);
 
         /// <summary>The same at a size of its own (the hotkeys have theirs).</summary>
-        public static Vector2 TextSize(HotbarBar bar, string text, float scale) => ImGui.CalcTextSize(text) * scale;
+        public static Vector2 TextSize(HotbarBar bar, string text, float scale) => Widgets.SquareTextSize(text) * scale;
 
         /// <summary>Text over a slot in a colour on a black outline, so it reads on any icon, at whole pixels.</summary>
         public static void Text(ImDrawListPtr drawList, HotbarBar bar, string text, Vector2 at, uint color) {
@@ -260,7 +263,7 @@ namespace DaraletPlayer.Ui {
             var spot = new Vector2((float)Math.Round(at.X), (float)Math.Round(at.Y));
             var black = PackedColor.Pack(0, 0, 0, (byte)(color >> 24));
             var font = ImGui.GetFont();
-            var size = ImGui.GetFontSize() * scale;
+            var size = Widgets.SquareFontSize() * scale;
 
             foreach (var offset in new[] { new Vector2(-1, 0), new Vector2(1, 0), new Vector2(0, -1), new Vector2(0, 1) }) {
                 drawList.AddText(font, size, spot + offset, black, text);
