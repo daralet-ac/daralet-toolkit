@@ -12,7 +12,8 @@ namespace DaraletPlayer.Ui {
     /// @playerui targets sends once a second: vitals, spells, who it's attacking and its threat table.
     /// </summary>
     internal class TargetTab : IDisposable {
-        private const float WindowWidth = 220;
+        private const int MinBarWidth = 40;
+        private const int MaxBarWidth = 400;
         private const float WindowBarHeight = 14;
 
         /// <summary>Spell rows a floating window shows of each kind (buffs, debuffs) before "and N more".</summary>
@@ -33,9 +34,63 @@ namespace DaraletPlayer.Ui {
 
             tracker = new TargetTracker(feed);
             selectedWindow = new FloatingWindow("target", "Target", settings, new Vector2(500, 60), RenderSelectedWindow,
-                inUse: SelectedInUse);
+                inUse: SelectedInUse, menuItems: () => RenderVitalsMenu("target"));
             trackedWindow = new FloatingWindow("tracked", "Tracked Target", settings, new Vector2(740, 60), RenderTrackedWindow,
-                visibleByDefault: false, inUse: TrackedInUse);
+                visibleByDefault: false, inUse: TrackedInUse, menuItems: () => RenderVitalsMenu("tracked"));
+        }
+
+        /// <summary>
+        /// The vitals settings in a target window's right-click menu: the same ones as the tab's Settings, shared by both
+        /// windows.
+        /// </summary>
+        private void RenderVitalsMenu(string id) {
+            var data = settings.Data;
+            var changed = false;
+
+            if (ImGui.MenuItem("Health", null, data.TargetShowHealth)) {
+                data.TargetShowHealth = !data.TargetShowHealth;
+                changed = true;
+            }
+
+            if (ImGui.MenuItem("Stamina", null, data.TargetShowStamina)) {
+                data.TargetShowStamina = !data.TargetShowStamina;
+                changed = true;
+            }
+
+            if (ImGui.MenuItem("Mana", null, data.TargetShowMana)) {
+                data.TargetShowMana = !data.TargetShowMana;
+                changed = true;
+            }
+
+            if (ImGui.MenuItem("Side by side", null, data.TargetSideBySide)) {
+                data.TargetSideBySide = !data.TargetSideBySide;
+                changed = true;
+            }
+
+            var width = data.TargetBarWidth;
+            ImGui.SetNextItemWidth(ImGui.GetFontSize() * 8);
+
+            if (ImGui.SliderInt($"Bar width##{id}-menu-bar-width", ref width, MinBarWidth, MaxBarWidth, "%d px")) {
+                data.TargetBarWidth = width;
+                changed = true;
+            }
+            Widgets.Tip("How wide each vital bar is, in both target windows.");
+
+            ImGui.Separator();
+
+            if (changed) {
+                settings.Changed();
+            }
+        }
+
+        /// <summary>
+        /// Opens the window's menu from a right-click anywhere on it: its menu doesn't open over items, and the window is
+        /// nearly all bars.
+        /// </summary>
+        private static void OpenMenuOnRightClick(FloatingWindow window) {
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Right) && ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)) {
+                window.OpenMenu();
+            }
         }
 
         public void Render() {
@@ -124,13 +179,33 @@ namespace DaraletPlayer.Ui {
             changed |= Form.FlowCheck(ref first, "Threat", ref data.TargetShowThreat,
                 "Shows the creature's threat table in the target windows: who it wants to attack, and how much. The one "
                 + "it's attacking is the one it picked from those near the top.");
+            changed |= Form.FlowCheck(ref first, "Health##target", ref data.TargetShowHealth,
+                "Shows the creature's health in the target windows (a player's too, as a percentage).");
+            changed |= Form.FlowCheck(ref first, "Stamina##target", ref data.TargetShowStamina,
+                "Shows the creature's stamina in the target windows.");
+            changed |= Form.FlowCheck(ref first, "Mana##target", ref data.TargetShowMana,
+                "Shows the creature's mana in the target windows.");
+            changed |= Form.FlowCheck(ref first, "Side by side##target", ref data.TargetSideBySide,
+                "Puts the vital bars in a row, beside each other, instead of one under another.");
             changed |= Form.FlowCheck(ref first, "Retail bars##target", ref data.RetailVitalBars, Widgets.RetailBarsTip);
             changed |= Form.FlowCheck(ref first, "Bold numbers##target", ref data.BoldVitalText, Widgets.BoldVitalsTip);
 
-            if (data.TargetShowThreat && Form.BeginForm("target-threat")) {
-                Form.Label("Threat rows", "How many rows of the threat table the target windows show. The tab shows all "
-                    + "of them.");
-                changed |= Form.Slider("##threat-rows", ref data.ThreatRows, 1, 12, "%d");
+            if (Form.BeginForm("target-bars")) {
+                Form.Label("Bar width", "How wide each vital bar is in the target windows, which grow or shrink to fit. "
+                    + "Each window's Size makes everything bigger, bars included.");
+                var width = data.TargetBarWidth;
+
+                if (Form.Slider("##target-bar-width", ref width, MinBarWidth, MaxBarWidth, "%d px")) {
+                    data.TargetBarWidth = width;
+                    changed = true;
+                }
+
+                if (data.TargetShowThreat) {
+                    Form.Label("Threat rows", "How many rows of the threat table the target windows show. The tab shows "
+                        + "all of them.");
+                    changed |= Form.Slider("##threat-rows", ref data.ThreatRows, 1, 12, "%d");
+                }
+
                 ImGui.EndTable();
             }
 
@@ -166,8 +241,18 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>The name line and vital bars. False when there's nothing more to show (not loaded, gone, or a player).</summary>
-        private bool RenderHeader(uint guid, TargetInfo target, float barWidth, float barHeight = 0) {
+        /// <summary>
+        /// The name line and vital bars. False when there's nothing more to show (not loaded, gone, or a player). In the
+        /// floating windows (inWindow) the bars are the ones the settings show, side by side when they say so; the tab shows
+        /// them all.
+        /// </summary>
+        private bool RenderHeader(uint guid, TargetInfo target, float barWidth, float barHeight = 0, bool inWindow = false) {
+            var data = settings.Data;
+            var health = !inWindow || data.TargetShowHealth;
+            var stamina = !inWindow || data.TargetShowStamina;
+            var mana = !inWindow || data.TargetShowMana;
+            var sideBySide = inWindow && data.TargetSideBySide;
+
             if (target == null) {
                 Widgets.TextDisabled("Loading...");
                 return false;
@@ -180,10 +265,14 @@ namespace DaraletPlayer.Ui {
 
             if (target.IsPlayer) {
                 Widgets.Text(target.Name ?? "");
-                var health = feed.ClientHealth(guid);
-                var label = health.HasValue ? $"{health.Value * 100:0}%" : "?";
-                Widgets.Bar(health ?? 0, Colors.Health, label, barWidth, barHeight);
-                Widgets.Tip("Another player's health, as the game shows it. Their spells and exact vitals aren't sent.");
+
+                if (health) {
+                    var percent = feed.ClientHealth(guid);
+                    var label = percent.HasValue ? $"{percent.Value * 100:0}%" : "?";
+                    Widgets.Bar(percent ?? 0, Colors.Health, label, barWidth, barHeight);
+                    Widgets.Tip("Another player's health, as the game shows it. Their spells and exact vitals aren't sent.");
+                }
+
                 return false;
             }
 
@@ -191,9 +280,10 @@ namespace DaraletPlayer.Ui {
             ImGui.SameLine();
             Widgets.TextDisabled($"Lvl {target.Level}  {Display.Distance(target.Distance)}");
 
-            Widgets.VitalBar(target.Health, target.MaxHealth, Colors.Health, barWidth, barHeight);
-            Widgets.VitalBar(target.Stamina, target.MaxStamina, Colors.Stamina, barWidth, barHeight);
-            Widgets.VitalBar(target.Mana, target.MaxMana, Colors.Mana, barWidth, barHeight);
+            var first = true;
+            Vital(ref first, sideBySide, health, target.Health, target.MaxHealth, Colors.Health, barWidth, barHeight);
+            Vital(ref first, sideBySide, stamina, target.Stamina, target.MaxStamina, Colors.Stamina, barWidth, barHeight);
+            Vital(ref first, sideBySide, mana, target.Mana, target.MaxMana, Colors.Mana, barWidth, barHeight);
 
             if (target.AttackTarget.HasValue) {
                 var you = feed.Hello != null && target.AttackTarget.Value == feed.Hello.Guid;
@@ -290,6 +380,7 @@ namespace DaraletPlayer.Ui {
 
         private void RenderSelectedWindow() {
             tracker.Refresh();
+            OpenMenuOnRightClick(selectedWindow);
 
             var selected = tracker.Selected;
 
@@ -310,6 +401,7 @@ namespace DaraletPlayer.Ui {
 
         private void RenderTrackedWindow() {
             tracker.Refresh();
+            OpenMenuOnRightClick(trackedWindow);
 
             if (tracker.Tracked == 0) {
                 Widgets.TextDisabled("Nothing tracked");
@@ -336,18 +428,23 @@ namespace DaraletPlayer.Ui {
         /// <summary>One creature in a floating window: name, vital bars, then debuffs, buffs and threat as the settings say.</summary>
         private void RenderCompact(uint guid, float scale) {
             var target = feed.Target(guid);
-            var width = WindowWidth * scale;
+            var data = settings.Data;
+            var barWidth = Math.Max(MinBarWidth, Math.Min(MaxBarWidth, data.TargetBarWidth)) * scale;
             var barHeight = WindowBarHeight * scale;
 
             if (target?.IsOk == true) {
-                width = Widgets.VitalBarWidth(width, target.MaxHealth, target.MaxStamina, target.MaxMana);
+                barWidth = Widgets.VitalBarWidth(barWidth, target.MaxHealth, target.MaxStamina, target.MaxMana);
             }
 
-            if (!RenderHeader(guid, target, width, barHeight)) {
+            if (!RenderHeader(guid, target, barWidth, barHeight, inWindow: true)) {
                 return;
             }
 
-            var data = settings.Data;
+            // spells and threat take the whole row of bars when they're side by side
+            var bars = (data.TargetShowHealth ? 1 : 0) + (data.TargetShowStamina ? 1 : 0) + (data.TargetShowMana ? 1 : 0);
+            var width = data.TargetSideBySide && bars > 1
+                ? bars * barWidth + (bars - 1) * ImGui.GetStyle().ItemSpacing.X
+                : barWidth;
             var spells = target.Enchantments ?? new List<EnchantmentInfo>();
 
             if (data.TargetShowDebuffs) {
@@ -387,6 +484,21 @@ namespace DaraletPlayer.Ui {
             if (spells.Count > WindowSpellRows) {
                 Widgets.TextDisabled($"and {spells.Count - WindowSpellRows} more");
             }
+        }
+
+        /// <summary>One vital bar, if shown: beside the last one when side by side, else under it.</summary>
+        private static void Vital(ref bool first, bool sideBySide, bool shown, uint current, uint max, Vector4 color,
+            float width, float height) {
+            if (!shown) {
+                return;
+            }
+
+            if (sideBySide && !first) {
+                ImGui.SameLine();
+            }
+
+            first = false;
+            Widgets.VitalBar(current, max, color, width, height);
         }
 
         private static Vector4 SpellColor(EnchantmentInfo spell) {

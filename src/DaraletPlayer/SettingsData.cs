@@ -67,6 +67,14 @@ namespace DaraletPlayer {
         [DataMember(Name = "targetShowBuffs")] public bool TargetShowBuffs;
         [DataMember(Name = "targetShowDebuffs")] public bool TargetShowDebuffs;
         [DataMember(Name = "targetShowThreat")] public bool TargetShowThreat;
+
+        // The target windows' vital bars (TargetTab): which show, beside each other or one under another, and each bar's
+        // width in pixels at 100%.
+        [DataMember(Name = "targetShowHealth")] public bool TargetShowHealth;
+        [DataMember(Name = "targetShowStamina")] public bool TargetShowStamina;
+        [DataMember(Name = "targetShowMana")] public bool TargetShowMana;
+        [DataMember(Name = "targetSideBySide")] public bool TargetSideBySide;
+        [DataMember(Name = "targetBarWidth")] public int TargetBarWidth;
         /// <summary>Rows of the threat table the floating target windows show.</summary>
         [DataMember(Name = "threatRows")] public int ThreatRows;
 
@@ -264,6 +272,10 @@ namespace DaraletPlayer {
             TargetShowBuffs = true;
             TargetShowDebuffs = true;
             TargetShowThreat = true;
+            TargetShowHealth = true;
+            TargetShowStamina = true;
+            TargetShowMana = true;
+            TargetBarWidth = 220;
             ThreatRows = 5;
             MapTypes = new Dictionary<string, bool>();
             MapShowFellows = true;

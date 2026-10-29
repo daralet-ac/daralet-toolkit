@@ -123,14 +123,14 @@ namespace DaraletPlayer.Ui {
 
             if (Widgets.Button("Leader", leader && member != null, memberTip
                 ?? $"Makes {member.Name} the fellowship's leader.")) {
-                CoreManager.Current.Actions.FellowshipGrantLeader(unchecked((int)member.Guid));
+                FellowshipActions.Leader(member.Guid);
             }
 
             Form.Flow(ref first, ButtonWidth("Dismiss"));
 
             if (Widgets.Button("Dismiss", leader && member != null, memberTip
                 ?? $"Dismisses {member.Name} from the fellowship.")) {
-                CoreManager.Current.Actions.FellowshipDismiss(unchecked((int)member.Guid));
+                FellowshipActions.Dismiss(member.Guid);
             }
 
             var openLabel = fellowship.Open ? "Close" : "Open";
@@ -141,7 +141,7 @@ namespace DaraletPlayer.Ui {
                 : "Opens the fellowship: any member can recruit.";
 
             if (Widgets.Button($"{openLabel}##fellowship-open", leader && !fellowship.Locked, openTip)) {
-                CoreManager.Current.Actions.FellowshipSetOpen(!fellowship.Open);
+                FellowshipActions.SetOpen(!fellowship.Open);
             }
 
             var recruit = SocialActions.SelectedPlayer(out var recruitName);
@@ -159,7 +159,7 @@ namespace DaraletPlayer.Ui {
             Form.Flow(ref first, ButtonWidth("Recruit"));
 
             if (Widgets.Button("Recruit", canRecruit, why ?? $"Asks {recruitName} to join the fellowship.")) {
-                CoreManager.Current.Actions.FellowshipRecruit(recruit);
+                FellowshipActions.Recruit(unchecked((uint)recruit));
             }
 
             Form.Flow(ref first, ButtonWidth("Quit"));
@@ -167,14 +167,14 @@ namespace DaraletPlayer.Ui {
             if (Widgets.Button("Quit", true, leader
                 ? "Leaves the fellowship; it carries on with a new leader."
                 : "Leaves the fellowship.")) {
-                CoreManager.Current.Actions.FellowshipQuit();
+                FellowshipActions.Quit();
             }
 
             Form.Flow(ref first, ButtonWidth("Disband"));
 
             if (Widgets.Button("Disband", leader, leader ? "Ends the fellowship for everyone in it."
                 : "Only the leader can disband the fellowship.")) {
-                CoreManager.Current.Actions.FellowshipDisband();
+                FellowshipActions.Disband();
             }
         }
 

@@ -388,12 +388,14 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   its checkboxes send (the server's `GameActionSetSingleCharacterOption`, which also tells friends for Appear Offline);
   the client's own copy of its options (`PlayerModule`) isn't changed, so the game's panels show the old value until
   the next login, and Apply in the game's options panel sends them all back. A ticked box shows as ticked for up to 4
-  seconds, until a social reply has caught up (`SocialActions.Option`). The fellowship's own buttons are Decal's
-  (`Actions.FellowshipGrantLeader`, `Dismiss`, `SetOpen`, `Recruit`, `Quit`, `Disband`), greyed out with the reason as
-  their tooltip: Leader and Dismiss need you to lead and a member selected, Open needs you to lead an unlocked one,
+  seconds, until a social reply has caught up (`SocialActions.Option`). The fellowship's own buttons are the client's
+  own messages (`FellowshipActions`: AcClient's `CM_Fellowship.Event_AssignNewLeader`, `Event_Dismiss`,
+  `Event_ChangeFellowOpeness`, `Event_Recruit`, `Event_Quit(0)`, and `Event_Quit(1)` to disband; `[fellowship]` lines in
+  log.txt): Decal's `Actions.FellowshipGrantLeader`, `Dismiss`, `SetOpen`, `Recruit`, `Quit` and `Disband` each crashed
+  the client. They're greyed out with the reason as their tooltip: Leader and Dismiss need you to lead and a member selected, Open needs you to lead an unlocked one,
   Recruit a selected player not in it and room (`SocialActions.CanRecruit`, the fellowship's `maxMembers` from the server:
   9, or no cap for a Town Defense fellowship, `Fellowship.MaxMembers`), Disband the leader. Friends'
-  right-click menu: Invite (`FellowshipRecruit`), Send tell (a popup, `/tell name, text`), Remove. Break and Kick ask
+  right-click menu: Invite (`FellowshipActions.Recruit`), Send tell (a popup, `/tell name, text`), Remove. Break and Kick ask
   first in a modal; Kick takes the vassal picked in the list, else the selection when it's a vassal.
   **The fellowship window** (`FellowshipTab.Window.cs`): Side by side puts a fellow's bars in a row, Bar width
   (`FellowshipBarWidth`, 130 to start) sizes each bar, and the name line can carry the Combat Focus's icon, the level,
@@ -811,7 +813,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   the fellow right-clicked (`SettingsData.FellowVitals`, by name, each vital null to follow the Stamina/Mana checkboxes).
   Vital and threat bars are never shorter than the font (`Widgets.Bar`), nor narrower than their numbers
   (`Widgets.VitalBarWidth`): a big font wrote each bar's numbers over the next. Clicking a threat row selects that
-  creature or player. The **Map window** is the World tab's map in a `FloatingWindow` with its own `MapView` (its own pan,
+  creature or player. The Target and Tracked Target windows share their vitals' settings, as the fellowship window has
+  them: Health, Stamina and Mana each shown or not, Side by side and Bar width (`TargetShowHealth`..., `TargetSideBySide`,
+  `TargetBarWidth`, 220 to start), with spells and threat as wide as the row of bars; the Target tab shows all three.
+  They're in both windows' right-click menus too (`TargetTab.RenderVitalsMenu`), which open from anywhere on the window
+  (`OpenMenuOnRightClick`), since it's nearly all bars and the menu doesn't open over items.
+  The **Map window** is the World tab's map in a `FloatingWindow` with its own `MapView` (its own pan,
   zoom and Follow me); the arrow window's **Details** box leaves the arrow alone.
 - **The game's UI pictures** (`Resources/ui`, embedded as `DaraletPlayer.Resources.ui.<name>.png`, drawn by `ItemIcons.DrawArt`): taken from the client by hand, since they aren't item icons: the main pack (`main-pack`), the green behind each pack in the Retail column (`pack-background`, with the pack's icon on it without its usual tile), the ring over the slot an item is held over in a drag (`drop-ring`, 17x16, scaled to the slot's width; a frame over a list line), and the red crossed-out circle (`drop-invalid`, not the reticle's) where it can't go, letting go there doing nothing (`Accepted(allowed)`: a pack only in a pack slot, on a pack, the main pack or the bank's own slots, never among a pack's items; an item not in a full pack; a paperdoll square only for what its `EquipableSlots` include), the empty slot (`empty-slot`: a pack's room left in the grids, which show a pack as its every slot, `InventoryBrowser.Slots`, and the side pack slots left in the Retail column), the selection frame (`selected`: the selected item, as `Actions.CurrentSelection` says, in the grids, the paperdoll and the Retail pack column, a click in a list selecting it as the game's pack does), and the target reticles (`reticle`, `reticle-invalid`). The Retail chosen pack's arrow is still drawn with shapes: the game's own hasn't been found. The grids have no gap between squares, as the game's pack has none.
   **Retail bars** (`SettingsData.RetailVitalBars`, off to start, ticked in the fellowship window's or the Target tab's

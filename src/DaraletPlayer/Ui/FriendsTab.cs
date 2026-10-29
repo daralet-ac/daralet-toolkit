@@ -162,7 +162,7 @@ namespace DaraletPlayer.Ui {
             }
 
             if (ImGui.MenuItem("Invite", null, false, canRecruit)) {
-                CoreManager.Current.Actions.FellowshipRecruit(unchecked((int)friend.Guid));
+                FellowshipActions.Recruit(friend.Guid);
             }
             Widgets.Tip(why ?? $"Asks {friend.Name} to join your fellowship, as the fellowship panel's Recruit does. "
                 + "They need to be near enough to see.");
