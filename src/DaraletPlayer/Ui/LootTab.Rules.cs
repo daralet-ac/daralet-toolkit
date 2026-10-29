@@ -20,21 +20,23 @@ namespace DaraletPlayer.Ui {
         private void RenderRules() {
             var rules = looter.ActiveList.Rules;
             var avail = ImGui.GetContentRegionAvail().X;
-            var saved = settings.Data.LootRuleListWidth;
-            var width = saved > 0 ? saved : Math.Min(260, avail * 0.38f);
-            // keep the editor usable however far the bar was dragged, or the window shrunk since
-            width = Math.Max(120, Math.Min(width, avail - 200));
+            var em = ImGui.GetFontSize();
+            MoveOldRuleListWidth(em);
 
-            if (ImGui.BeginChild("loot-rules", new Vector2(width, 0), true)) {
+            // keep the editor usable however far the bar was dragged, or the window shrunk since
+            var (minList, minEditor) = (em * 9, em * 15);
+            var width = Panes.Size("loot-rules", Math.Min(em * 20, avail * 0.38f), avail, minList, minEditor);
+
+            if (Widgets.BeginChild("loot-rules", new Vector2(width, 0), true)) {
                 RenderRuleList(looter.ActiveList);
             }
             ImGui.EndChild();
 
             ImGui.SameLine(0, 0);
-            RenderRuleListSplitter(width, avail);
+            Panes.Divider("loot-rules", true, width, avail, minList, minEditor, "Drag to widen or narrow the rule list.");
             ImGui.SameLine(0, 0);
 
-            if (ImGui.BeginChild("loot-rule-editor", new Vector2(0, 0), true)) {
+            if (Widgets.BeginChild("loot-rule-editor", new Vector2(0, 0), true)) {
                 if (selectedRule >= 0 && selectedRule < rules.Count) {
                     RenderRuleEditor(rules, selectedRule);
                 }
@@ -45,31 +47,20 @@ namespace DaraletPlayer.Ui {
             ImGui.EndChild();
         }
 
-        /// <summary>The bar between the rule list and the editor, dragged to widen or narrow the list.</summary>
-        private void RenderRuleListSplitter(float width, float avail) {
-            var height = ImGui.GetContentRegionAvail().Y;
-            var barWidth = ImGui.GetStyle().ItemSpacing.X;
-            ImGui.InvisibleButton("##rule-list-splitter", new Vector2(barWidth, Math.Max(1, height)));
-            var active = ImGui.IsItemActive();
+        /// <summary>A rule list width dragged before Panes, in pixels: kept, as lines of text at the size it was dragged at.</summary>
+        private void MoveOldRuleListWidth(float em) {
+            var data = settings.Data;
 
-            if (active || ImGui.IsItemHovered()) {
-                ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEW);
-                var min = ImGui.GetItemRectMin();
-                var max = ImGui.GetItemRectMax();
-                var x = (min.X + max.X) / 2;
-                ImGui.GetWindowDrawList().AddLine(new Vector2(x, min.Y), new Vector2(x, max.Y),
-                    ImGui.GetColorU32(active ? ImGuiCol.SeparatorActive : ImGuiCol.SeparatorHovered), 2);
+            if (data.LootRuleListWidth <= 0 || em <= 0) {
+                return;
             }
-            Widgets.Tip("Drag to widen or narrow the rule list. Double-click for its usual width.");
 
-            if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
-                settings.Data.LootRuleListWidth = 0;
-                settings.Changed();
+            if (data.PaneSizes != null && !data.PaneSizes.ContainsKey("loot-rules")) {
+                data.PaneSizes["loot-rules"] = data.LootRuleListWidth / em;
             }
-            else if (active && ImGui.GetIO().MouseDelta.X != 0) {
-                settings.Data.LootRuleListWidth = Math.Max(120, Math.Min(width + ImGui.GetIO().MouseDelta.X, avail - 200));
-                settings.Changed();
-            }
+
+            data.LootRuleListWidth = 0;
+            settings.Changed();
         }
 
         /// <summary>A rule's mark on a blank square.</summary>

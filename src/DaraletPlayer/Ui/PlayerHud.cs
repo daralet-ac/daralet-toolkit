@@ -70,6 +70,7 @@ namespace DaraletPlayer.Ui {
 
             Appraisal.Start(feed, settings, icons);
             ItemTooltip.Scale = () => settings.Data.ClampedItemTextScale;
+            Panes.Settings = settings;
             Widgets.RetailBars = () => settings.Data.RetailVitalBars;
             Widgets.BoldVitals = () => settings.Data.BoldVitalText;
 
@@ -107,6 +108,7 @@ namespace DaraletPlayer.Ui {
             hud.OnRender += Hud_OnRender;
             settings.Swapped += Settings_Swapped;
             GameDrag.Start();
+            CursorKeeper.Start();
         }
 
         /// <summary>Another settings profile: what was worked out from the old one's starts again.</summary>
@@ -253,9 +255,11 @@ namespace DaraletPlayer.Ui {
 
             try {
                 GameDrag.Stop();
+                CursorKeeper.Stop();
                 Appraisal.Stop();
                 ItemUser.Icons = null;
                 ItemTooltip.Scale = () => 1;
+                Panes.Settings = null;
                 Widgets.RetailBars = () => false;
                 Widgets.BoldVitals = () => false;
             }

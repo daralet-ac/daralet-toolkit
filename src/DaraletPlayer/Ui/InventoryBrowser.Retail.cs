@@ -56,7 +56,7 @@ namespace DaraletPlayer.Ui {
 
             var dollFlags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
 
-            if (ImGui.BeginChild("retail-worn", new Vector2(-packsWidth - style.ItemSpacing.X, topHeight), true, dollFlags)) {
+            if (Widgets.BeginChild("retail-worn", new Vector2(-packsWidth - style.ItemSpacing.X, topHeight), true, dollFlags)) {
                 // centred, as the game's equipment panel is
                 ImGui.SetCursorPosX(Math.Max(ImGui.GetCursorPosX(), (ImGui.GetWindowWidth() - dollWidth) / 2));
                 RenderPaperdoll((float)Math.Floor(sigilGap));
@@ -68,7 +68,7 @@ namespace DaraletPlayer.Ui {
 
             ImGui.SameLine();
 
-            if (ImGui.BeginChild("retail-packs", new Vector2(packsWidth, topHeight), true, ImGuiWindowFlags.NoScrollbar)) {
+            if (Widgets.BeginChild("retail-packs", new Vector2(packsWidth, topHeight), true, ImGuiWindowFlags.NoScrollbar)) {
                 // packs close together, as in the game's column
                 ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(ImGui.GetStyle().ItemSpacing.X, 1));
                 var start = ImGui.GetCursorPosY();
@@ -80,7 +80,7 @@ namespace DaraletPlayer.Ui {
 
             // a thin edge so the grid sits close to the scrollbar (padding is read as the child begins)
             ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(3, 3));
-            var itemsShown = ImGui.BeginChild("retail-items", Vector2.Zero, true);
+            var itemsShown = Widgets.BeginChild("retail-items", Vector2.Zero, true);
             ImGui.PopStyleVar();
 
             if (itemsShown) {

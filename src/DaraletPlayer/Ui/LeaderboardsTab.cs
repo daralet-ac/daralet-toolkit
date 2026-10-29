@@ -30,9 +30,11 @@ namespace DaraletPlayer.Ui {
         }
 
         public void Render() {
-            var width = Math.Min(170, ImGui.GetContentRegionAvail().X * 0.3f);
+            var em = ImGui.GetFontSize();
+            var avail = ImGui.GetContentRegionAvail().X;
+            var width = Panes.Size("leaderboard-list", Math.Min(em * 13, avail * 0.3f), avail, em * 6, em * 15);
 
-            if (ImGui.BeginChild("leaderboard-list", new Vector2(width, 0), true)) {
+            if (Widgets.BeginChild("leaderboard-list", new Vector2(width, 0), true)) {
                 for (var i = 0; i < Leaderboards.All.Length; i++) {
                     if (ImGui.Selectable(Leaderboards.All[i].Label, i == selected)) {
                         selected = i;
@@ -43,9 +45,12 @@ namespace DaraletPlayer.Ui {
             }
             ImGui.EndChild();
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, 0);
+            Panes.Divider("leaderboard-list", true, width, avail, em * 6, em * 15,
+                "Drag to widen or narrow the list of boards.");
+            ImGui.SameLine(0, 0);
 
-            if (ImGui.BeginChild("leaderboard-board", new Vector2(0, 0), false)) {
+            if (Widgets.BeginChild("leaderboard-board", new Vector2(0, 0), false)) {
                 RenderBoard(Leaderboards.All[selected]);
             }
             ImGui.EndChild();
@@ -145,14 +150,14 @@ namespace DaraletPlayer.Ui {
             var hasRank = board.Id != "trade";
             var flags = Widgets.TableFlags | ImGuiTableFlags.ScrollY;
 
-            if (!ImGui.BeginTable(id, board.Columns.Length + (hasRank ? 1 : 0), flags)) {
+            if (!Widgets.BeginTable(id, board.Columns.Length + (hasRank ? 1 : 0), flags)) {
                 return;
             }
 
             ImGui.TableSetupScrollFreeze(0, 1);
 
             if (hasRank) {
-                ImGui.TableSetupColumn("#", ImGuiTableColumnFlags.WidthFixed, 30);
+                ImGui.TableSetupColumn("#", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(30));
             }
 
             // the first column (who) takes what's left; the numbers get a fixed width
@@ -161,7 +166,7 @@ namespace DaraletPlayer.Ui {
                     ImGui.TableSetupColumn(board.Columns[i].Header, ImGuiTableColumnFlags.WidthStretch);
                 }
                 else {
-                    ImGui.TableSetupColumn(board.Columns[i].Header, ImGuiTableColumnFlags.WidthFixed, 110);
+                    ImGui.TableSetupColumn(board.Columns[i].Header, ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(110));
                 }
             }
 

@@ -300,12 +300,12 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 140);
-            ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.WidthFixed, 35);
-            ImGui.TableSetupColumn("Health", ImGuiTableColumnFlags.WidthFixed, Widgets.BarWidth);
-            ImGui.TableSetupColumn("Stamina", ImGuiTableColumnFlags.WidthFixed, Widgets.BarWidth);
-            ImGui.TableSetupColumn("Mana", ImGuiTableColumnFlags.WidthFixed, Widgets.BarWidth);
-            ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, 45);
+            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(140));
+            ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(35));
+            ImGui.TableSetupColumn("Health", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(Widgets.BarWidth));
+            ImGui.TableSetupColumn("Stamina", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(Widgets.BarWidth));
+            ImGui.TableSetupColumn("Mana", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(Widgets.BarWidth));
+            ImGui.TableSetupColumn("Dist", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(45));
             ImGui.TableSetupColumn("Location", ImGuiTableColumnFlags.WidthStretch);
             const string vitalTip = "Current / maximum, updated every second.";
             Widgets.HeadersRow(

@@ -418,7 +418,7 @@ namespace DaraletPlayer.Ui {
 
             var height = Math.Min(results.Count, 6) * ImGui.GetTextLineHeightWithSpacing() + 6;
 
-            if (!ImGui.BeginChild("world-search-results", new Vector2(0, height), true)) {
+            if (!Widgets.BeginChild("world-search-results", new Vector2(0, height), true)) {
                 ImGui.EndChild();
                 return;
             }

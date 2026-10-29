@@ -103,6 +103,12 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
   `CharacterFilter.LoginStatus == 3`: `FloatingWindow` stays hidden until then, `SelfPosition` gives nothing, and
   `Hotkeys.ForTheGame` and `GameDrag` check first. The main window draws at character select, so a tab mustn't read them
   before the feed is connected (it isn't until login).
+- **ImGui's mouse cursors (a window edge's resize arrows, a divider's, the I-beam) flashed for a frame and were gone.**
+  UtilityBelt.Service passes ImGui every window message but WM_SETCURSOR (`HudManager.WindowMessage` skips 32 and 132),
+  ImGui's Windows code only sets a cursor when it changes, and the game answers WM_SETCURSOR, sent on every mouse move,
+  with its own. `CursorKeeper` answers it instead (the system cursor ImGui's code would pick, `SetCursor`, and `e.Eat`
+  on Decal's `WindowMessage`) while ImGui's cursor isn't the plain arrow, which is left to the game. It covers other
+  plugins' ImGui windows too: there's one ImGui.
 - **Every Decal event handler and render callback is wrapped in try/catch.** An exception escaping into Decal can crash the
   client.
 - **JSON:** System.Text.Json writes dictionaries as objects; `DataContractJsonSerializer` only reads them with
@@ -283,7 +289,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   still says `LootList`) in `SettingsData.Loot`, each character
   picking one (`LootData.ActiveFor`). A rule is a category, tiers, name words and any of `MarketSearch.Filters`, plus an
   outcome (Keep, Salvage, Notify, Ignore); the first enabled rule that matches decides. The rule list is widened by
-  dragging the bar between it and the editor (`SettingsData.LootRuleListWidth`, 0 for the default); a long rule name
+  dragging the bar between it and the editor (`Panes`, `loot-rules`; a width saved in `LootRuleListWidth`, pixels, from
+  before, is moved over the first time it's drawn); a long rule name
   is cut short of its mark, which stays at the row's right end. **Folders** (`LootRule.Folder`, `Feed/LootFolders.cs`,
   `Ui/LootTab.RuleList.cs`) are only a name on rules, and a folder's rules are always kept together where its first one
   is (`LootFolders.Gather`), so the list's order is still the order rules are checked in. Ctrl/Shift+click picks several
@@ -884,7 +891,14 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   every `FloatingWindow` (times the window's own Size, `FloatingWindow.FontScale`). Popups and menus inherit their
   window's scale, but a tooltip is a window of its own drawn at the font's size, so tooltips open with
   `Widgets.BeginTooltip`, which scales them to the window they're shown from: never call `ImGui.BeginTooltip` or
-  `SetTooltip` directly. The slider only applies a size once let go, since it grows with the text under the mouse.
+  `SetTooltip` directly. ImGui sizes a child window's text by its own scale times its direct parent's only, so a child
+  inside a child (the Quests list's scrolling table in its `quests-list` child) drew at 100% whatever the Text size:
+  child windows open with `Widgets.BeginChild`, and tables that scroll (ScrollX/ScrollY, a child of their own) with
+  `Widgets.BeginTable`, which match the parent's font size; never call `ImGui.BeginChild` directly. Sizes picked in
+  pixels grow with the text too: fixed table columns are `Widgets.Scaled(px)` (px at 100% text), and split panes
+  (**Panes**, `Ui/Panes.cs`: Loot's rule list, the Inventory's pack list, the Hotbars page's bar list, Leaderboards'
+  board list, and the Quests list above its details) are sized in lines of text, `SettingsData.PaneSizes` by name, set
+  by dragging the divider between the two (double-click for the usual size). The slider only applies a size once let go, since it grows with the text under the mouse.
   Text drawn inside a square of a fixed size (stack counts, `ItemIcons.OutlinedText`; every hotbar slot label,
   `SlotPainter`) leaves the Text size out (`Widgets.SquareFontSize`, `SquareTextSize`, from `Widgets.TextScale`, which
   `PlayerHud` and `FloatingWindow` set as they apply it), or it spills out of the square; a window's own Size still counts.

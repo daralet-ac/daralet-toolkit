@@ -129,9 +129,9 @@ namespace DaraletPlayer.Ui {
                 Widgets.TextDisabled($"You haven't fought a rated duel yet. Every rating starts at {arena.StartingRating}.");
             }
             else if (ImGui.BeginTable("arena-boards", 4, Widgets.TableFlags)) {
-                ImGui.TableSetupColumn("Bracket", ImGuiTableColumnFlags.WidthFixed, 110);
-                ImGui.TableSetupColumn("Rating", ImGuiTableColumnFlags.WidthFixed, 60);
-                ImGui.TableSetupColumn("W / L / D", ImGuiTableColumnFlags.WidthFixed, 90);
+                ImGui.TableSetupColumn("Bracket", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(110));
+                ImGui.TableSetupColumn("Rating", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(60));
+                ImGui.TableSetupColumn("W / L / D", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(90));
                 ImGui.TableSetupColumn("Won", ImGuiTableColumnFlags.WidthStretch);
                 Widgets.HeadersRow(
                     "1v1 to fellowship-sized duels; scaled ones have their own ratings.",

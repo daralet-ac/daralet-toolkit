@@ -38,7 +38,7 @@ namespace DaraletPlayer.Ui {
             var size = new Vector2(member.X + style.ScrollbarSize + style.ItemSpacing.X,
                 scrollAfter * (member.Y + style.ItemSpacing.Y));
 
-            if (ImGui.BeginChild("fellowship-scroll", size, false)) {
+            if (Widgets.BeginChild("fellowship-scroll", size, false)) {
                 RenderMembers(members, fellowship, selected, barSize);
             }
 

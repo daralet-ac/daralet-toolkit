@@ -242,11 +242,11 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.TableSetupColumn("For", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Leader", ImGuiTableColumnFlags.WidthFixed, 120);
-            ImGui.TableSetupColumn("Size", ImGuiTableColumnFlags.WidthFixed, 40);
-            ImGui.TableSetupColumn("Levels", ImGuiTableColumnFlags.WidthFixed, 55);
-            ImGui.TableSetupColumn("Waiting", ImGuiTableColumnFlags.WidthFixed, 60);
-            ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 50);
+            ImGui.TableSetupColumn("Leader", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(120));
+            ImGui.TableSetupColumn("Size", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(40));
+            ImGui.TableSetupColumn("Levels", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(55));
+            ImGui.TableSetupColumn("Waiting", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(60));
+            ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(50));
             Widgets.HeadersRow(
                 "What the fellowship wants more players for. Green: you fit it.",
                 "Its leader.",
@@ -313,10 +313,10 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.TableSetupColumn("For", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 120);
-            ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.WidthFixed, 35);
-            ImGui.TableSetupColumn("Waiting", ImGuiTableColumnFlags.WidthFixed, 60);
-            ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 55);
+            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(120));
+            ImGui.TableSetupColumn("Lvl", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(35));
+            ImGui.TableSetupColumn("Waiting", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(60));
+            ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(55));
             Widgets.HeadersRow(
                 "What they're looking for a group for. Green: your fellowship's lfm would take them.",
                 "Who's looking.",

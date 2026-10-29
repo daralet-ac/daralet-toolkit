@@ -139,14 +139,21 @@ namespace DaraletPlayer.Ui {
             var wornWidth = settings.Data.InventoryShowWorn ? panelWidth - ImGui.GetStyle().ItemSpacing.X : 0;
             var room = ImGui.GetContentRegionAvail().X - (wornWidth > 0 ? panelWidth : 0);
 
-            if (ImGui.BeginChild("bank-packs", new Vector2(Math.Min(260, room * 0.38f), 0), true)) {
+            // one size for every window's pack list (the tab's, the Bank and Inventory windows'), as one divider is dragged
+            var em = ImGui.GetFontSize();
+            var packsWidth = Panes.Size("inventory-packs", Math.Min(em * 20, room * 0.38f), room, em * 6, em * 8);
+
+            if (Widgets.BeginChild("bank-packs", new Vector2(packsWidth, 0), true)) {
                 RenderHolders();
             }
             ImGui.EndChild();
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, 0);
+            Panes.Divider("inventory-packs", true, packsWidth, room, em * 6, em * 8,
+                "Drag to widen or narrow the list of packs.");
+            ImGui.SameLine(0, 0);
 
-            if (ImGui.BeginChild("bank-items", new Vector2(wornWidth > 0 ? -panelWidth : 0, 0), true)) {
+            if (Widgets.BeginChild("bank-items", new Vector2(wornWidth > 0 ? -panelWidth : 0, 0), true)) {
                 RenderItems();
             }
             ImGui.EndChild();
@@ -157,7 +164,7 @@ namespace DaraletPlayer.Ui {
             if (wornWidth > 0) {
                 ImGui.SameLine();
 
-                if (ImGui.BeginChild("bank-worn", new Vector2(wornWidth, 0), true)) {
+                if (Widgets.BeginChild("bank-worn", new Vector2(wornWidth, 0), true)) {
                     RenderWorn();
                 }
                 ImGui.EndChild();
@@ -292,7 +299,7 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The items as icons, as many to a row as fit, then the pack's empty slots.</summary>
         private void RenderGrid(List<Item> items, int slots = 0) {
-            if (ImGui.BeginChild("bank-items-grid", Vector2.Zero, false)) {
+            if (Widgets.BeginChild("bank-items-grid", Vector2.Zero, false)) {
                 var cell = GridIconSize;
                 var columns = Math.Max(1, (int)(ImGui.GetContentRegionAvail().X / cell));
                 var squares = Math.Max(items.Count, slots);
@@ -379,17 +386,17 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderList(List<Item> items, bool searching) {
-            if (!ImGui.BeginTable("bank-items-table", searching ? 4 : 3, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
+            if (!Widgets.BeginTable("bank-items-table", searching ? 4 : 3, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
                 return;
             }
 
             ImGui.TableSetupScrollFreeze(0, 1);
             ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, 70);
-            ImGui.TableSetupColumn("Burden", ImGuiTableColumnFlags.WidthFixed, 55);
+            ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(70));
+            ImGui.TableSetupColumn("Burden", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(55));
 
             if (searching) {
-                ImGui.TableSetupColumn("Where", ImGuiTableColumnFlags.WidthFixed, 120);
+                ImGui.TableSetupColumn("Where", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(120));
             }
 
             Widgets.HeadersRow(

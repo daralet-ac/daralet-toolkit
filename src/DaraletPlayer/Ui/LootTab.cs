@@ -459,14 +459,14 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            if (!ImGui.BeginTable("loot-test", 3, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
+            if (!Widgets.BeginTable("loot-test", 3, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
                 return;
             }
 
             ImGui.TableSetupScrollFreeze(0, 1);
             ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Would", ImGuiTableColumnFlags.WidthFixed, 70);
-            ImGui.TableSetupColumn("Rule", ImGuiTableColumnFlags.WidthFixed, 160);
+            ImGui.TableSetupColumn("Would", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(70));
+            ImGui.TableSetupColumn("Rule", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(160));
             ImGui.TableHeadersRow();
 
             foreach (var decision in decisions) {

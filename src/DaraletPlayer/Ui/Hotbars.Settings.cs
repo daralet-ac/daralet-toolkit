@@ -42,16 +42,20 @@ namespace DaraletPlayer.Ui {
             Frame();
             selected = Math.Max(0, Math.Min(windows.Count - 1, selected));
 
-            var listWidth = (float)Math.Round(ImGui.GetFontSize() * 11);
+            var em = ImGui.GetFontSize();
+            var avail = ImGui.GetContentRegionAvail().X;
+            var listWidth = Panes.Size("hotbar-list", em * 11, avail, em * 7, em * 20);
 
-            if (ImGui.BeginChild("hotbar-list", new Vector2(listWidth, 0), true)) {
+            if (Widgets.BeginChild("hotbar-list", new Vector2(listWidth, 0), true)) {
                 RenderList();
             }
 
             ImGui.EndChild();
-            ImGui.SameLine();
+            ImGui.SameLine(0, 0);
+            Panes.Divider("hotbar-list", true, listWidth, avail, em * 7, em * 20, "Drag to widen or narrow the list of bars.");
+            ImGui.SameLine(0, 0);
 
-            if (ImGui.BeginChild("hotbar-settings", new Vector2(0, 0), false)) {
+            if (Widgets.BeginChild("hotbar-settings", new Vector2(0, 0), false)) {
                 RenderSelected();
             }
 

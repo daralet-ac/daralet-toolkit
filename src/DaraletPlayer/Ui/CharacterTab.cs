@@ -66,7 +66,7 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>What the game's Character Information panel says, then the stats: the tab's and the window's.</summary>
         private void RenderContents() {
-            if (!ImGui.BeginChild("character-contents", Vector2.Zero, false)) {
+            if (!Widgets.BeginChild("character-contents", Vector2.Zero, false)) {
                 ImGui.EndChild();
                 return;
             }

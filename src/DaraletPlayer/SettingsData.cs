@@ -147,8 +147,16 @@ namespace DaraletPlayer {
         /// <summary>The Corpse window shows its items as a grid of icons, as the game's does, rather than a list.</summary>
         [DataMember(Name = "lootGrid")] public bool LootGrid;
 
-        /// <summary>The Loot tab's rule list width, dragged with the bar beside it; 0 for the default.</summary>
+        /// <summary>
+        /// The Loot tab's rule list width in pixels, from before Panes; moved into PaneSizes the first time it's drawn.
+        /// </summary>
         [DataMember(Name = "lootRuleListWidth")] public float LootRuleListWidth;
+
+        /// <summary>
+        /// Each split's first pane (a list beside or above what it shows), as dragged by its divider (Panes), by name, in
+        /// lines of text, so it grows with the Text size; a split not here has its usual size.
+        /// </summary>
+        [DataMember(Name = "paneSizes")] public Dictionary<string, float> PaneSizes;
 
         /// <summary>The Carried and Bank views mark items the way the active loot list's rules do (LootMarks).</summary>
         [DataMember(Name = "bankLootMarks")] public bool InventoryLootMarks;
@@ -294,6 +302,7 @@ namespace DaraletPlayer {
             CarriedRetail = true;
             Loot = new LootData();
             Hotbars = new HotbarData();
+            PaneSizes = new Dictionary<string, float>();
             OneClickHeal = true;
             LfgChatLinks = true;
             EscapeClosesWindows = true;

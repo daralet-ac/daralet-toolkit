@@ -108,16 +108,19 @@ namespace DaraletPlayer.Ui {
             }
 
             // the list takes the top, the picked quest the rest
-            var listHeight = Math.Max(ImGui.GetFrameHeightWithSpacing() * 4, ImGui.GetContentRegionAvail().Y * 0.5f);
+            var avail = ImGui.GetContentRegionAvail().Y;
+            var least = ImGui.GetFrameHeightWithSpacing() * 4;
+            var listHeight = Panes.Size("quests-list", Math.Max(least, avail * 0.5f), avail, least, least);
 
-            if (ImGui.BeginChild("quests-list", new Vector2(0, listHeight), false)) {
+            if (Widgets.BeginChild("quests-list", new Vector2(0, listHeight), false)) {
                 RenderList(quests);
             }
             ImGui.EndChild();
 
-            ImGui.Separator();
+            Panes.Divider("quests-list", false, listHeight, avail, least, least,
+                "Drag to make the list of quests taller or shorter.");
 
-            if (ImGui.BeginChild("quest-details", Vector2.Zero, false)) {
+            if (Widgets.BeginChild("quest-details", Vector2.Zero, false)) {
                 RenderDetails(quests.First(q => q.Id == selected));
             }
             ImGui.EndChild();
@@ -140,7 +143,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderList(List<QuestInfo> quests) {
-            if (!ImGui.BeginTable("quests-table", 4, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
+            if (!Widgets.BeginTable("quests-table", 4, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
                 return;
             }
 

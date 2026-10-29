@@ -152,20 +152,20 @@ namespace DaraletPlayer.Ui {
 
             var extra = ExtraColumns();
 
-            if (!ImGui.BeginTable("market-results", 4 + extra.Count, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
+            if (!Widgets.BeginTable("market-results", 4 + extra.Count, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
                 return;
             }
 
             ImGui.TableSetupScrollFreeze(0, 1);
             ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, 100);
-            ImGui.TableSetupColumn("Tier", ImGuiTableColumnFlags.WidthFixed, 35);
+            ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(100));
+            ImGui.TableSetupColumn("Tier", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(35));
 
             foreach (var (header, _) in extra) {
-                ImGui.TableSetupColumn(header, ImGuiTableColumnFlags.WidthFixed, 75);
+                ImGui.TableSetupColumn(header, ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(75));
             }
 
-            ImGui.TableSetupColumn("Expires", ImGuiTableColumnFlags.WidthFixed, 70);
+            ImGui.TableSetupColumn("Expires", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(70));
             ImGui.TableHeadersRow();
 
             var now = DateTime.UtcNow;

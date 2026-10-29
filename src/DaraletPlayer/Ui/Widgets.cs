@@ -102,6 +102,58 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
+        /// A width picked in pixels at 100% text, at the window's text size now: a fixed table column, say, which would
+        /// otherwise cut off its bigger text.
+        /// </summary>
+        public static float Scaled(float pixels) {
+            var font = ImGui.GetFont();
+            var normal = font.FontSize * font.Scale * ImGui.GetIO().FontGlobalScale;
+            return normal > 0 ? (float)Math.Round(pixels * ImGui.GetFontSize() / normal) : pixels;
+        }
+
+        /// <summary>
+        /// ImGui.BeginChild, with the text as big as the window it's in. ImGui sizes a child's text by its own scale times
+        /// its parent's only, not its grandparent's, so a child inside a child (a scrolling table in a list, say) drew at
+        /// 100% whatever the Text size. Always pair with ImGui.EndChild, as for ImGui.BeginChild.
+        /// </summary>
+        public static bool BeginChild(string id, Vector2 size, bool border, ImGuiWindowFlags flags = ImGuiWindowFlags.None) {
+            var parentSize = ImGui.GetFontSize();
+            var open = ImGui.BeginChild(id, size, border, flags);
+
+            // the child is the current window even when it's clipped and BeginChild says false
+            MatchFontSize(parentSize);
+            return open;
+        }
+
+        /// <summary>
+        /// ImGui.BeginTable, with the text as big as the window it's in: a table that scrolls is a child window of its own
+        /// (see BeginChild). One that doesn't is drawn in the window itself, so nothing changes for it.
+        /// </summary>
+        public static bool BeginTable(string id, int columns, ImGuiTableFlags flags) {
+            var parentSize = ImGui.GetFontSize();
+            var open = ImGui.BeginTable(id, columns, flags);
+
+            if (open && (flags & (ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY)) != 0) {
+                MatchFontSize(parentSize);
+            }
+
+            return open;
+        }
+
+        /// <summary>
+        /// Scales the current (child) window's text to this size. Its scale is kept from frame to frame, so it's put back to
+        /// 1 first and the size read then, or the sum would use last frame's scale.
+        /// </summary>
+        private static void MatchFontSize(float size) {
+            ImGui.SetWindowFontScale(1);
+            var unscaled = ImGui.GetFontSize();
+
+            if (unscaled > 0) {
+                ImGui.SetWindowFontScale(size / unscaled);
+            }
+        }
+
+        /// <summary>
         /// The window's font size without the Text size, for text drawn in a square that doesn't grow with it (an item
         /// icon's stack count, a hotbar slot's labels): at a bigger Text size it would spill out of the square. A
         /// window's own Size still counts, since it grows the squares too.

@@ -168,10 +168,10 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, 110);
-            ImGui.TableSetupColumn("Tier", ImGuiTableColumnFlags.WidthFixed, 35);
-            ImGui.TableSetupColumn("Expires in", ImGuiTableColumnFlags.WidthFixed, 80);
-            ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 55);
+            ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(110));
+            ImGui.TableSetupColumn("Tier", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(35));
+            ImGui.TableSetupColumn("Expires in", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(80));
+            ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(55));
             Widgets.HeadersRow(null, "What it's listed for, in pyreals.", "The item's loot tier.", "How long until it comes off the market unsold.", null);
 
             foreach (var listing in listings) {
@@ -209,10 +209,10 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, 110);
-            ImGui.TableSetupColumn("You get", ImGuiTableColumnFlags.WidthFixed, 110);
-            ImGui.TableSetupColumn("Payout", ImGuiTableColumnFlags.WidthFixed, 80);
-            ImGui.TableSetupColumn("Sold", ImGuiTableColumnFlags.WidthFixed, 70);
+            ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(110));
+            ImGui.TableSetupColumn("You get", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(110));
+            ImGui.TableSetupColumn("Payout", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(80));
+            ImGui.TableSetupColumn("Sold", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(70));
             Widgets.HeadersRow(null, "What it sold for.", "What you get after the fee.", "Whether you've collected it from a Market Broker yet.", "How long ago it sold.");
 
             foreach (var sale in sales) {
@@ -251,8 +251,8 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, 110);
-            ImGui.TableSetupColumn("Expired", ImGuiTableColumnFlags.WidthFixed, 70);
+            ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(110));
+            ImGui.TableSetupColumn("Expired", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(70));
             Widgets.HeadersRow("Items whose listings ran out unsold. Claim them back from a Market Broker.", "What it was listed for.", "How long ago it ran out.");
 
             foreach (var item in expired) {

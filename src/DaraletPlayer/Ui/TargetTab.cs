@@ -305,9 +305,9 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            ImGui.TableSetupColumn("Spell", ImGuiTableColumnFlags.WidthFixed, 200);
-            ImGui.TableSetupColumn("School", ImGuiTableColumnFlags.WidthFixed, 100);
-            ImGui.TableSetupColumn("Caster", ImGuiTableColumnFlags.WidthFixed, 140);
+            ImGui.TableSetupColumn("Spell", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(200));
+            ImGui.TableSetupColumn("School", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(100));
+            ImGui.TableSetupColumn("Caster", ImGuiTableColumnFlags.WidthFixed, Widgets.Scaled(140));
             ImGui.TableSetupColumn("Left", ImGuiTableColumnFlags.WidthStretch);
             Widgets.HeadersRow(
                 "The spell in effect in each category. Spells you cast are brighter.",
