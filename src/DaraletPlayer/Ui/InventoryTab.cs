@@ -31,6 +31,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>The /bank buttons, one bar shared by the Carried and Bank views and the Bank window.</summary>
         private readonly BankCommandBar commands;
 
+        /// <summary>Salvage, on your packs' views: what your loot rules say to salvage.</summary>
+        private readonly RuleSalvage salvage;
+
         /// <summary>
         /// The last container the game opened: asking about the bank with it means a newly opened bank is asked about
         /// straight away (the server doesn't need it).
@@ -46,6 +49,7 @@ namespace DaraletPlayer.Ui {
             carriedBrowser = new InventoryBrowser(feed, icons, settings, carried: true, host: "main");
             windowBrowser = new InventoryBrowser(feed, icons, settings, carried: false, host: "bank-window");
             commands = new BankCommandBar(feed);
+            salvage = new RuleSalvage(feed, settings);
             bankWindow = new FloatingWindow("bank", "Bank", settings, new Vector2(320, 120), RenderBankWindow,
                 defaultSize: new Vector2(640, 460), inUse: BankInUse, alwaysOnlyInUse: true, onClose: CloseBank);
 
@@ -60,6 +64,7 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.ContainerOpened += Core_ContainerOpened;
             CoreManager.Current.RenderFrame += Core_RenderFrame;
             InventoryChanges.Start();
+            PanelDrop.Start(feed);
             AetheriaSlots.Start();
         }
 
@@ -75,6 +80,7 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.ContainerOpened -= Core_ContainerOpened;
             CoreManager.Current.RenderFrame -= Core_RenderFrame;
             InventoryChanges.Stop();
+            PanelDrop.Stop();
             AetheriaSlots.Stop();
             bankWindow.Dispose();
             carriedWindow.Dispose();
@@ -112,7 +118,8 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderCarriedTab() {
-            commands.Render(bankView: false);
+            commands.Render(bankView: false, () => salvage.RenderButton("main", small: false));
+            salvage.RenderPopup("main");
             carriedBrowser.Render();
         }
 
@@ -238,6 +245,14 @@ namespace DaraletPlayer.Ui {
             + "its name). Off, it's the Carried tab's view, with the /bank buttons.";
 
         private void RenderCarriedWindow() {
+            // Sort and Salvage first, so they stay in sight however narrow the window is
+            if (settings.Data.CarriedRetail) {
+                RenderSortButton();
+                ImGui.SameLine();
+                salvage.RenderButton("carried-window", small: true);
+                ImGui.SameLine();
+            }
+
             if (ImGui.Checkbox("Retail", ref settings.Data.CarriedRetail)) {
                 settings.Changed();
             }
@@ -251,9 +266,10 @@ namespace DaraletPlayer.Ui {
                 RenderRetailBar();
             }
             else {
-                commands.Render(bankView: false);
+                commands.Render(bankView: false, () => salvage.RenderButton("carried-window", small: false));
             }
 
+            salvage.RenderPopup("carried-window");
             carriedWindowBrowser.Render();
         }
 
@@ -279,7 +295,7 @@ namespace DaraletPlayer.Ui {
                     + "before the scrollbar. Its height stays. Needs the items as a grid (Grid).");
         }
 
-        /// <summary>Retail's top line, in place of the /bank buttons: Loot highlights and Sort.</summary>
+        /// <summary>Retail's top line, in place of the /bank buttons: Loot highlights (Sort and Salvage start the line).</summary>
         private void RenderRetailBar() {
             ImGui.SameLine();
 
@@ -289,9 +305,9 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Highlights the items your active loot profile's rules would mark, with each rule's highlight and icon "
                 + "(set in the Loot tab). The server describes every item to check them, so full "
                 + "packs take a little while to fill in.");
+        }
 
-            ImGui.SameLine();
-
+        private void RenderSortButton() {
             if (ImGui.SmallButton("Sort##carried-window-sort")) {
                 feed.SendCommand(BankCommands.SortCarried);
             }
@@ -316,6 +332,15 @@ namespace DaraletPlayer.Ui {
 
                 // a split's new stack, moved to where it was let go once it shows up
                 StackSplit.Step();
+
+                // Decal's hooks read the game's memory, which isn't there before login
+                if (CoreManager.Current.CharacterFilter.LoginStatus == 3) {
+                    PanelDrop.Step();
+                salvage.Step();
+
+                    // a vendor just opened: what's marked for sale goes on its sell list
+                    VendorSale.Step(settings);
+                }
 
                 if (feed.Status != FeedStatus.Ready || !feed.Supports(PlayerFeed.KindBankWindow)) {
                     return;

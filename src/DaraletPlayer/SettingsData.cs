@@ -82,6 +82,17 @@ namespace DaraletPlayer {
         [DataMember(Name = "mapTypes")] public Dictionary<string, bool> MapTypes;
         [DataMember(Name = "mapShowFellows")] public bool MapShowFellows;
         [DataMember(Name = "mapShowLabels")] public bool MapShowLabels;
+        /// <summary>
+        /// Location types by whose name wins where two would overlap on the map, first to last (LabelPriority.Order fills
+        /// in any missing); null for LabelPriority.DefaultOrder.
+        /// </summary>
+        [DataMember(Name = "mapLabelOrder")] public List<string> MapLabelOrder;
+
+        /// <summary>
+        /// Items marked for sale (an item's right-click menu), by character name: they go on a vendor's sell list as soon
+        /// as one opens (VendorSale).
+        /// </summary>
+        [DataMember(Name = "saleItems")] public Dictionary<string, List<uint>> SaleItems;
         [DataMember(Name = "mapTextScale")] public float MapTextScale;
         [DataMember(Name = "mapFollow")] public bool MapFollow;
         /// <summary>The map window (the World tab's map on its own) keeps centred on you.</summary>
@@ -295,6 +306,7 @@ namespace DaraletPlayer {
             TargetBarWidth = 220;
             ThreatRows = 5;
             MapTypes = new Dictionary<string, bool>();
+            SaleItems = new Dictionary<string, List<uint>>();
             MapShowFellows = true;
             MapShowLabels = true;
             MapTextScale = 1;

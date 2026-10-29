@@ -15,8 +15,9 @@ namespace DaraletPlayer.Ui {
     ///
     /// The game's own windows aren't in the world, but the click can't tell: one let go over the vendor window went on the
     /// ground. So while a vendor is open (Actions.VendorId), a drop on the panel it's shown in is put on its sell list
-    /// instead (Actions.VendorAddSellList), as the game's pack does. And one let go over the game's shortcut bar goes on
-    /// it (GameShortcuts).
+    /// instead (Actions.VendorAddSellList), as the game's pack does; a pack, its items the vendor buys (VendorSale). One
+    /// let go over the game's shortcut bar goes on it (GameShortcuts). While trading, or over an Ust's salvage panel, it
+    /// goes in the trade or on the panel (PanelDrop).
     /// </summary>
     internal static class WorldDrop {
         private const int WM_LBUTTONDOWN = 0x0201;
@@ -55,8 +56,19 @@ namespace DaraletPlayer.Ui {
             }
 
             if (OverVendor(at)) {
+                // a pack goes on as what's in it: the vendor only buys an empty one
+                if (Carried.IsPack(id)) {
+                    VendorSale.AddPack(id);
+                    return;
+                }
+
                 PluginCore.LogFile($"[drop] 0x{id:X8} put on the vendor's sell list");
                 actions.VendorAddSellList(id);
+                return;
+            }
+
+            // an open trade, or the salvage panel
+            if (PanelDrop.Drop(id, at)) {
                 return;
             }
 

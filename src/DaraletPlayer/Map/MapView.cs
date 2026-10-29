@@ -20,6 +20,8 @@ namespace DaraletPlayer.Map {
         /// <summary>Location types to draw (Locations.Types), by type.</summary>
         public Func<string, bool> ShowType;
         public bool ShowLabels;
+        /// <summary>Location types by whose name wins where two would overlap, first to last (LabelPriority.Order).</summary>
+        public List<string> LabelOrder;
         /// <summary>How big the names are drawn: 1 is the normal text size.</summary>
         public float TextScale = 1;
         public List<FellowInfo> Fellows;
@@ -49,9 +51,13 @@ namespace DaraletPlayer.Map {
 
         /// <summary>
         /// Town names are written on the map from this zoom on (screen pixels per map unit), everything else's from LabelScale.
+        /// Names never overlap (LabelPlacer), so zoomed out only the first few in priority fit, and more as you zoom in.
         /// </summary>
         private const float TownLabelScale = 3;
-        private const float LabelScale = 16;
+        private const float LabelScale = 6;
+
+        /// <summary>The room kept clear round each name, in pixels, so neighbours don't touch.</summary>
+        private const float LabelGap = 2;
 
         private static readonly uint OutlineColor = Col(0f, 0f, 0f, 0.85f);
         private static readonly uint StrokeColor = Col(0f, 0f, 0f, 1f);
@@ -98,6 +104,9 @@ namespace DaraletPlayer.Map {
         private Vector2 menuSpot;
         private Location menuLocation;
         private FellowInfo menuFellow;
+
+        /// <summary>Each name's width at a font size of 1, measured once.</summary>
+        private readonly Dictionary<string, float> labelWidths = new Dictionary<string, float>();
 
         /// <summary>Set by the menu: the arrow should point here.</summary>
         public event Action<Destination> DestinationChosen;
@@ -170,7 +179,11 @@ namespace DaraletPlayer.Map {
             var textSize = ImGui.GetFontSize() * Math.Max(0.5f, Math.Min(2.5f, scene.TextScale));
             var hover = new Hover();
 
-            DrawLocations(drawList, scene, textSize, hoverMouse, hover);
+            // fellows' names are written whatever's under them, so the places' names keep clear of them
+            var labels = new LabelPlacer(origin, origin + size);
+            ReserveFellowLabels(labels, scene, textSize);
+
+            DrawLocations(drawList, scene, textSize, hoverMouse, hover, labels);
 
             if (hover.Location != null && hover.Location.IsPortal) {
                 var portal = hover.Location;
@@ -211,8 +224,32 @@ namespace DaraletPlayer.Map {
             }
         }
 
+        /// <summary>A place whose name could be written, for sorting by priority.</summary>
+        private struct LabelCandidate {
+            public Location Location;
+            public Vector2 Point;
+            public float MarkerSize;
+            public uint Color;
+            public int Priority;
+            public int Order;
+        }
+
+        /// <summary>
+        /// Every place's marker, then the names that fit: highest priority first (the searched-for place before all), each
+        /// to the right of its marker, or to the left when the right is taken, or not at all.
+        /// </summary>
         /// <param name="mouse">Where the mouse is, or null when it isn't over the map.</param>
-        private void DrawLocations(ImDrawListPtr drawList, MapScene scene, float textSize, Vector2? mouse, Hover hover) {
+        private void DrawLocations(ImDrawListPtr drawList, MapScene scene, float textSize, Vector2? mouse, Hover hover,
+            LabelPlacer labels) {
+            var priorities = new Dictionary<string, int>();
+            var order = scene.LabelOrder ?? LabelPriority.Order(null);
+
+            for (var i = 0; i < order.Count; i++) {
+                priorities[order[i]] = i;
+            }
+
+            var candidates = new List<LabelCandidate>();
+
             foreach (var location in scene.Locations) {
                 if (!scene.ShowType(location.Type)) {
                     continue;
@@ -220,7 +257,7 @@ namespace DaraletPlayer.Map {
 
                 var p = ToScreen(location.X, location.Y);
 
-                // a little past the edges, so a label reaching in still shows
+                // a little past the edges, so a marker half in view still shows
                 var offScreen = p.X < viewOrigin.X - 40 || p.Y < viewOrigin.Y - 20
                     || p.X > viewOrigin.X + viewSize.X + 40 || p.Y > viewOrigin.Y + viewSize.Y + 20;
 
@@ -234,7 +271,15 @@ namespace DaraletPlayer.Map {
                 var labelled = location.Type == "Town" ? viewScale >= TownLabelScale : viewScale >= LabelScale;
 
                 if (scene.ShowLabels && labelled) {
-                    Label(drawList, p + new Vector2(style.Size + 3, -textSize / 2), style.Color, location.Name, textSize);
+                    candidates.Add(new LabelCandidate {
+                        Location = location,
+                        Point = p,
+                        MarkerSize = style.Size,
+                        Color = style.Color,
+                        Priority = location == scene.Highlight ? -1
+                            : priorities.TryGetValue(location.Type, out var priority) ? priority : order.Count,
+                        Order = candidates.Count,
+                    });
                 }
 
                 if (!mouse.HasValue) {
@@ -247,6 +292,58 @@ namespace DaraletPlayer.Map {
                     hover.Distance = distance;
                     hover.Location = location;
                 }
+            }
+
+            // List.Sort isn't stable, so the file's order breaks ties
+            candidates.Sort((a, b) => a.Priority != b.Priority ? a.Priority.CompareTo(b.Priority) : a.Order.CompareTo(b.Order));
+
+            foreach (var candidate in candidates) {
+                PlaceLabel(drawList, labels, candidate, textSize);
+            }
+        }
+
+        /// <summary>Writes a place's name beside its marker where there's room for all of it, the right side first.</summary>
+        private void PlaceLabel(ImDrawListPtr drawList, LabelPlacer labels, LabelCandidate candidate, float textSize) {
+            var name = candidate.Location.Name;
+            var box = new Vector2(LabelWidth(name, textSize), textSize);
+            var gap = new Vector2(LabelGap, LabelGap);
+            var offset = candidate.MarkerSize + 3;
+
+            var right = candidate.Point + new Vector2(offset, -textSize / 2);
+            var left = candidate.Point + new Vector2(-offset - box.X, -textSize / 2);
+
+            foreach (var at in new[] { right, left }) {
+                if (labels.TryPlace(at - gap, at + box + gap)) {
+                    Label(drawList, at, candidate.Color, name, textSize);
+                    return;
+                }
+            }
+        }
+
+        /// <summary>A name's width on screen with its one-pixel stroke, at a font size.</summary>
+        private float LabelWidth(string text, float textSize) {
+            if (!labelWidths.TryGetValue(text, out var perUnit)) {
+                perUnit = ImGui.CalcTextSize(text).X / Math.Max(1, ImGui.GetFontSize());
+                labelWidths[text] = perUnit;
+            }
+
+            return perUnit * textSize + 2;
+        }
+
+        /// <summary>The boxes the fellows' names take (DrawFellows writes them), so no place's name goes over one.</summary>
+        private void ReserveFellowLabels(LabelPlacer labels, MapScene scene, float textSize) {
+            if (scene.Fellows == null) {
+                return;
+            }
+
+            foreach (var fellow in scene.Fellows) {
+                if (!fellow.IsOnMap || fellow.Guid == scene.SelfGuid) {
+                    continue;
+                }
+
+                var at = ToScreen(fellow.MapX.Value, fellow.MapY.Value) + new Vector2(8, -textSize / 2);
+                var gap = new Vector2(LabelGap, LabelGap);
+                labels.Reserve(at - gap, at + new Vector2(LabelWidth(fellow.Name ?? "", textSize), textSize) + gap);
             }
         }
 

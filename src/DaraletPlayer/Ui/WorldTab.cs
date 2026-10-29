@@ -164,6 +164,7 @@ namespace DaraletPlayer.Ui {
                 Locations = locations,
                 ShowType = IsShown,
                 ShowLabels = settings.Data.MapShowLabels,
+                LabelOrder = LabelPriority.Order(settings.Data.MapLabelOrder),
                 TextScale = settings.Data.MapTextScale,
                 Fellows = settings.Data.MapShowFellows ? feed.Fellowship?.Members : null,
                 SelfGuid = feed.Hello?.Guid ?? 0,
@@ -260,18 +261,52 @@ namespace DaraletPlayer.Ui {
 
             var data = settings.Data;
             Widgets.TextDisabled("Places");
+            Widgets.Tip("Names never cover one another: where two would, the one higher in this list is written. Move a "
+                + "kind up or down with its arrows. Zoom in for room for more.");
 
-            foreach (var (type, label, _) in Locations.Types) {
+            var order = LabelPriority.Order(data.MapLabelOrder);
+            (int Index, int Step)? move = null;
+
+            for (var i = 0; i < order.Count; i++) {
+                var type = order[i];
                 var shown = IsShown(type);
+
+                ImGui.BeginDisabled(i == 0);
+                if (ImGui.ArrowButton($"##label-up-{type}", ImGuiDir.Up)) {
+                    move = (i, -1);
+                }
+                ImGui.EndDisabled();
+                Widgets.Tip("Its names win over the kind above where two would overlap.");
+
+                ImGui.SameLine(0, 2);
+                ImGui.BeginDisabled(i == order.Count - 1);
+                if (ImGui.ArrowButton($"##label-down-{type}", ImGuiDir.Down)) {
+                    move = (i, 1);
+                }
+                ImGui.EndDisabled();
+                Widgets.Tip("The kind below's names win over these where two would overlap.");
+
+                ImGui.SameLine();
                 ImGui.PushStyleColor(ImGuiCol.CheckMark, MapView.TypeColor(type));
 
-                if (ImGui.Checkbox($"{label} ({locations.Count(l => l.Type == type)})", ref shown)) {
+                if (ImGui.Checkbox($"{Locations.Label(type)} ({locations.Count(l => l.Type == type)})##show-{type}", ref shown)) {
                     data.MapTypes[type] = shown;
                     settings.Changed();
                 }
 
                 ImGui.PopStyleColor();
             }
+
+            // after the list, so it isn't reordered while it's drawn
+            if (move.HasValue) {
+                MoveLabelPriority(order, move.Value.Index, move.Value.Step);
+            }
+
+            if (ImGui.SmallButton("Usual order")) {
+                data.MapLabelOrder = null;
+                settings.Changed();
+            }
+            Widgets.Tip("Puts the kinds back in the order they start in: towns, dungeons and outposts first, vendors and NPCs last.");
 
             ImGui.Separator();
             Widgets.TextDisabled("Also on the map");
@@ -284,7 +319,8 @@ namespace DaraletPlayer.Ui {
             if (ImGui.Checkbox("Names", ref data.MapShowLabels)) {
                 settings.Changed();
             }
-            Widgets.Tip("Writes town names on the map, and every place's name once you zoom in.");
+            Widgets.Tip("Writes town names on the map, and other places' names once you zoom in, as many as fit without "
+                + "covering one another: the kinds higher in the list above first.");
 
             ImGui.EndPopup();
         }
@@ -479,6 +515,19 @@ namespace DaraletPlayer.Ui {
 
         private void WindowMap_Panned() {
             SetWindowFollow(false);
+        }
+
+        /// <summary>Swaps a kind of place with its neighbour in the names' priority, and saves the whole order.</summary>
+        private void MoveLabelPriority(List<string> order, int index, int step) {
+            var other = index + step;
+
+            if (other < 0 || other >= order.Count) {
+                return;
+            }
+
+            (order[index], order[other]) = (order[other], order[index]);
+            settings.Data.MapLabelOrder = order;
+            settings.Changed();
         }
 
         private bool IsShown(string type) {

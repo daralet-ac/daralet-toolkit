@@ -39,6 +39,16 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>A stack's size in an icon's bottom right corner.</summary>
+        /// <summary>
+        /// The mark of an item marked for sale (VendorSale): a green $ in the bottom left corner, clear of a loot mark's
+        /// symbol (top left) and a stack's count (bottom right).
+        /// </summary>
+        public static void DrawSaleMark(ImDrawListPtr drawList, Vector2 at, float size) {
+            var symbol = Math.Max(8f, size * 0.45f);
+            DrawSymbol(drawList, LootMarks.Dollar, at + new Vector2(1, size - symbol - 1), symbol,
+                ImGui.GetColorU32(Colors.Good));
+        }
+
         public static void StackCount(ImDrawListPtr drawList, int stack, Vector2 at, float cell) {
             var text = StackText.Short(stack);
             var size = Widgets.SquareTextSize(text);

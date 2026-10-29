@@ -350,6 +350,10 @@ namespace DaraletPlayer.Ui {
 
             ItemIcons.DrawMark(drawList, item.Mark, at, cell);
 
+            if (VendorSale.IsMarked(settings, item.Id)) {
+                ItemIcons.DrawSaleMark(drawList, at, cell);
+            }
+
             if (item.Stack > 1) {
                 ItemIcons.StackCount(drawList, item.Stack, at, cell);
             }
@@ -413,6 +417,10 @@ namespace DaraletPlayer.Ui {
 
                 var iconHovered = icons.Draw(Icon(item), item.Mark);
                 var label = item.Stack > 1 ? $"{item.Name} ({item.Stack:N0})" : item.Name;
+
+                if (VendorSale.IsMarked(settings, item.Id)) {
+                    label += "  (for sale)";
+                }
                 ImGui.Selectable($"{label}##item-{item.Id}", item.Id == selection);
 
                 DragSource(item);
@@ -538,6 +546,17 @@ namespace DaraletPlayer.Ui {
 
             if (!inBank && bankGuid != 0 && ImGui.MenuItem("Put in the bank")) {
                 Move(item.Id, bankGuid);
+            }
+
+            // what you carry, not what you wear: a vendor won't take a worn item
+            if (!inBank && item.Worn == 0) {
+                var forSale = VendorSale.IsMarked(settings, item.Id);
+
+                if (ImGui.MenuItem("Marked for sale", null, forSale)) {
+                    VendorSale.SetMarked(settings, item.Id, !forSale);
+                }
+                Widgets.Tip("Marks it to sell: whenever you open a vendor that buys it, it goes on the vendor's sell list (its "
+                    + "Selling tab) by itself, ready for you to press Sell. Marked items show a green $.");
             }
 
             if (ImGui.BeginMenu("Move to")) {

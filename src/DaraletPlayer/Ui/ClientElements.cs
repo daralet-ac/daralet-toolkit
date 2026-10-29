@@ -46,6 +46,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>Set once a call has failed: logged once, and nothing is looked up again until the next start.</summary>
         private static bool broken;
 
+        /// <summary>A call has failed, so nothing's found until the next start.</summary>
+        public static bool Broken => broken;
+
         /// <summary>
         /// The element's box on screen, in the game window's pixels (which are ImGui's), while it and the panel it's in
         /// (Toolbar, Indicators) are shown. False when there's no such element, it's hidden (its panel closed), or the

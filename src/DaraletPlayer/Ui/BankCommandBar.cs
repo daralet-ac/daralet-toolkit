@@ -24,7 +24,11 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <param name="bankView">The bank's view (or window): withdraw, sort and search as well as deposit.</param>
-        public void Render(bool bankView) {
+        /// <param name="leading">
+        /// Your packs' view: more buttons, drawn just after Sort at the left of the row, where narrowing the window
+        /// doesn't push them out of sight.
+        /// </param>
+        public void Render(bool bankView, Action leading = null) {
             if (!feed.Supports(PlayerFeed.KindBank)) {
                 return;
             }
@@ -37,12 +41,9 @@ namespace DaraletPlayer.Ui {
             if (bankView) {
                 RenderWithdraw(open, hasWhat);
                 ImGui.SameLine();
-            }
+                RenderDeposit(open, hasWhat);
+                ImGui.SameLine();
 
-            RenderDeposit(open, hasWhat);
-            ImGui.SameLine();
-
-            if (bankView) {
                 CommandButton("Sort", BankCommands.Sort(what), open,
                     "Files items into their inscribed packs, combines stacks and puts everything in order: "
                     + $"{BankCommands.Sort("[what]")}. Sorts only what's in the box, or everything. Needs your bank open.");
@@ -53,11 +54,20 @@ namespace DaraletPlayer.Ui {
                     + "The answer shows on the line below. Needs your bank open.");
             }
             else {
-                // your own packs sort anywhere, with the server's /sort; it sorts everything, whatever's in the box
+                // your own packs sort anywhere, with the server's /sort; it sorts everything, whatever's in the box. First
+                // on the row, so a narrow window still shows it.
                 CommandButton("Sort##carried-sort", BankCommands.SortCarried, true,
                     "Sorts the packs you carry: files items into your named and inscribed packs, combines stacks and orders "
                     + $"the rest by kind. Sends {BankCommands.SortCarried}. Sorts everything, whatever's in the box. "
                     + "No bank needed.");
+
+                if (leading != null) {
+                    ImGui.SameLine();
+                    leading();
+                }
+
+                ImGui.SameLine();
+                RenderDeposit(open, hasWhat);
             }
 
             ImGui.SameLine();

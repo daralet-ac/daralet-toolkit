@@ -740,6 +740,30 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   tool down. Decal's names for these keys come from the network header flags: `LongValueKey.Unknown10` is the use flags
   (flag 0x10), `UsageMask` the TargetType, `Category` the ItemType. Each use logs them to log.txt (`[use]` lines).
 
+- **Selling and salvaging from the Inventory windows.** **Marked for sale** in an item's right-click menu (carried, not
+  worn; a green $ on its icon, `ItemIcons.DrawSaleMark`) keeps its guid in `SettingsData.SaleItems` by character; the moment
+  a vendor opens (its window's tabs, `ClientElements.VendorTabs`, coming into sight, half a second later, `VendorSale.Step`:
+  Decal's `VendorId` needn't go back to 0 on closing, and the server resends the vendor's list after every purchase) every marked item you carry that
+  it buys goes on its sell list (`VendorAddSellList`): nothing's sold until you press Sell. Marks of items gone from Decal
+  (sold, given) are dropped then. A **pack let go over the vendor** puts on its items the vendor buys (an empty pack, the
+  pack itself: a vendor only buys one empty). What a vendor buys is `ItemChecks.VendorBuys` (`Feed/ItemChecks.cs`, from
+  daralet-ACE's `Player.VerifySellItems`: the vendor's ItemType mask, Decal's `Vendor.Categories`; a value; not retained;
+  not attuned, since the server's IsSellable, which the client isn't sent, is off for those). **Trade and the Ust**
+  (`Ui/PanelDrop.cs`): while a trade is open (Decal's `WorldFilter.EnterTrade`/`EndTrade`) any item let go in the game,
+  but on the shortcut bar or the vendor, goes in the trade (`Actions.TradeAdd`) rather than on the ground. The salvage
+  panel is taken to be what the panel along the bottom (ENVP) shows while no vendor, trade or container is open and you
+  carry an Ust: an item let go there goes on it (`Actions.SalvagePanelAdd`), a pack its salvageable items of one material
+  (`ItemChecks.NextMaterial`), the next material each time it's let go there again (what's been added is forgotten when
+  ENVP goes). Untested in the game when written (the trade and salvage panels' own element ids weren't looked up):
+  `[drop]` lines in log.txt say what was decided. **Salvage** (`Ui/RuleSalvage.cs`), beside Sort on your packs' views,
+  describes every carried non-stacking item, then lists those the active loot profile's first matching rule says to
+  Salvage (`Loot.Decide`, so a Keep rule above wins) and the server calls salvageable, leaving out items marked for sale,
+  in a popup; its Salvage sends `@playerui salvage` 20 at a time, 700ms apart (the server drops a request of the same kind
+  sooner than 400ms after the last). The server's `HandleSalvaging` already tops up bags of the same material and
+  workmanship and puts new bags in the salvage crate (wcids 1055060, 1055070, 1055080) if you carry one; with Combine like
+  bags afterwards, if two carried bags still match three seconds later, `/salvage combine` is sent (the server asks Yes/No).
+  `[salvage]` lines in log.txt. Sort and Salvage start their rows (Retail's top line, the carried `BankCommandBar`), so a
+  narrow window doesn't push them out of sight.
 - **Dragging into the world** (`Ui/WorldDrop.cs`): an item (or pack) let go outside every ImGui window is given to what it was let go over, or dropped on the ground, as the game's own pack does. A plugin can't ask what's under the mouse, so the selection is cleared and the game is posted a left click there (`PostMessage` to `Decal.Hwnd`): whatever it selects within 300ms gets the item (`Actions.GiveItem`); nothing, and it's dropped (`Actions.DropItem`). Yourself does nothing; the bank's items are left alone. `[drop]` lines in log.txt. The game's own panels aren't ImGui windows, so letting go over one counts as the world, except the vendor window: while a vendor is open (`Actions.VendorId`), an item let go over the panel along the bottom it's shown in (ENVP, `ClientElements.Environment`, which also shows chests and corpses) goes on the sell list (`Actions.VendorAddSellList`) instead of on the ground. While it's held there (`WorldDrop.OverVendor` decides both), `VendorDrop` does what the game does for one from its own pack: the window turns to its Selling tab and the sell list's slot under the mouse has the green ring. The game's own `gmVendorUI::UpdateDragOver` opens that tab only while it's dragging something of its own (`UIElementManager`'s drag element at `+0x31C`), with `gmVendorUI::OpenTab(0x100000BB)`, which hands the tab's id to the window's panel of tabs (`UIElement_Panel::OpenTab`, `0x46C110`); the plugin calls that on the panel itself (`ClientElements.OpenTab`), found by id, rather than reach the vendor window through an unchecked offset. A click posted on the tab instead reached ImGui too, which took its button-up for the item being let go, selling it the moment the tab switched. The vendor window's parts are its panel of tabs `0x100000B8` (element type 8, `UIElement_Panel`), the tabs Items, Buying and Selling (`0x100000B9`, `0x100000BA`, `0x100000BB`), their pages (`0x100000BC`, `0x100000C4`, `0x100000CD`: Selling is `0x100000CD`, which `UpdateDragOver` checks for in the panel's current page at `+0x6D8`), and each page's single row of 32-pixel slots (`0x100000BD`, `0x100000C5`, `0x100000CE`), all three rows in the same place. The client's functions were read with a throwaway disassembler (the Iced NuGet package) over `acclient.exe`, at the addresses AcClient's `Entrypoint` names. The vendor window's own layout is `0x21000012` (found by searching the layouts for gmVendorUI's element type `0x10000017`, which `gmVendorUI::GetUIElementType` returns), but the game never makes its root element, `0x100000B7`: `GetElement` finds nothing by that id.
 - **Dragging in from the game** (`Ui/GameDrag.cs`, first version): a plugin can't see the game's drag, so it's inferred: the left button went down outside every ImGui window (ImGui counts no window hovered while a button held from outside is down), moved, and came up over one of ours, and the dragged thing is the game's selection. What can be dragged in is anything on the ground (`GameDraggedGroundItem`): let go over a spot (`InventoryBrowser.GameDropTarget`), a pack goes in a pack slot (or takes a pack's place), anything else in a pack or at a grid slot, by `MoveItem`; elsewhere it shows red. While it's held over our windows ImGui hovers nothing, so the drag is drawn by hand: the pack's icon under the mouse over an inventory window (`GameDrag.DrawIcon`; the game's own drag icon isn't drawn over ImGui windows), and the green ring or red circle over the spot it's over (`GameDrag.OverLastItem`, the mouse against the spot's square). Each drop spot's verdict is logged when it changes (`[drop]` lines, `LogDropMark`). `[drag-in]` lines in log.txt say what was seen.
 - **Item icons** (`Ui/ItemIcons.cs`, `Feed/IconLayers.cs`): every item list (bank, Loot tab, Corpse window, Market) draws
@@ -761,6 +785,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   tile a frame made a texture on it, since one 2048-pixel texture stalled the game.
   The file also has 43 `_Unknown` entries (shops, taverns, halls): every type needs a row in `Locations.Types`, which a
   test checks.
+  **Names never overlap** (`Map/LabelPlacer.cs`): each frame the names are offered in priority order and each takes a box
+  (right of its marker, else left) only if it's wholly in view and clear of every box taken before it, fellows' names
+  first (always written), then the searched-for place, then by kind (`Map/LabelPriority.cs`, `SettingsData.MapLabelOrder`,
+  reordered with the arrows in Show...; null for `LabelPriority.DefaultOrder`), ties in file order. So zoomed out only the
+  first few fit, and zooming in spreads them out for more; non-town names start at a lower zoom than before (6 pixels a map
+  unit) for that reason. Kept out of `Locations.cs`, which Daralet Admin has a copy of.
 
 - **Appraisal** (`Ui/Appraisal.cs`, `Ui/AppraisalWindow.cs`, `Feed/ItemCompare.cs`): Appraise and Appraise in new window
   in an item's right-click menu in the Corpse window or the bank (`Appraisal.MenuItems`; nothing happens until one is
