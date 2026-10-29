@@ -658,8 +658,11 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   appraisal of the pack changed before) took the change instead: a player's "Weapons, Armor" landed on their "Salvage"
   pack while the list showed each where it was meant to be, and `/sort` filled the salvage pack with weapons. Decal only
   learns an inscription from an appraisal, and the server sends none when it changes, so the pack is appraised again a
-  second later (`InventoryBrowser.RefreshCarried`), and a second after that the list shows the tags Decal has, not the
-  ones it sent (`adoptPack`). Groups are
+  second later (`InventoryBrowser.RefreshCarried`), and a second after that the list shows the tags it has, not the
+  ones it sent (`adoptPack`). But an appraisal of a pack with no inscription leaves Decal's old one in place, so Clear
+  all tags never showed: the pack kept its old tags, and the next tick sent them back. So the `bank` reply carries the
+  packs you carry too (`carried`, bank open or not, `BankInfo.Carried`), and their tags are the server's when it sends
+  them (`InventoryBrowser.CarriedInscription`), asked for again straight after each change (`PlayerFeed.RefreshBankSoon`). Groups are
   OR (a comma) and the words in one AND (a space): the list's **OR** makes each tick its own group (`ToggleTag`), its
   **AND** adds the word to a picked group, or a new one (`ToggleInGroup`), and ticks then show that group. And an
   **Icon** drop-down of every style and color `/bank icon` takes (`BankCommands.PackIcons`, copied from daralet-ACE's

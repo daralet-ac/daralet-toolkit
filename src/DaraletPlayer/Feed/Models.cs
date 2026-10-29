@@ -169,6 +169,12 @@ namespace DaraletPlayer.Feed {
         [DataMember(Name = "noteCount")] public int NoteCount;
         [DataMember(Name = "autoSort")] public bool AutoSort;
         [DataMember(Name = "packs")] public List<BankPackInfo> Packs;
+        /// <summary>
+        /// The side packs you carry (number 0), bank open or not, with their inscriptions as the server has them: Decal
+        /// only learns one from an appraisal, and keeps the old one when an appraisal has none, so a cleared pack kept
+        /// its tags. Null from an older server.
+        /// </summary>
+        [DataMember(Name = "carried")] public List<BankPackInfo> Carried;
     }
 
     /// <summary>

@@ -66,6 +66,8 @@ namespace DaraletPlayer.Feed {
         private readonly Dictionary<string, DateTime> waitingSince = new Dictionary<string, DateTime>();
         private readonly Dictionary<string, DateTime> lastSentAt = new Dictionary<string, DateTime>();
         private readonly Dictionary<string, string> lastSentArguments = new Dictionary<string, string>();
+        /// <summary>Kinds to ask for again at the next Refresh the server allows, whatever its interval.</summary>
+        private readonly HashSet<string> soon = new HashSet<string>();
         private readonly Dictionary<uint, TargetInfo> targets = new Dictionary<uint, TargetInfo>();
         private readonly Dictionary<uint, float> clientHealth = new Dictionary<uint, float>();
 
@@ -144,6 +146,12 @@ namespace DaraletPlayer.Feed {
         public Dictionary<uint, CorpseItemInfo> Described { get; } = new Dictionary<uint, CorpseItemInfo>();
         public DateTime DescribedUpdatedAt { get; private set; } = DateTime.MinValue;
 
+        /// <summary>
+        /// When the latest bank request had been sent by the time a bank reply came: a reply to one sent after a command
+        /// has what the command changed.
+        /// </summary>
+        public DateTime BankAskedAt { get; private set; } = DateTime.MinValue;
+
         /// <summary>The last command a tab sent with SendCommand, and the chat that came back for it.</summary>
         public string LastCommand { get; private set; }
         public List<string> LastCommandReply { get; } = new List<string>();
@@ -208,7 +216,8 @@ namespace DaraletPlayer.Feed {
                 waitingSince.Remove(kind);
             }
 
-            if (changed || sinceSent > interval) {
+            if (changed || sinceSent > interval || soon.Contains(kind)) {
+                soon.Remove(kind);
                 Request(kind, arguments);
             }
         }
@@ -225,6 +234,24 @@ namespace DaraletPlayer.Feed {
         public void RefreshSocialSoon() {
             lastSentAt.Remove(KindSocial);
             waitingSince.Remove(KindSocial);
+        }
+
+        /// <summary>
+        /// Asks for the bank reply again as soon as the server allows: after a pack's tags change, so the Tags list and
+        /// the pack's name show what the server now has.
+        /// </summary>
+        public void RefreshBankSoon() {
+            // not sooner than MinInterval after the last, which the server would drop; whoever calls RefreshBank asks
+            waitingSince.Remove(KindBank);
+            soon.Add(KindBank);
+        }
+
+        /// <summary>
+        /// Refresh for the bank, with the arguments it was last asked with (InventoryTab's open container), so a caller
+        /// that only wants the carried packs' tags doesn't count as new arguments each frame.
+        /// </summary>
+        public void RefreshBank(TimeSpan interval) {
+            Refresh(KindBank, interval, lastSentArguments.TryGetValue(KindBank, out var arguments) ? arguments : null);
         }
 
         /// <summary>
@@ -475,6 +502,7 @@ namespace DaraletPlayer.Feed {
                 case KindBank:
                     // also sent unasked when the bank opens or closes, with the plugin's bank window on
                     Bank = Json.Read<BankInfo>(json);
+                    BankAskedAt = lastSentAt.TryGetValue(KindBank, out var askedAt) ? askedAt : DateTime.MinValue;
                     break;
                 case KindBankWindow:
                 case KindLootWindow:

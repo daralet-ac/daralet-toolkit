@@ -107,7 +107,9 @@ namespace DaraletPlayer.Tests {
         public void ReadsTheBankAsTheServerWritesIt() {
             var json = "{\"open\":true,\"loaded\":true,\"guid\":2046820353,\"used\":40,\"capacity\":120,\"coins\":5000,\"notes\":250000,"
                 + "\"noteCount\":3,\"autoSort\":true,\"packs\":[{\"number\":1,\"guid\":2147483664,\"name\":\"Backpack\","
-                + "\"tags\":\"weapons, swords t6\",\"inscription\":\"weapons, swords t6\",\"used\":12,\"capacity\":24}]}";
+                + "\"tags\":\"weapons, swords t6\",\"inscription\":\"weapons, swords t6\",\"used\":12,\"capacity\":24}],"
+                + "\"carried\":[{\"number\":0,\"guid\":2147483680,\"name\":\"Sack\",\"tags\":\"none\",\"inscription\":null,"
+                + "\"used\":3,\"capacity\":24}]}";
 
             var bank = Json.Read<BankInfo>(json);
 
@@ -120,6 +122,10 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual(0x80000010u, bank.Packs[0].Guid);
             Assert.AreEqual("weapons, swords t6", bank.Packs[0].Tags);
             Assert.AreEqual(24, bank.Packs[0].Capacity);
+
+            // a cleared carried pack: no inscription, which Decal can't say
+            Assert.AreEqual(0x80000020u, bank.Carried[0].Guid);
+            Assert.IsNull(bank.Carried[0].Inscription);
         }
     }
 }

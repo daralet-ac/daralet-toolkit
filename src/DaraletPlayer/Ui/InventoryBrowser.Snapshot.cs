@@ -113,6 +113,19 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>
+        /// A carried pack's inscription: the server's, from the bank reply, when it sends one; else Decal's, which it only
+        /// learns from an appraisal and doesn't forget when the inscription is cleared.
+        /// </summary>
+        private string CarriedInscription(WorldObject pack) {
+            var fromServer = feed.Bank?.Carried?.FirstOrDefault(p => p.Guid == unchecked((uint)pack.Id));
+            if (fromServer != null) {
+                return fromServer.Inscription ?? "";
+            }
+
+            return pack.Values(StringValueKey.Inscription, "");
+        }
+
         /// <summary>Your main pack and the packs in it.</summary>
         private void SnapshotCarried(ILookup<int, WorldObject> byContainer) {
             var me = CoreManager.Current.CharacterFilter.Id;
@@ -133,7 +146,7 @@ namespace DaraletPlayer.Ui {
                 .OrderBy(i => i.Values(LongValueKey.Slot, 0));
 
             foreach (var pack in packs) {
-                var inscription = pack.Values(StringValueKey.Inscription, "");
+                var inscription = CarriedInscription(pack);
                 contents[pack.Id] = Items(byContainer[pack.Id], skipPacks: false);
                 holders.Add(new Holder {
                     Id = pack.Id,

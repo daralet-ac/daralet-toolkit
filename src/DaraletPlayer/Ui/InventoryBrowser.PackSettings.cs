@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Decal.Adapter;
 using DaraletPlayer.Feed;
@@ -13,6 +14,9 @@ namespace DaraletPlayer.Ui {
     internal partial class InventoryBrowser {
         /// <summary>How long after a change to a carried pack it's appraised again, for Decal to hear its new tags.</summary>
         private static readonly TimeSpan CarriedRefreshDelay = TimeSpan.FromSeconds(1);
+
+        /// <summary>How often the bank reply, with the carried packs' tags, is asked for while a carried pack's are shown.</summary>
+        private static readonly TimeSpan CarriedTagsRefresh = TimeSpan.FromSeconds(5);
 
         /// <summary>
         /// The pack's tags as last sent, kept until the server's next bank reply (or, for a pack you carry, its next
@@ -37,6 +41,10 @@ namespace DaraletPlayer.Ui {
         private int adoptPack;
         private DateTime adoptAt;
 
+        /// <summary>The carried pack last changed, and when, for the bank reply that has the change.</summary>
+        private int sentPack;
+        private DateTime sentAt;
+
         /// <summary>The carried packs appraised for their tags when first shown.</summary>
         private readonly HashSet<int> appraisedPacks = new HashSet<int>();
 
@@ -45,9 +53,28 @@ namespace DaraletPlayer.Ui {
         private void RenderPackSettings(Holder holder) {
             if (holder.CarriedPack) {
                 RefreshCarried(holder);
+
+                // the Inventory window can be open without the tab that asks for the bank reply
+                feed.RefreshBank(CarriedTagsRefresh);
             }
 
-            if (adoptPack == holder.Id && refreshPack != holder.Id && DateTime.UtcNow >= adoptAt) {
+            // the tags the server has, once a bank reply asked for after the change has come (BankInfo.Carried)
+            if (sentPack == holder.Id && feed.Bank?.Carried != null && feed.BankAskedAt > sentAt) {
+                sentPack = 0;
+                adoptPack = 0;
+
+                // straight from the reply: the pack list's snapshot can be half a second behind it
+                var fromServer = feed.Bank.Carried.FirstOrDefault(p => p.Guid == unchecked((uint)holder.Id));
+                if (fromServer != null) {
+                    inscriptionFor = holder.Id;
+                    inscriptionSeen = holder.Inscription;
+                    inscription = fromServer.Inscription ?? "";
+                }
+            }
+
+            // else Decal's, once it's appraised the pack again (an older server)
+            if (adoptPack == holder.Id && refreshPack != holder.Id && DateTime.UtcNow >= adoptAt
+                && feed.Bank?.Carried == null) {
                 adoptPack = 0;
                 inscriptionSeen = null;
             }
@@ -95,9 +122,14 @@ namespace DaraletPlayer.Ui {
                 refreshPack = holder.Id;
                 refreshAt = DateTime.UtcNow + CarriedRefreshDelay;
                 adoptPack = 0;
+                sentPack = holder.Id;
+                sentAt = DateTime.UtcNow;
             }
 
             feed.SendCommand(command);
+
+            // sent after the command, so the reply has the change (a carried pack's tags too, from a newer server)
+            feed.RefreshBankSoon();
         }
 
         /// <summary>
