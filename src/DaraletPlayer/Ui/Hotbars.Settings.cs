@@ -121,6 +121,8 @@ namespace DaraletPlayer.Ui {
             if (captureInto != null) {
                 Hint($"Press a key for {captureWhat}. Escape cancels.");
             }
+
+            RenderLayouts();
         }
 
         private static string Summary(HotbarBar bar) {

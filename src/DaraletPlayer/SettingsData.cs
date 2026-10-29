@@ -25,6 +25,45 @@ namespace DaraletPlayer {
         /// </summary>
         [DataMember(Name = "fellowVitals")] public Dictionary<string, FellowVitals> FellowVitals;
 
+        // The fellowship window (FellowshipTab): each fellow's bars in a row instead of a column, how wide each bar is, and
+        // what goes on the line with their name.
+        [DataMember(Name = "fellowshipSideBySide")] public bool FellowshipSideBySide;
+        /// <summary>Each vital bar's width in the fellowship window, in pixels at 100%.</summary>
+        [DataMember(Name = "fellowshipBarWidth")] public int FellowshipBarWidth;
+        [DataMember(Name = "fellowshipShowLevel")] public bool FellowshipShowLevel;
+        [DataMember(Name = "fellowshipShowFocus")] public bool FellowshipShowFocus;
+        [DataMember(Name = "fellowshipShowDistance")] public bool FellowshipShowDistance;
+        /// <summary>Each fellow's buffs as icons: the fellowship requests then ask for every fellow's spells.</summary>
+        [DataMember(Name = "fellowshipShowBuffs")] public bool FellowshipShowBuffs;
+        [DataMember(Name = "fellowshipShowDebuffs")] public bool FellowshipShowDebuffs;
+
+        // Big fellowships in the fellowship window (FellowshipTab.Layout.cs)
+        /// <summary>FellowshipOrder.List, Pages or Grid.</summary>
+        [DataMember(Name = "fellowshipLayout")] public string FellowshipLayout;
+        /// <summary>List: past this many members the window stops growing and scrolls.</summary>
+        [DataMember(Name = "fellowshipScrollAfter")] public int FellowshipScrollAfter;
+        /// <summary>Pages: members on each page.</summary>
+        [DataMember(Name = "fellowshipPageSize")] public int FellowshipPageSize;
+        [DataMember(Name = "fellowshipGridColumns")] public int FellowshipGridColumns;
+        /// <summary>Grid: each tile's width in pixels at 100%.</summary>
+        [DataMember(Name = "fellowshipTileWidth")] public int FellowshipTileWidth;
+        /// <summary>The most members shown, pinned first; 0 for every one.</summary>
+        [DataMember(Name = "fellowshipShowUpTo")] public int FellowshipShowUpTo;
+        /// <summary>FellowshipOrder.ByFellowship (the server's order), ByName, ByHealth or ByDistance.</summary>
+        [DataMember(Name = "fellowshipSort")] public string FellowshipSort;
+        /// <summary>Members too far away for the server to give a distance are left out (never you).</summary>
+        [DataMember(Name = "fellowshipHideFar")] public bool FellowshipHideFar;
+        /// <summary>Members shown first, in this order, by name.</summary>
+        [DataMember(Name = "fellowshipPinned")] public List<string> FellowshipPinned;
+        /// <summary>Buffs and debuffs are only asked for up to this many members: each one's spells are a lot to send.</summary>
+        [DataMember(Name = "fellowshipSpellsUpTo")] public int FellowshipSpellsUpTo;
+
+        /// <summary>Vital bars (fellowship, target) in the game's own art instead of plain filled bars (Widgets.VitalBar).</summary>
+        [DataMember(Name = "retailVitalBars")] public bool RetailVitalBars;
+
+        /// <summary>Vital bars' numbers drawn bold (Widgets.BoldVitals).</summary>
+        [DataMember(Name = "boldVitalText")] public bool BoldVitalText;
+
         [DataMember(Name = "targetShowBuffs")] public bool TargetShowBuffs;
         [DataMember(Name = "targetShowDebuffs")] public bool TargetShowDebuffs;
         [DataMember(Name = "targetShowThreat")] public bool TargetShowThreat;
@@ -126,6 +165,18 @@ namespace DaraletPlayer {
         /// <summary>The Character Information button (the burden pack) opens the Character window.</summary>
         [DataMember(Name = "toolbarCharacter")] public bool ToolbarCharacter;
 
+        /// <summary>The Social button (the two heads) opens the Social window.</summary>
+        [DataMember(Name = "toolbarSocial")] public bool ToolbarSocial;
+
+        /// <summary>The key that opens and closes the /dap window (Launcher); none to start.</summary>
+        [DataMember(Name = "toolkitKey")] public HotkeyBinding ToolkitKey;
+
+        /// <summary>
+        /// How big item details are drawn, times the Text size: the tooltips over items and the Appraisal windows (the Loot
+        /// tab's Item details). 1 is normal.
+        /// </summary>
+        [DataMember(Name = "itemTextScale")] public float ItemTextScale;
+
         /// <summary>The key that hides and shows the game's UI and the plugin's windows, for screenshots (HideGameUi).</summary>
         [DataMember(Name = "hideUiKey")] public HotkeyBinding HideUiKey;
 
@@ -188,12 +239,28 @@ namespace DaraletPlayer {
 
         public float ClampedTextScale => Math.Max(MinTextScale, Math.Min(MaxTextScale, TextScale));
 
+        public float ClampedItemTextScale => Math.Max(MinTextScale, Math.Min(MaxTextScale, ItemTextScale));
+
         private void SetDefaults() {
             Windows = new Dictionary<string, WindowPlacement>();
             TextScale = 1;
             FellowshipShowStamina = true;
             FellowshipShowMana = true;
             FellowVitals = new Dictionary<string, FellowVitals>(StringComparer.OrdinalIgnoreCase);
+            FellowshipBarWidth = 130;
+            FellowshipLayout = "list";
+            FellowshipScrollAfter = 10;
+            FellowshipPageSize = 10;
+            FellowshipGridColumns = 4;
+            FellowshipTileWidth = 90;
+            FellowshipSort = "fellowship";
+            FellowshipPinned = new List<string>();
+            FellowshipSpellsUpTo = 12;
+            FellowshipShowLevel = true;
+            FellowshipShowFocus = true;
+            FellowshipShowDistance = true;
+            ItemTextScale = 1;
+            ToolkitKey = new HotkeyBinding();
             TargetShowBuffs = true;
             TargetShowDebuffs = true;
             TargetShowThreat = true;

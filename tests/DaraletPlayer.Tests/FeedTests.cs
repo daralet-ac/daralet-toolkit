@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using DaraletPlayer.Feed;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -67,6 +68,88 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual("Holtburg (42.1N, 33.6E)", fellowship.Members[0].Location);
 
             Assert.IsNull(Json.Read<FellowshipInfo>("null"));
+        }
+
+        [TestMethod]
+        public void ReadsAFellowsFocusAndSpells() {
+            // the shape @playerui fellowship spells sends, nulls left out (the second fellow wears no focus)
+            var json = "{\"name\":\"Raiders\",\"leader\":1,\"members\":["
+                + "{\"guid\":1,\"name\":\"Bob\",\"focus\":{\"name\":\"Combat Focus\",\"icon\":100667956,\"underlay\":0,"
+                + "\"overlay\":1},\"buffs\":[2,3],\"debuffs\":[4]},"
+                + "{\"guid\":2,\"name\":\"Al\",\"distance\":3}]}";
+
+            var fellowship = Json.Read<FellowshipInfo>(json);
+
+            Assert.AreEqual(0x06001234u, fellowship.Members[0].Focus.Icon);
+            Assert.AreEqual("Combat Focus", fellowship.Members[0].Focus.Name);
+            CollectionAssert.AreEqual(new[] { 2, 3 }, fellowship.Members[0].Buffs);
+            CollectionAssert.AreEqual(new[] { 4 }, fellowship.Members[0].Debuffs);
+            Assert.IsNull(fellowship.Members[1].Focus);
+            Assert.IsNull(fellowship.Members[1].Buffs);
+            Assert.AreEqual(3f, fellowship.Members[1].Distance);
+        }
+
+        private static FellowInfo Fellow(uint guid, string name, uint health, float? distance) {
+            return new FellowInfo { Guid = guid, Name = name, Health = health, MaxHealth = 100, Distance = distance };
+        }
+
+        [TestMethod]
+        public void BigFellowshipsShowPinnedFirstThenSorted() {
+            var members = new List<FellowInfo> {
+                Fellow(1, "Leader", 90, 0), Fellow(2, "Bo", 20, 30), Fellow(3, "Al", 60, null), Fellow(4, "Cy", 40, 5),
+            };
+
+            var byHealth = FellowshipOrder.Arrange(members, new List<string> { "cy" }, FellowshipOrder.ByHealth, false, 0, 1);
+            CollectionAssert.AreEqual(new[] { "Cy", "Bo", "Al", "Leader" }, byHealth.Select(m => m.Name).ToArray());
+
+            var near = FellowshipOrder.Arrange(members, null, FellowshipOrder.ByDistance, true, 2, 1);
+            CollectionAssert.AreEqual(new[] { "Leader", "Cy" }, near.Select(m => m.Name).ToArray(), "Al is too far to say");
+
+            var asSent = FellowshipOrder.Arrange(members, null, FellowshipOrder.ByFellowship, false, 0, 1);
+            CollectionAssert.AreEqual(new[] { "Leader", "Bo", "Al", "Cy" }, asSent.Select(m => m.Name).ToArray());
+        }
+
+        [TestMethod]
+        public void PagesSplitMembersAndTheSizeLimitComesFromTheServer() {
+            var members = Enumerable.Range(1, 23).Select(i => Fellow((uint)i, "F" + i, 100, 1)).ToList();
+
+            var third = FellowshipOrder.Page(members, 10, 2, out var pages);
+
+            Assert.AreEqual(3, pages);
+            CollectionAssert.AreEqual(new[] { "F21", "F22", "F23" }, third.Select(m => m.Name).ToArray());
+            Assert.AreEqual(9, FellowshipOrder.MaxMembers(new FellowshipInfo()), "an older server doesn't say");
+            Assert.AreEqual(int.MaxValue, FellowshipOrder.MaxMembers(
+                Json.Read<FellowshipInfo>("{\"name\":\"Defense\",\"members\":[],\"maxMembers\":2147483647}")));
+        }
+
+        [TestMethod]
+        public void ReadsTheSocialReply() {
+            // the server's own test pins this same JSON (PlayerUiProtocolTests.SocialJsonHasTheNamesThePluginReads)
+            var json = "{\"appearOffline\":true,\"ignoreFellowshipRequests\":false,\"autoAcceptFellowshipRequests\":true,"
+                + "\"shareFellowshipXp\":true,\"shareFellowshipLoot\":false,"
+                + "\"friends\":[{\"guid\":1342177282,\"name\":\"Al\",\"online\":true}],"
+                + "\"squelches\":[{\"guid\":1342177283,\"name\":\"Cy\",\"account\":true}],"
+                + "\"allegiance\":{\"name\":\"Order\",\"rank\":3,\"followers\":7,\"xpGenerated\":1000,\"xpReceived\":2000,"
+                + "\"monarch\":{\"guid\":1342177284,\"name\":\"Mo\",\"level\":200,\"rank\":6,\"online\":false,\"xpGenerated\":0},"
+                + "\"patron\":null,"
+                + "\"vassals\":[{\"guid\":1342177285,\"name\":\"Vi\",\"level\":40,\"rank\":1,\"online\":true,\"xpGenerated\":50}]}}";
+
+            var social = Json.Read<SocialInfo>(json);
+
+            Assert.IsTrue(social.AppearOffline);
+            Assert.IsTrue(social.AutoAcceptFellowshipRequests);
+            Assert.IsTrue(social.ShareFellowshipXp);
+            Assert.IsFalse(social.ShareFellowshipLoot);
+            Assert.AreEqual("Al", social.Friends[0].Name);
+            Assert.IsTrue(social.Friends[0].Online);
+            Assert.IsTrue(social.Squelches[0].Account);
+            Assert.AreEqual(7, social.Allegiance.Followers);
+            Assert.AreEqual(3u, social.Allegiance.Rank);
+            Assert.AreEqual(2000ul, social.Allegiance.XpReceived);
+            Assert.AreEqual("Mo", social.Allegiance.Monarch.Name);
+            Assert.IsNull(social.Allegiance.Patron);
+            Assert.AreEqual(50ul, social.Allegiance.Vassals[0].XpGenerated);
+            Assert.IsNull(Json.Read<SocialInfo>("{\"friends\":[],\"squelches\":[],\"allegiance\":null}").Allegiance);
         }
 
         [TestMethod]

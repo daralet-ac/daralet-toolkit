@@ -30,6 +30,8 @@ namespace DaraletPlayer.Feed {
         [DataMember(Name = "evenShare")] public bool EvenShare;
         [DataMember(Name = "locked")] public bool Locked;
         [DataMember(Name = "members")] public List<FellowInfo> Members;
+        /// <summary>How many it can hold: 9, or no cap (int.MaxValue) for a Town Defense one; 0 from an older server.</summary>
+        [DataMember(Name = "maxMembers")] public int MaxMembers;
     }
 
     [DataContract]
@@ -52,8 +54,84 @@ namespace DaraletPlayer.Feed {
         [DataMember(Name = "mapY")] public float? MapY;
         /// <summary>Inside a building: still on the map, where the building is.</summary>
         [DataMember(Name = "inBuilding")] public bool InBuilding;
+        /// <summary>The Combat Focus they wear, or null (none, or an older server).</summary>
+        [DataMember(Name = "focus")] public FocusInfo Focus;
+        /// <summary>Spell ids of the helpful spells on them, one a category; null unless @playerui fellowship spells asked.</summary>
+        [DataMember(Name = "buffs")] public List<int> Buffs;
+        /// <summary>Spell ids of the harmful spells on them, as Buffs.</summary>
+        [DataMember(Name = "debuffs")] public List<int> Debuffs;
 
         public bool IsOnMap => MapX.HasValue && MapY.HasValue;
+    }
+
+    /// <summary>A worn Combat Focus: its name and its icon's layers, portal dat ids (0 for none).</summary>
+    [DataContract]
+    public class FocusInfo {
+        [DataMember(Name = "name")] public string Name;
+        [DataMember(Name = "icon")] public uint Icon;
+        [DataMember(Name = "underlay")] public uint Underlay;
+        [DataMember(Name = "overlay")] public uint Overlay;
+    }
+
+    /// <summary>
+    /// @playerui social: your Appear Offline and fellowship options, friends, squelches and allegiance (null without one).
+    /// </summary>
+    [DataContract]
+    public class SocialInfo {
+        [DataMember(Name = "appearOffline")] public bool AppearOffline;
+        [DataMember(Name = "ignoreFellowshipRequests")] public bool IgnoreFellowshipRequests;
+        [DataMember(Name = "autoAcceptFellowshipRequests")] public bool AutoAcceptFellowshipRequests;
+        [DataMember(Name = "shareFellowshipXp")] public bool ShareFellowshipXp;
+        [DataMember(Name = "shareFellowshipLoot")] public bool ShareFellowshipLoot;
+        [DataMember(Name = "friends")] public List<FriendInfo> Friends;
+        [DataMember(Name = "squelches")] public List<SquelchInfo> Squelches;
+        [DataMember(Name = "allegiance")] public AllegianceInfo Allegiance;
+    }
+
+    /// <summary>A friend. Online is false for one who appears offline.</summary>
+    [DataContract]
+    public class FriendInfo {
+        [DataMember(Name = "guid")] public uint Guid;
+        [DataMember(Name = "name")] public string Name;
+        [DataMember(Name = "online")] public bool Online;
+    }
+
+    /// <summary>A squelched character; Account when it's their whole account.</summary>
+    [DataContract]
+    public class SquelchInfo {
+        [DataMember(Name = "guid")] public uint Guid;
+        [DataMember(Name = "name")] public string Name;
+        [DataMember(Name = "account")] public bool Account;
+    }
+
+    /// <summary>
+    /// Your allegiance: your rank and followers, the XP you've passed to your patron (XpGenerated) and been passed by your
+    /// vassals (XpReceived), and your monarch (null when it's you), patron (null when you have none) and vassals.
+    /// </summary>
+    [DataContract]
+    public class AllegianceInfo {
+        [DataMember(Name = "name")] public string Name;
+        [DataMember(Name = "rank")] public uint Rank;
+        [DataMember(Name = "followers")] public int Followers;
+        [DataMember(Name = "xpGenerated")] public ulong XpGenerated;
+        [DataMember(Name = "xpReceived")] public ulong XpReceived;
+        [DataMember(Name = "monarch")] public AllegianceMemberInfo Monarch;
+        [DataMember(Name = "patron")] public AllegianceMemberInfo Patron;
+        [DataMember(Name = "vassals")] public List<AllegianceMemberInfo> Vassals;
+    }
+
+    /// <summary>
+    /// One of your allegiance. XpGenerated: for your patron, what you've passed up to them; for a vassal, what they've
+    /// passed up to you.
+    /// </summary>
+    [DataContract]
+    public class AllegianceMemberInfo {
+        [DataMember(Name = "guid")] public uint Guid;
+        [DataMember(Name = "name")] public string Name;
+        [DataMember(Name = "level")] public int Level;
+        [DataMember(Name = "rank")] public uint Rank;
+        [DataMember(Name = "online")] public bool Online;
+        [DataMember(Name = "xpGenerated")] public ulong XpGenerated;
     }
 
     /// <summary>

@@ -292,5 +292,81 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual("5", CooldownShape.TimeLeft(4.41, decimals: false));
             Assert.AreEqual("12", CooldownShape.TimeLeft(11.2, decimals: false));
         }
+
+        [TestMethod]
+        public void ALayoutCarriesBarsWindowsAndOnlyItsOwnersItems() {
+            var data = new HotbarData();
+            var bar = data.Bars[0];
+            bar.Columns = 6;
+            bar.Put(Me, 0, 0, 0, Item(1));
+            bar.Put("Someone Else", 0, 0, 1, Item(2));
+            var windows = new System.Collections.Generic.Dictionary<string, WindowPlacement> {
+                ["hotbar-1"] = new WindowPlacement { X = 1500, Y = 1200, Visible = true },
+                ["fellowship"] = new WindowPlacement { X = 5, Y = 5 },
+            };
+
+            var layout = HotbarLayout.Make("Mine", data, windows, Me, withItems: true);
+            var folder = Path.Combine(Path.GetTempPath(), "DaraletPlayerTests-" + Guid.NewGuid().ToString("N"));
+
+            try {
+                var loaded = HotbarLayout.Load(HotbarLayout.Save(layout, folder), out var problem);
+
+                Assert.IsNull(problem);
+                Assert.AreEqual(Me, loaded.Character);
+                Assert.AreEqual(6, loaded.Bars[0].Columns);
+                Assert.AreEqual(1, loaded.Bars[0].Slots.Count, "only the saving character's items");
+                Assert.AreEqual(1500f, loaded.Windows["hotbar-1"].X);
+                Assert.IsFalse(loaded.Windows.ContainsKey("fellowship"));
+
+                // changing the bars afterwards doesn't change what was saved
+                bar.Columns = 2;
+                Assert.AreEqual(6, layout.Bars[0].Columns);
+            }
+            finally {
+                Directory.Delete(folder, true);
+            }
+        }
+
+        [TestMethod]
+        public void ApplyingALayoutGivesItsItemsToWhoeverLoadsIt() {
+            var saved = new HotbarData();
+            saved.Bars[0].Put(Me, 0, 0, 0, Item(1));
+            saved.Add().Rows = 3;
+            var layout = HotbarLayout.Make("Two bars", saved, new System.Collections.Generic.Dictionary<string, WindowPlacement> {
+                ["hotbar-2"] = new WindowPlacement { X = 900, Y = 1000 },
+            }, Me, withItems: true);
+
+            var data = new HotbarData();
+            data.Bars[0].Put("Alt", 0, 0, 4, Item(9));
+            data.Bars[0].Put("Other", 0, 0, 5, Item(8));
+            data.Add();
+            data.Add();
+            var windows = new System.Collections.Generic.Dictionary<string, WindowPlacement> {
+                ["hotbar-3"] = new WindowPlacement { X = 1, Y = 1 },
+            };
+
+            HotbarLayout.Apply(layout, data, windows, "Alt");
+
+            Assert.AreEqual(2, data.Bars.Count);
+            Assert.AreEqual(3, data.Bars[1].Rows);
+            Assert.AreEqual(1, data.Bars[0].At("Alt", 0, 0, 0).Id, "the layout's items are the loader's");
+            Assert.IsNull(data.Bars[0].At("Alt", 0, 0, 4), "replacing the loader's own");
+            Assert.AreEqual(8, data.Bars[0].At("Other", 0, 0, 5).Id, "other characters keep theirs");
+            Assert.IsFalse(windows.ContainsKey("hotbar-3"), "a bar that's gone takes its window with it");
+            Assert.AreEqual(900f, windows["hotbar-2"].X);
+            Assert.AreEqual(3, data.NextId);
+        }
+
+        [TestMethod]
+        public void ALayoutWithoutItemsLeavesTheLoadersOwn() {
+            var layout = HotbarLayout.Make("Bare", new HotbarData(), null, Me, withItems: false);
+            var data = new HotbarData();
+            data.Bars[0].Put("Alt", 0, 0, 4, Item(9));
+
+            HotbarLayout.Apply(layout, data, new System.Collections.Generic.Dictionary<string, WindowPlacement>(), "Alt");
+
+            Assert.IsNull(layout.Character);
+            Assert.AreEqual(9, data.Bars[0].At("Alt", 0, 0, 4).Id);
+        }
     }
 }

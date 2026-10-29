@@ -35,6 +35,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>Extra items at the top of the right-click menu (a fellow's vitals), or null.</summary>
         private readonly Action menuItems;
 
+        /// <summary>A size of its own on top of the Text size (the Appraisal windows' Item details size), or null.</summary>
+        private readonly Func<float> textScale;
+
         /// <summary>Less room round the contents than the style's (a hotbar), or null.</summary>
         private readonly Vector2? padding;
 
@@ -52,6 +55,9 @@ namespace DaraletPlayer.Ui {
 
         private bool bringToFront;
 
+        /// <summary>Set by OpenMenu: the right-click menu opens this frame, at the window's level, where it's looked for.</summary>
+        private bool openMenu;
+
         // the style's border and padding, while this window's Begin has its own
         private float? savedBorderSize;
         private Vector2? savedPadding;
@@ -65,9 +71,10 @@ namespace DaraletPlayer.Ui {
         /// <param name="alwaysOnlyInUse">Only ever shown while in use.</param>
         /// <param name="onClose">What closing it does instead of hiding it; it comes back for the next thing.</param>
         /// <param name="padding">The room round what's in it, instead of the style's.</param>
+        /// <param name="textScale">A text size of its own, on top of the window's Size and the Text size.</param>
         public FloatingWindow(string id, string title, Settings settings, Vector2 defaultPosition, Action render,
             bool visibleByDefault = true, Vector2? defaultSize = null, Func<object> inUse = null, bool alwaysOnlyInUse = false,
-            Action onClose = null, Action menuItems = null, Vector2? padding = null) {
+            Action onClose = null, Action menuItems = null, Vector2? padding = null, Func<float> textScale = null) {
             this.id = id;
             this.settings = settings;
             this.defaultPosition = defaultPosition;
@@ -78,6 +85,7 @@ namespace DaraletPlayer.Ui {
             this.onClose = onClose;
             this.menuItems = menuItems;
             this.padding = padding;
+            this.textScale = textScale;
             this.visibleByDefault = visibleByDefault;
 
             // made here so a window that starts hidden is saved that way
@@ -143,7 +151,7 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>The window's text size: its own size times the Config tab's Text size.</summary>
-        private float FontScale => Scale * settings.Data.ClampedTextScale;
+        private float FontScale => Scale * settings.Data.ClampedTextScale * (textScale?.Invoke() ?? 1);
 
         /// <summary>Shown only while in use: always for some windows, by choice (Only when needed) for the rest.</summary>
         private bool OnlyInUse => inUse != null && (alwaysOnlyInUse || Placement.OnlyInUse);
@@ -290,9 +298,22 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>
+        /// Opens the right-click menu from something drawn in the window (a fellow, with menuItems about them): the menu
+        /// itself doesn't open over items, and a popup opened inside one's ID scope wouldn't be the window's.
+        /// </summary>
+        public void OpenMenu() {
+            openMenu = true;
+        }
+
         private void RenderContextMenu() {
             // not over an item, whose own right-click (the game's appraisal, say) comes first
             var flags = ImGuiPopupFlags.MouseButtonRight | ImGuiPopupFlags.NoOpenOverItems;
+
+            if (openMenu) {
+                openMenu = false;
+                ImGui.OpenPopup($"{id}-menu");
+            }
 
             if (!ImGui.BeginPopupContextWindow($"{id}-menu", flags)) {
                 return;
@@ -433,11 +454,19 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>The saved position and size the first time, then a width asked for (SetWidth), then the size limits.</summary>
+        /// <summary>
+        /// The saved position every frame but while the left button is down (a drag), the saved size the first time, then a
+        /// width asked for (SetWidth), then the size limits.
+        /// </summary>
         private void SetNextPlacement() {
-            if (!positioned) {
+            // ImGui pulls a window back inside the screen by itself whenever the screen is smaller than where it is, and the
+            // game's screen is for a moment around login: the hotbars came back in the middle, and that place was saved. So
+            // only a drag moves a window: the rest of the time it's put where it was saved, which ImGui doesn't pull back.
+            if (!positioned || !ImGui.IsMouseDown(ImGuiMouseButton.Left)) {
                 ImGui.SetNextWindowPos(new Vector2(Placement.X ?? defaultPosition.X, Placement.Y ?? defaultPosition.Y), ImGuiCond.Always);
+            }
 
+            if (!positioned) {
                 if (defaultSize.HasValue) {
                     var size = new Vector2(Placement.Width ?? defaultSize.Value.X, Placement.Height ?? defaultSize.Value.Y);
                     ImGui.SetNextWindowSize(size, ImGuiCond.Always);
@@ -506,7 +535,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 ImGui.SetWindowFontScale(FontScale);
-                Widgets.TextScale = settings.Data.ClampedTextScale;
+                Widgets.TextScale = settings.Data.ClampedTextScale * (textScale?.Invoke() ?? 1);
 
                 // the contents start below the title bar and the padding, so this is the title bar's height
                 if (!Locked) {
@@ -532,7 +561,8 @@ namespace DaraletPlayer.Ui {
 
             var position = ImGui.GetWindowPos();
 
-            if (Placement.X != position.X || Placement.Y != position.Y) {
+            // only a drag moves a window (SetNextPlacement): anything else is ImGui keeping it on a smaller screen
+            if (ImGui.IsMouseDown(ImGuiMouseButton.Left) && (Placement.X != position.X || Placement.Y != position.Y)) {
                 Placement.X = position.X;
                 Placement.Y = position.Y;
                 settings.Changed();

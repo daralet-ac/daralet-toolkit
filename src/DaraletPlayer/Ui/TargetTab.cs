@@ -124,6 +124,8 @@ namespace DaraletPlayer.Ui {
             changed |= Form.FlowCheck(ref first, "Threat", ref data.TargetShowThreat,
                 "Shows the creature's threat table in the target windows: who it wants to attack, and how much. The one "
                 + "it's attacking is the one it picked from those near the top.");
+            changed |= Form.FlowCheck(ref first, "Retail bars##target", ref data.RetailVitalBars, Widgets.RetailBarsTip);
+            changed |= Form.FlowCheck(ref first, "Bold numbers##target", ref data.BoldVitalText, Widgets.BoldVitalsTip);
 
             if (data.TargetShowThreat && Form.BeginForm("target-threat")) {
                 Form.Label("Threat rows", "How many rows of the threat table the target windows show. The tab shows all "

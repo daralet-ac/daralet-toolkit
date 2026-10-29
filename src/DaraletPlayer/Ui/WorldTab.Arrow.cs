@@ -59,7 +59,7 @@ namespace DaraletPlayer.Ui {
 
             // following a fellow needs their position, even with the World tab closed
             if (destination.FellowGuid.HasValue) {
-                feed.Refresh(PlayerFeed.KindFellowship, FellowshipRefresh);
+                feed.RefreshFellowship(FellowshipRefresh);
             }
 
             if (!self.TryGet(out var x, out var y, out _)) {

@@ -5,10 +5,10 @@ using DaraletPlayer.Feed;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The game toolbar's backpack, Contracts and Map buttons, and the Character Information button (the burden pack by
-    /// the link indicator), each drawn again over the game's own to open the plugin's Inventory, Quests, Map and Character
-    /// windows instead (ToolbarButton). Each is on or off by itself, from the Config tab's Client UI Override section
-    /// (ClientUiOverride); the game's other buttons are left to it.
+    /// The game toolbar's backpack, Contracts, Social and Map buttons, and the Character Information button (the
+    /// burden pack by the link indicator), each drawn again over the game's own to open the plugin's Inventory, Quests,
+    /// Social, Map and Character windows instead (ToolbarButton). Each is on or off by itself, from the Config tab's
+    /// Client UI Override section (ClientUiOverride); the game's other buttons are left to it.
     /// </summary>
     internal class ToolbarButtons : IDisposable {
         /// <summary>The burden pack's pictures: not overburdened, overburdened, very (BurdenLevel).</summary>
@@ -22,7 +22,7 @@ namespace DaraletPlayer.Ui {
         private readonly ToolbarButton[] buttons;
 
         public ToolbarButtons(Settings settings, ItemIcons icons, FloatingWindow inventory, FloatingWindow quests,
-            FloatingWindow map, FloatingWindow character) {
+            FloatingWindow map, FloatingWindow character, FloatingWindow social) {
             var toolbar = ClientElements.Toolbar;
 
             buttons = new[] {
@@ -41,6 +41,11 @@ namespace DaraletPlayer.Ui {
                     () => settings.Data.ToolbarMap, map, icons),
                 new ToolbarButton("Daralet Toolbar Character", ClientElements.IndicatorBurden, ClientElements.Indicators,
                     BurdenPack, CharacterTip, () => settings.Data.ToolbarCharacter, character, icons),
+                new ToolbarButton("Daralet Toolbar Social", ClientElements.ToolbarSocial, toolbar,
+                    ToolbarButton.Pictures("toolbar-social", "toolbar-social-open"),
+                    () => "Social: opens or closes Daralet Toolkit's Social window: allegiance, fellowship, friends and "
+                        + "squelches.",
+                    () => settings.Data.ToolbarSocial, social, icons),
             };
         }
 
@@ -63,27 +68,32 @@ namespace DaraletPlayer.Ui {
             Setting(ref first, settings, ref data.ToolbarInventory, "Inventory", "backpack", "Inventory", "inventory");
             Setting(ref first, settings, ref data.ToolbarQuests, "Quests", "Contracts (the quill)", "Quests",
                 "Contracts panel");
+            Setting(ref first, settings, ref data.ToolbarSocial, "Social", "Social (the two heads)", "Social",
+                "social panel");
             Setting(ref first, settings, ref data.ToolbarMap, "Map", "Map (the compass)", "Map", "map panel");
             Setting(ref first, settings, ref data.ToolbarCharacter, "Character", "Character Information (the pack by "
                 + "the link indicator, which shows your burden)", "Character", "Character Information panel");
         }
 
-        /// <summary>Whether all four buttons are on.</summary>
+        /// <summary>Whether all five buttons are on.</summary>
         public static bool AllOn(SettingsData data) {
-            return data.ToolbarInventory && data.ToolbarQuests && data.ToolbarMap && data.ToolbarCharacter;
+            return data.ToolbarInventory && data.ToolbarQuests && data.ToolbarMap && data.ToolbarCharacter
+                && data.ToolbarSocial;
         }
 
-        /// <summary>Whether any of the four buttons is on.</summary>
+        /// <summary>Whether any of the five buttons is on.</summary>
         public static bool AnyOn(SettingsData data) {
-            return data.ToolbarInventory || data.ToolbarQuests || data.ToolbarMap || data.ToolbarCharacter;
+            return data.ToolbarInventory || data.ToolbarQuests || data.ToolbarMap || data.ToolbarCharacter
+                || data.ToolbarSocial;
         }
 
-        /// <summary>Turns all four buttons on or off, for Enable all and Disable all. The caller saves.</summary>
+        /// <summary>Turns all five buttons on or off, for Enable all and Disable all. The caller saves.</summary>
         public static void SetAll(SettingsData data, bool on) {
             data.ToolbarInventory = on;
             data.ToolbarQuests = on;
             data.ToolbarMap = on;
             data.ToolbarCharacter = on;
+            data.ToolbarSocial = on;
         }
 
         /// <summary>The checkbox for one button, in a Form.Flow row.</summary>

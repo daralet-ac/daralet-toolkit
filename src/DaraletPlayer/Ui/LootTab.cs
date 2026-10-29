@@ -43,6 +43,10 @@ namespace DaraletPlayer.Ui {
 
         private List<uint> testGuids = new List<uint>();
 
+        /// <summary>Item details' Text size while its slider is held: only used once it's let go, as the Config tab's.</summary>
+        private int itemTextPercent = 100;
+        private bool itemTextSliderActive;
+
         public LootTab(PlayerFeed feed, Settings settings, ItemIcons icons) {
             this.feed = feed;
             this.settings = settings;
@@ -116,9 +120,9 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderSettings() {
-            if (!Form.SettingsHeader("loot-settings", "The Corpse window: whether it opens, and its size and background. "
-                + "Loot window, which has it take the place of the game's corpse and chest window, is under the Config "
-                + "tab's Client UI Override.")) {
+            if (!Form.SettingsHeader("loot-settings", "The Corpse window: whether it opens, and its size and background; and "
+                + "how big item details are drawn. Loot window, which has the Corpse window take the place of the game's "
+                + "corpse and chest window, is under the Config tab's Client UI Override.")) {
                 return;
             }
 
@@ -126,7 +130,53 @@ namespace DaraletPlayer.Ui {
             corpseWindow.RenderControls("Whether the Corpse window opens at all. When on, it opens by itself when you open "
                 + "a corpse or chest it has something to show for (with Loot window on, every one) and goes when that "
                 + "closes. Unticked, it never opens.");
+
+            RenderItemTextSize();
             ImGui.Spacing();
+        }
+
+        /// <summary>
+        /// Item details: how big the tooltips over items and the Appraisal windows draw their text, on top of the Config
+        /// tab's Text size.
+        /// </summary>
+        private void RenderItemTextSize() {
+            Form.Section("Item details");
+
+            if (!Form.BeginForm("loot-item-text")) {
+                return;
+            }
+
+            Form.Label("Text size", "How big an item's details are drawn: the tooltip when the mouse is over an item "
+                + "(corpses, packs, the bank, the market) and the Appraisal windows. On top of the Config tab's Text size.");
+
+            // as the Config tab's: the tooltip under the mouse grows with it, so a size is only used once it's let go
+            if (!itemTextSliderActive) {
+                itemTextPercent = (int)Math.Round(settings.Data.ClampedItemTextScale * 100);
+            }
+
+            var style = ImGui.GetStyle();
+            var reset = ImGui.CalcTextSize("Reset").X + style.FramePadding.X * 2 + style.ItemSpacing.X;
+            ImGui.SetNextItemWidth(Math.Max(ImGui.GetFontSize() * 4, Math.Min(Form.ControlWidth,
+                ImGui.GetContentRegionAvail().X - reset)));
+            ImGui.SliderInt("##loot-item-text-size", ref itemTextPercent, (int)(SettingsData.MinTextScale * 100),
+                (int)(SettingsData.MaxTextScale * 100), "%d%%");
+            itemTextSliderActive = ImGui.IsItemActive();
+
+            if (ImGui.IsItemDeactivatedAfterEdit()) {
+                settings.Data.ItemTextScale = itemTextPercent / 100f;
+                settings.Changed();
+            }
+            Widgets.Tip("How big item details are drawn. The new size is used once you let go. Ctrl+click to type one.");
+
+            ImGui.SameLine();
+
+            if (ImGui.SmallButton("Reset##loot-item-text-size-reset")) {
+                settings.Data.ItemTextScale = 1;
+                settings.Changed();
+            }
+            Widgets.Tip("Puts item details back to 100%.");
+
+            ImGui.EndTable();
         }
 
         private void RenderModePicker(LootData data) {

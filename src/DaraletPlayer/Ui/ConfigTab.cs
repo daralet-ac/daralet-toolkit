@@ -16,6 +16,7 @@ namespace DaraletPlayer.Ui {
         private readonly Settings settings;
         private readonly ClientUiOverride clientUiOverride;
         private readonly HideGameUi hideGameUi;
+        private readonly Launcher launcher;
 
         private string profileName = "";
         /// <summary>The profile the name box was filled in for: another, swapped in anywhere, fills it again.</summary>
@@ -30,10 +31,11 @@ namespace DaraletPlayer.Ui {
         /// <summary>The files From file found when it was pressed.</summary>
         private List<string> exportFiles = new List<string>();
 
-        public ConfigTab(Settings settings, ClientUiOverride clientUiOverride, HideGameUi hideGameUi) {
+        public ConfigTab(Settings settings, ClientUiOverride clientUiOverride, HideGameUi hideGameUi, Launcher launcher) {
             this.settings = settings;
             this.clientUiOverride = clientUiOverride;
             this.hideGameUi = hideGameUi;
+            this.launcher = launcher;
         }
 
         private static string Me => CoreManager.Current.CharacterFilter.Name;
@@ -77,6 +79,7 @@ namespace DaraletPlayer.Ui {
             ImGui.Spacing();
             clientUiOverride.Render();
             hideGameUi.Render();
+            launcher.Render();
         }
 
         private void RenderText() {

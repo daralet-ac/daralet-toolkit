@@ -15,8 +15,11 @@ the game with:
   drawn from the game's own files: your floor bright and the others dimmed, following you and turning as you turn. It
   greys out the rooms you've been in (remembered for each character), marks the portals, corpses, chests, NPCs and
   monsters on your floor in those rooms, and draws the way out, or the way to anything you right-click.
-- **Fellowship**: your fellowship's health, stamina and mana, with a small window that stays on screen while you play.
-  Click a name to select that member.
+- **Social**: your allegiance (rank, followers, monarch, patron and vassals, and the XP passed between you, with Swear,
+  Break and Kick), your fellowship (its members' health, stamina and mana, its Leader, Dismiss, Open, Recruit, Quit and
+  Disband buttons, Create Fellowship when you aren't in one, and a small window that stays on screen while you play,
+  with each member's level, Combat Focus, distance and buffs if you like), Find a group, your friends (who's online,
+  Appear Offline, and invites and tells from a right-click) and your squelches. Click a name to select that player.
 - **Combat**: what you're fighting: its health, stamina and mana, every buff and debuff on it, and its threat table (who
   it wants to attack), with a window that stays on screen too. And hotbars: drag potions, kits, weapons or spells onto them
   and use or cast them with a click or a hotkey. Each bar can have as many slots, rows and pages as you like, its own colours, and
@@ -34,7 +37,8 @@ the game with:
 - **Arena**: queue, challenge, leave and watch duels, with your ratings and the latest results.
 - **Leaderboards**: the website's leaderboards: level, arena, capstones, deaths and more.
 
-Type `/dap` to open and close the window. Hover over almost anything for a tooltip saying what it does.
+Type `/dap` to open and close the window, or set a key or a button you can put anywhere for it (the Config tab).
+Hover over almost anything for a tooltip saying what it does.
 
 ## What you need
 

@@ -18,6 +18,7 @@ namespace DaraletPlayer.Ui {
         public const uint ToolbarBackpack = 0x100001B1;
         public const uint ToolbarContracts = 0x1000055A;
         public const uint ToolbarMap = 0x1000019A;
+        public const uint ToolbarSocial = 0x10000197;
 
         // the indicators by the toolbar (INDI), and their Character Information button (the burden pack), in layout
         // 0x21000071

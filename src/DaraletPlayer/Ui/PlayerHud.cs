@@ -17,7 +17,7 @@ namespace DaraletPlayer.Ui {
         private readonly ItemIcons icons;
         private readonly Hud hud;
         private readonly ConfigTab configTab;
-        private readonly FellowshipTab fellowshipTab;
+        private readonly SocialTab socialTab;
         private readonly CombatTab combatTab;
         private readonly WorldTab worldTab;
         private readonly InventoryTab inventoryTab;
@@ -30,6 +30,7 @@ namespace DaraletPlayer.Ui {
         private readonly ToolbarButtons toolbarButtons;
         private readonly HideGameUi hideGameUi;
         private readonly EscapeCloses escapeCloses;
+        private readonly Launcher launcher;
         private readonly MarketApi api = new MarketApi();
 
         /// <summary>
@@ -46,7 +47,7 @@ namespace DaraletPlayer.Ui {
             icons = new ItemIcons(settings);
             ItemUser.Icons = icons;
 
-            fellowshipTab = new FellowshipTab(feed, settings);
+            socialTab = new SocialTab(feed, settings, icons);
             combatTab = new CombatTab(feed, settings, icons);
             worldTab = new WorldTab(feed, settings);
             inventoryTab = new InventoryTab(feed, icons, settings);
@@ -57,15 +58,20 @@ namespace DaraletPlayer.Ui {
             lootTab = new LootTab(feed, settings, icons);
             // the hud is made below: these read the field when called
             hideGameUi = new HideGameUi(settings, () => hud.Visible, shown => hud.Visible = shown);
-            configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow), hideGameUi);
+            launcher = new Launcher(settings, () => hud.Visible, Toggle);
+            configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow), hideGameUi,
+                launcher);
             leaderboardsTab = new LeaderboardsTab(feed, api);
             toolbarButtons = new ToolbarButtons(settings, icons, inventoryTab.CarriedWindow, questsTab.Window,
-                worldTab.MapWindow, characterTab.Window);
+                worldTab.MapWindow, characterTab.Window, socialTab.Window);
             // the hud is made below: these read the field when called
             escapeCloses = new EscapeCloses(settings, () => hud.Visible, () => hud.Visible = false,
                 inventoryTab.CarriedWindow, inventoryTab.BankWindow, characterTab.Window, questsTab.Window);
 
             Appraisal.Start(feed, settings, icons);
+            ItemTooltip.Scale = () => settings.Data.ClampedItemTextScale;
+            Widgets.RetailBars = () => settings.Data.RetailVitalBars;
+            Widgets.BoldVitals = () => settings.Data.BoldVitalText;
 
             tabs = new List<(string, string, Action)> {
                 ("Config", "Settings profiles: every setting of the plugin's as a set each character picks from, saved to "
@@ -73,8 +79,9 @@ namespace DaraletPlayer.Ui {
                     + "the plugin's windows instead of the game's panels.", configTab.Render),
                 ("World", "A map of Dereth with Daralet's towns, dungeons, lifestones and portals, you and your fellowship, "
                     + "and an arrow to point you anywhere on it.", worldTab.Render),
-                ("Fellowship", "Your fellowship's health, stamina and mana, a vitals window you can place anywhere on "
-                    + "screen, and Find a group: look for a group, or for more players, with /lfgroup and /lfmore.", fellowshipTab.Render),
+                ("Social", "Your allegiance, your fellowship (its members' vitals, its buttons, a vitals window you can "
+                    + "place anywhere), Find a group (/lfgroup and /lfmore), your friends and your squelches.",
+                    socialTab.Render),
                 ("Combat", "Your selected target's vitals, buffs, debuffs and threat table, a tracked target to watch "
                     + "alongside it, and hotbars of items to use with a click or a hotkey.", combatTab.Render),
                 ("Character", "What the game's Character Information panel says (age, deaths, innate attributes, "
@@ -248,6 +255,9 @@ namespace DaraletPlayer.Ui {
                 GameDrag.Stop();
                 Appraisal.Stop();
                 ItemUser.Icons = null;
+                ItemTooltip.Scale = () => 1;
+                Widgets.RetailBars = () => false;
+                Widgets.BoldVitals = () => false;
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
@@ -255,7 +265,7 @@ namespace DaraletPlayer.Ui {
 
             // the game's UI back first, whatever fails after
             var pieces = new IDisposable[] {
-                hideGameUi, escapeCloses, hud, toolbarButtons, fellowshipTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
+                hideGameUi, escapeCloses, launcher, hud, toolbarButtons, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
                 lootTab, api, icons,
             };
 

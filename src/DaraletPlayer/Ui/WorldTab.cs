@@ -141,7 +141,7 @@ namespace DaraletPlayer.Ui {
             ApplyWorldData();
 
             if (settings.Data.MapShowFellows) {
-                feed.Refresh(PlayerFeed.KindFellowship, FellowshipRefresh);
+                feed.RefreshFellowship(FellowshipRefresh);
             }
 
             var hasSelf = self.TryGet(out var x, out var y, out _);
@@ -179,7 +179,7 @@ namespace DaraletPlayer.Ui {
             ApplyWorldData();
 
             if (settings.Data.MapShowFellows) {
-                feed.Refresh(PlayerFeed.KindFellowship, FellowshipRefresh);
+                feed.RefreshFellowship(FellowshipRefresh);
             }
 
             var hasSelf = self.TryGet(out var x, out var y, out _);

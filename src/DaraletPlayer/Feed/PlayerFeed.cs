@@ -35,6 +35,11 @@ namespace DaraletPlayer.Feed {
         public const string KindAbandon = "abandon";
         public const string KindRollRanges = "rollranges";
         public const string KindLfg = "lfg";
+        public const string KindSocial = "social";
+        public const string KindFriend = "friend";
+        public const string KindSquelch = "squelch";
+        public const string KindAllegiance = "allegiance";
+        public const string KindFellowCreate = "fellowcreate";
 
         // chat types, which Decal passes as the colour
         private const int TellChat = 3;
@@ -84,6 +89,17 @@ namespace DaraletPlayer.Feed {
         /// <summary>Your fellowship, or null when you aren't in one (or before the first reply).</summary>
         public FellowshipInfo Fellowship { get; private set; }
         public DateTime FellowshipUpdatedAt { get; private set; } = DateTime.MinValue;
+
+        /// <summary>
+        /// Whether fellowship requests ask for each fellow's buffs and debuffs too (the fellowship window shows them). Every
+        /// tab asking for the fellowship asks the same way, through RefreshFellowship, or each would count as new arguments
+        /// and the requests would never wait their interval.
+        /// </summary>
+        public Func<bool> WantFellowSpells { get; set; } = () => false;
+
+        /// <summary>Your friends, squelches, allegiance and social options, or null before the first reply.</summary>
+        public SocialInfo Social { get; private set; }
+        public DateTime SocialUpdatedAt { get; private set; } = DateTime.MinValue;
 
         /// <summary>When the last targets reply came. Spell timers count down from it.</summary>
         public DateTime TargetsUpdatedAt { get; private set; } = DateTime.MinValue;
@@ -187,6 +203,20 @@ namespace DaraletPlayer.Feed {
             if (changed || sinceSent > interval) {
                 Request(kind, arguments);
             }
+        }
+
+        /// <summary>Refresh for the fellowship, asking for the fellows' spells when the fellowship window shows them.</summary>
+        public void RefreshFellowship(TimeSpan interval) {
+            Refresh(KindFellowship, interval, WantFellowSpells() ? "spells" : null);
+        }
+
+        /// <summary>
+        /// Asks for the social reply again as soon as the server allows: after a button changes your friends, squelches or
+        /// allegiance, so the list shows it without waiting for the next refresh.
+        /// </summary>
+        public void RefreshSocialSoon() {
+            lastSentAt.Remove(KindSocial);
+            waitingSince.Remove(KindSocial);
         }
 
         /// <summary>
@@ -425,6 +455,10 @@ namespace DaraletPlayer.Feed {
                 case KindLfg:
                     Lfg = Json.Read<LfgInfo>(json);
                     LfgUpdatedAt = DateTime.UtcNow;
+                    break;
+                case KindSocial:
+                    Social = Json.Read<SocialInfo>(json);
+                    SocialUpdatedAt = DateTime.UtcNow;
                     break;
                 case KindMarket:
                     Market = Json.Read<MarketInfo>(json);

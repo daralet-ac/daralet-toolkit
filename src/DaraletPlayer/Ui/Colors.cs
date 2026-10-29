@@ -10,6 +10,9 @@ namespace DaraletPlayer.Ui {
         public static readonly Vector4 Good = new Vector4(0.4f, 0.9f, 0.45f, 1f);
         public static readonly Vector4 Text = new Vector4(1f, 1f, 1f, 1f);
 
+        /// <summary>Details beside a name (a fellow's level and distance): easy to read, but not as bright as the name.</summary>
+        public static readonly Vector4 Detail = new Vector4(0.88f, 0.84f, 0.7f, 1f);
+
         /// <summary>Spells someone else cast: dimmer than yours (Good / Danger), so yours stand out.</summary>
         public static readonly Vector4 BuffOther = new Vector4(0.45f, 0.7f, 0.5f, 1f);
         public static readonly Vector4 DebuffOther = new Vector4(0.85f, 0.55f, 0.5f, 1f);

@@ -8,43 +8,34 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The Fellowship tab: Members, with the fellowship vitals window it controls (both show what @playerui fellowship sends,
-    /// asked for once a second while either is on screen), and Find a group (FindGroupTab).
+    /// The Social tab's Fellowship: your fellowship's members and its buttons (Leader, Dismiss, Open, Recruit, Quit,
+    /// Disband), or Create Fellowship when you aren't in one, and the fellowship vitals window it controls. Both show what
+    /// @playerui fellowship sends, asked for once a second while either is on screen.
     /// </summary>
-    internal class FellowshipTab : IDisposable {
+    /// <remarks>Split across files: <c>.Window</c> (the fellowship window) and <c>.Create</c> (Create Fellowship).</remarks>
+    internal partial class FellowshipTab : IDisposable {
         private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(1);
-        private const float WindowBarWidth = 130;
-        private const float WindowBarHeight = 14;
+        private static readonly TimeSpan BigRefreshInterval = TimeSpan.FromSeconds(2);
 
         private readonly PlayerFeed feed;
         private readonly Settings settings;
+        private readonly ItemIcons icons;
         private readonly FloatingWindow window;
-        private readonly FindGroupTab findGroup;
+        private readonly Action openFindGroup;
 
-        /// <summary>Set by Members' Find a group button: Find a group is the open tab next frame.</summary>
-        private bool openFindGroup;
-
-        /// <summary>The fellow right-clicked in the window, whose vitals its menu offers; null when it wasn't on a fellow.</summary>
-        private string menuMember;
-
-        public FellowshipTab(PlayerFeed feed, Settings settings) {
+        public FellowshipTab(PlayerFeed feed, Settings settings, ItemIcons icons, Action openFindGroup) {
             this.feed = feed;
             this.settings = settings;
+            this.icons = icons;
+            this.openFindGroup = openFindGroup;
 
             window = new FloatingWindow("fellowship", "Fellowship", settings, new Vector2(20, 200), RenderWindow,
                 inUse: FellowshipInUse, menuItems: RenderMenuMember);
-            findGroup = new FindGroupTab(feed, settings);
-        }
 
-        /// <summary>The window's right-click menu, over a fellow: which of their vitals it shows, for them alone.</summary>
-        private void RenderMenuMember() {
-            if (menuMember == null) {
-                return;
-            }
-
-            Widgets.TextDisabled(menuMember);
-            RenderVitalChoices(menuMember);
-            ImGui.Separator();
+            // only the fellowship window draws spells, so only it makes the requests ask for them
+            feed.WantFellowSpells = () => window.Shown
+                && (settings.Data.FellowshipShowBuffs || settings.Data.FellowshipShowDebuffs)
+                && (feed.Fellowship?.Members?.Count ?? 0) <= settings.Data.FellowshipSpellsUpTo;
         }
 
         /// <summary>
@@ -80,28 +71,6 @@ namespace DaraletPlayer.Ui {
         }
 
         public void Render() {
-            if (!ImGui.BeginTabBar("fellowship-tabs")) {
-                return;
-            }
-
-            if (Widgets.TabItem("Members", "Your fellowship's members and their vitals, and the fellowship window.")) {
-                RenderMembers();
-                ImGui.EndTabItem();
-            }
-
-            var select = openFindGroup;
-            openFindGroup = false;
-
-            if (Widgets.TabItem("Find a group", "Look for a group, or for more players for your fellowship, and see who else "
-                + "is looking: /lfgroup and /lfmore as a form.", select)) {
-                findGroup.Render();
-                ImGui.EndTabItem();
-            }
-
-            ImGui.EndTabBar();
-        }
-
-        private void RenderMembers() {
             Refresh();
 
             if (!feed.Supports(PlayerFeed.KindFellowship)) {
@@ -120,13 +89,7 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
-                Widgets.TextDisabled("You aren't in a fellowship.");
-                ImGui.SameLine();
-
-                if (Widgets.Button("Find a group", true, "Opens Find a group, to look for a fellowship to join.")) {
-                    openFindGroup = true;
-                }
-
+                RenderCreate();
                 return;
             }
 
@@ -137,12 +100,91 @@ namespace DaraletPlayer.Ui {
                 + "Even share splits XP equally; otherwise higher levels get more. "
                 + "Open fellowships let any member recruit. Locked ones can't take new members.");
 
+            RenderButtons(fellowship);
+            ImGui.Spacing();
             RenderTable(fellowship);
+        }
+
+        /// <summary>
+        /// The fellowship panel's buttons, each greyed out (saying why) while it can't be used. Leader, Dismiss and Recruit
+        /// act on your selection, as the game's do: click a member's name to select them.
+        /// </summary>
+        private void RenderButtons(FellowshipInfo fellowship) {
+            var leader = SocialActions.IsLeader(fellowship);
+            var me = unchecked((uint)CoreManager.Current.CharacterFilter.Id);
+            var selected = unchecked((uint)SocialActions.Selection());
+            var member = fellowship.Members?.FirstOrDefault(m => m.Guid == selected && m.Guid != me);
+            var first = true;
+
+            var memberTip = !leader ? "Only the leader can." : member == null ? "Select a member first (click their name)."
+                : null;
+
+            Form.Flow(ref first, ButtonWidth("Leader"));
+
+            if (Widgets.Button("Leader", leader && member != null, memberTip
+                ?? $"Makes {member.Name} the fellowship's leader.")) {
+                CoreManager.Current.Actions.FellowshipGrantLeader(unchecked((int)member.Guid));
+            }
+
+            Form.Flow(ref first, ButtonWidth("Dismiss"));
+
+            if (Widgets.Button("Dismiss", leader && member != null, memberTip
+                ?? $"Dismisses {member.Name} from the fellowship.")) {
+                CoreManager.Current.Actions.FellowshipDismiss(unchecked((int)member.Guid));
+            }
+
+            var openLabel = fellowship.Open ? "Close" : "Open";
+            Form.Flow(ref first, ButtonWidth(openLabel));
+            var openTip = !leader ? "Only the leader can open or close the fellowship."
+                : fellowship.Locked ? "A locked fellowship can't be opened or closed."
+                : fellowship.Open ? "Closes the fellowship: only the leader can recruit."
+                : "Opens the fellowship: any member can recruit.";
+
+            if (Widgets.Button($"{openLabel}##fellowship-open", leader && !fellowship.Locked, openTip)) {
+                CoreManager.Current.Actions.FellowshipSetOpen(!fellowship.Open);
+            }
+
+            var recruit = SocialActions.SelectedPlayer(out var recruitName);
+            var canRecruit = SocialActions.CanRecruit(fellowship, out var why);
+
+            if (canRecruit && recruit == 0) {
+                canRecruit = false;
+                why = "Select the player to recruit.";
+            }
+            else if (canRecruit && fellowship.Members?.Any(m => m.Guid == unchecked((uint)recruit)) == true) {
+                canRecruit = false;
+                why = $"{recruitName} is already in your fellowship.";
+            }
+
+            Form.Flow(ref first, ButtonWidth("Recruit"));
+
+            if (Widgets.Button("Recruit", canRecruit, why ?? $"Asks {recruitName} to join the fellowship.")) {
+                CoreManager.Current.Actions.FellowshipRecruit(recruit);
+            }
+
+            Form.Flow(ref first, ButtonWidth("Quit"));
+
+            if (Widgets.Button("Quit", true, leader
+                ? "Leaves the fellowship; it carries on with a new leader."
+                : "Leaves the fellowship.")) {
+                CoreManager.Current.Actions.FellowshipQuit();
+            }
+
+            Form.Flow(ref first, ButtonWidth("Disband"));
+
+            if (Widgets.Button("Disband", leader, leader ? "Ends the fellowship for everyone in it."
+                : "Only the leader can disband the fellowship.")) {
+                CoreManager.Current.Actions.FellowshipDisband();
+            }
+        }
+
+        private static float ButtonWidth(string label) {
+            return ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 2;
         }
 
         private void RenderSettings() {
             if (!Form.SettingsHeader("fellowship-settings", "The fellowship window: whether it's on screen, its size and "
-                + "background, and which vitals it shows.")) {
+                + "background, and what it shows.")) {
                 return;
             }
 
@@ -164,7 +206,72 @@ namespace DaraletPlayer.Ui {
                 settings.Changed();
             }
 
+            if (Form.FlowCheck(ref first, "Side by side##fellowship", ref data.FellowshipSideBySide,
+                "Puts each member's bars in a row, beside each other, instead of one under another.")) {
+                settings.Changed();
+            }
+
+            if (Form.FlowCheck(ref first, "Retail bars##fellowship", ref data.RetailVitalBars, Widgets.RetailBarsTip)) {
+                settings.Changed();
+            }
+
+            if (Form.FlowCheck(ref first, "Bold numbers##fellowship", ref data.BoldVitalText, Widgets.BoldVitalsTip)) {
+                settings.Changed();
+            }
+
+            if (Form.BeginForm("fellowship-bars")) {
+                Form.Label("Bar width", "How wide each vital bar is in the fellowship window, which grows or shrinks to fit. "
+                    + "Its Size makes everything bigger, bars included.");
+                var width = data.FellowshipBarWidth;
+
+                if (Form.Slider("##fellowship-bar-width", ref width, MinBarWidth, MaxBarWidth, "%d px")) {
+                    data.FellowshipBarWidth = width;
+                    settings.Changed();
+                }
+
+                ImGui.EndTable();
+            }
+
             Widgets.TextDisabled("Right-click a member, here or in the window, to pick their bars for them alone.");
+
+            Form.Section("By each name");
+
+            // the focus and spells came with the server's social requests: an older one sends neither
+            if (!feed.Supports(PlayerFeed.KindSocial)) {
+                Form.Hint("This server is too old to send each member's Combat Focus, buffs or debuffs: those stay empty "
+                    + "until it's updated.");
+            }
+
+            first = true;
+
+            if (Form.FlowCheck(ref first, "Level##fellowship", ref data.FellowshipShowLevel,
+                "Shows each member's character level by their name.")) {
+                settings.Changed();
+            }
+
+            if (Form.FlowCheck(ref first, "Combat Focus##fellowship", ref data.FellowshipShowFocus,
+                "Shows the icon of the Combat Focus each member wears, before their name.")) {
+                settings.Changed();
+            }
+
+            if (Form.FlowCheck(ref first, "Distance##fellowship", ref data.FellowshipShowDistance,
+                "Shows how far each member is from you, when they're near enough for the server to say.")) {
+                settings.Changed();
+            }
+
+            if (Form.FlowCheck(ref first, "Buffs##fellowship", ref data.FellowshipShowBuffs,
+                "Shows an icon for each timed helpful spell on each member (hover one for its name); ones that never "
+                + "run out, such as an item's cantrips, are left out. The server then sends "
+                + "every member's spells each second.")) {
+                settings.Changed();
+            }
+
+            if (Form.FlowCheck(ref first, "Debuffs##fellowship", ref data.FellowshipShowDebuffs,
+                "Shows an icon for each harmful spell on each member (hover one for its name), framed in red.")) {
+                settings.Changed();
+            }
+
+            RenderLayoutSettings();
         }
 
         private static string Describe(FellowshipInfo fellowship) {
@@ -232,70 +339,6 @@ namespace DaraletPlayer.Ui {
             ImGui.EndTable();
         }
 
-        private void RenderWindow() {
-            Refresh();
-
-            var fellowship = feed.Fellowship;
-
-            if (fellowship?.Members == null || fellowship.Members.Count == 0) {
-                Widgets.TextDisabled("No fellowship");
-                return;
-            }
-
-            var maximums = fellowship.Members.SelectMany(m => new[] { m.MaxHealth, m.MaxStamina, m.MaxMana }).ToArray();
-            var barSize = new Vector2(Widgets.VitalBarWidth(WindowBarWidth * window.Scale, maximums), WindowBarHeight * window.Scale);
-            var selected = unchecked((uint)CoreManager.Current.Actions.CurrentSelection);
-
-            // a right-click is on a fellow (their vitals join the window's menu) or not
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Right) && ImGui.IsWindowHovered()) {
-                menuMember = null;
-            }
-
-            foreach (var member in fellowship.Members) {
-                ImGui.PushID((int)member.Guid);
-                RenderWindowMember(member, fellowship, member.Guid == selected, barSize);
-                ImGui.PopID();
-            }
-        }
-
-        /// <summary>
-        /// One fellow in the window: their name and bars, as one group, so clicking anywhere on them selects them the way the
-        /// game's own fellowship panel does.
-        /// </summary>
-        private void RenderWindowMember(FellowInfo member, FellowshipInfo fellowship, bool selected, Vector2 barSize) {
-            ImGui.BeginGroup();
-
-            var nameColor = !member.Distance.HasValue ? Colors.Muted : selected ? Colors.Info : Colors.Text;
-            Widgets.TextColored(nameColor, MemberLabel(member, fellowship));
-
-            var (health, stamina, mana) = settings.Data.FellowShows(member.Name);
-
-            if (health) {
-                Widgets.VitalBar(member.Health, member.MaxHealth, Colors.Health, barSize.X, barSize.Y);
-            }
-
-            if (stamina) {
-                Widgets.VitalBar(member.Stamina, member.MaxStamina, Colors.Stamina, barSize.X, barSize.Y);
-            }
-
-            if (mana) {
-                Widgets.VitalBar(member.Mana, member.MaxMana, Colors.Mana, barSize.X, barSize.Y);
-            }
-
-            ImGui.EndGroup();
-            Widgets.OutlineIfHovered();
-
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) {
-                Select(member);
-            }
-
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Right)) {
-                menuMember = member.Name;
-            }
-
-            MemberTip(member);
-        }
-
         /// <summary>A member's name in the table, greyed out when they're too far away to say how far; a click selects them.</summary>
         private void MemberName(FellowInfo member, FellowshipInfo fellowship) {
             var far = !member.Distance.HasValue;
@@ -304,7 +347,8 @@ namespace DaraletPlayer.Ui {
                 ImGui.PushStyleColor(ImGuiCol.Text, Colors.Muted);
             }
 
-            if (ImGui.Selectable($"{MemberLabel(member, fellowship)}##member-{member.Guid}")) {
+            if (ImGui.Selectable($"{MemberLabel(member, fellowship)}##member-{member.Guid}",
+                member.Guid == unchecked((uint)SocialActions.Selection()))) {
                 Select(member);
             }
 
@@ -317,6 +361,7 @@ namespace DaraletPlayer.Ui {
             if (ImGui.BeginPopupContextItem($"member-menu-{member.Guid}")) {
                 Widgets.TextDisabled($"{member.Name}'s bars in the fellowship window");
                 RenderVitalChoices(member.Name);
+                RenderPinChoice(member.Name);
                 ImGui.EndPopup();
             }
         }
@@ -337,17 +382,10 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.Actions.SelectItem(unchecked((int)member.Guid));
         }
 
-        /// <summary>
-        /// Whether the window has a fellowship to show, for Only when needed. It asks the server as the window would, since a
-        /// hidden window doesn't draw, and drawing is what asks.
-        /// </summary>
-        private object FellowshipInUse() {
-            Refresh();
-            return feed.Fellowship?.Members?.Count > 0 ? "fellowship" : null;
-        }
-
         private void Refresh() {
-            feed.Refresh(PlayerFeed.KindFellowship, RefreshInterval);
+            // a big fellowship is a long reply: every two seconds is plenty
+            var big = (feed.Fellowship?.Members?.Count ?? 0) > FellowshipOrder.DefaultMaxMembers;
+            feed.RefreshFellowship(big ? BigRefreshInterval : RefreshInterval);
         }
 
         public void Dispose() {

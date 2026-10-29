@@ -45,6 +45,13 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>Another settings profile, with bars of its own: a window for each of those instead.</summary>
         private void Settings_Swapped() {
+            RemakeWindows();
+        }
+
+        /// <summary>
+        /// Different bars (another profile, a layout imported): a window for each, and anything half done let go.
+        /// </summary>
+        private void RemakeWindows() {
             editMode = false;
             bindMode = false;
             moving = null;

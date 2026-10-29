@@ -15,6 +15,27 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         public static float TextScale = 1;
 
+        /// <summary>Whether vital bars are drawn in the game's own art (SettingsData.RetailVitalBars), set by PlayerHud.</summary>
+        public static Func<bool> RetailBars = () => false;
+
+        /// <summary>Whether vital bars' numbers are drawn bold (SettingsData.BoldVitalText), set by PlayerHud.</summary>
+        public static Func<bool> BoldVitals = () => false;
+
+        /// <summary>How far the second copy of bold text is drawn from the first.</summary>
+        private static readonly Vector2 BoldShift = new Vector2(1, 0);
+
+        // the numbers on a Retail bar: white, with a black outline (packed by hand: ImGui has no context yet here)
+        private const uint BarText = 0xFFFFFFFF;
+        private const uint BarTextOutline = 0xFF000000;
+
+        /// <summary>The Retail bars checkbox's tooltip, wherever it is (the fellowship and target windows' settings).</summary>
+        public const string BoldVitalsTip = "Draws the numbers on health, stamina and mana bars bold, so they stand out "
+            + "better, in the fellowship and target windows and the Fellowship tab. One setting for all of them.";
+
+        public const string RetailBarsTip = "Draws health, stamina and mana bars with the game's own vitals art (its "
+            + "bars and their glass caps) instead of plain filled bars, in the fellowship and target windows and the "
+            + "Fellowship tab. One setting for all of them.";
+
         /// <summary>How every list in the plugin is drawn: striped rows, column lines, columns as wide as what's in them.</summary>
         public const ImGuiTableFlags TableFlags =
             ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingFixedFit;
@@ -70,11 +91,12 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>
         /// ImGui.BeginTooltip, with the text as big as the window it's shown from: a tooltip is a window of its own,
-        /// which ImGui draws at the font's own size, whatever the Text size or the window's size.
+        /// which ImGui draws at the font's own size, whatever the Text size or the window's size. extraScale goes on top (the
+        /// Loot tab's Item details size, for item tooltips).
         /// </summary>
-        public static void BeginTooltip() {
+        public static void BeginTooltip(float extraScale = 1) {
             var font = ImGui.GetFont();
-            var scale = ImGui.GetFontSize() / (font.FontSize * font.Scale * ImGui.GetIO().FontGlobalScale);
+            var scale = ImGui.GetFontSize() / (font.FontSize * font.Scale * ImGui.GetIO().FontGlobalScale) * extraScale;
             ImGui.BeginTooltip();
             ImGui.SetWindowFontScale(scale);
         }
@@ -309,6 +331,55 @@ namespace DaraletPlayer.Ui {
             Bar(fraction, color, $"{current} / {max}", width, height);
         }
 
+        /// <summary>
+        /// The bar in the game's own art (ItemIcons.DrawVitalBar), with its numbers outlined on top so they read over the
+        /// bright fill. False when the art can't be drawn, for the plain bar instead.
+        /// </summary>
+        private static bool RetailBar(string vital, float fraction, string text, float width, float height) {
+            height = Math.Max(height > 0 ? height : ImGui.GetFrameHeight(), ImGui.GetTextLineHeight());
+            var min = ImGui.GetCursorScreenPos();
+            var max = min + new Vector2(width, height);
+            var drawList = ImGui.GetWindowDrawList();
+
+            if (!ItemIcons.DrawVitalBar(drawList, vital, min, max, fraction)) {
+                return false;
+            }
+
+            var at = BarTextAt(text, min, width, height);
+            var bold = BoldVitals();
+
+            foreach (var offset in new[] { new Vector2(-1, 0), new Vector2(1, 0), new Vector2(0, -1), new Vector2(0, 1) }) {
+                drawList.AddText(at + offset, BarTextOutline, text);
+
+                if (bold) {
+                    drawList.AddText(at + offset + BoldShift, BarTextOutline, text);
+                }
+            }
+
+            DrawBarText(drawList, at, BarText, text, bold);
+            ImGui.Dummy(new Vector2(width, height));
+            return true;
+        }
+
+        /// <summary>Where a bar's text goes: in its middle, on whole pixels.</summary>
+        private static Vector2 BarTextAt(string text, Vector2 min, float width, float height) {
+            var size = ImGui.CalcTextSize(text);
+            return new Vector2((float)Math.Round(min.X + (width - size.X) / 2), (float)Math.Round(min.Y + (height - size.Y) / 2));
+        }
+
+        /// <summary>A bar's text, bold drawn twice a pixel apart: ImGui has one font, with no bold of its own.</summary>
+        private static void DrawBarText(ImDrawListPtr drawList, Vector2 at, uint color, string text, bool bold) {
+            drawList.AddText(at, color, text);
+
+            if (bold) {
+                drawList.AddText(at + BoldShift, color, text);
+            }
+        }
+
+        /// <summary>
+        /// A filled bar with text on it. In a vital's colour (Colors.Health, Stamina, Mana) with Retail bars on, it's drawn in
+        /// the game's own art.
+        /// </summary>
         public static void Bar(float fraction, Vector4 color, string text, float width = BarWidth, float height = 0) {
             // never shorter than its text: a bigger font (the game's resolution, a font size setting) than the bar's height
             // was chosen for wrote each bar's numbers over the next
@@ -316,9 +387,26 @@ namespace DaraletPlayer.Ui {
                 height = Math.Max(height, ImGui.GetTextLineHeight());
             }
 
+            var vital = color == Colors.Health ? "health" : color == Colors.Stamina ? "stamina" : color == Colors.Mana ? "mana"
+                : null;
+
+            if (vital != null && RetailBars() && RetailBar(vital, fraction, text, width, height)) {
+                return;
+            }
+
+            // bold numbers are drawn here, in the middle, over a bar with none of its own
+            var bold = vital != null && BoldVitals();
+
             ImGui.PushStyleColor(ImGuiCol.PlotHistogram, color);
-            ImGui.ProgressBar(fraction, new Vector2(width, height), text);
+            ImGui.ProgressBar(fraction, new Vector2(width, height), bold ? "" : text);
             ImGui.PopStyleColor();
+
+            if (bold) {
+                var min = ImGui.GetItemRectMin();
+                var box = ImGui.GetItemRectSize();
+                DrawBarText(ImGui.GetWindowDrawList(), BarTextAt(text, min, box.X, box.Y), ImGui.GetColorU32(ImGuiCol.Text),
+                    text, true);
+            }
         }
 
         /// <summary>45s, 12m 05s, 3h 07m, 2d 04h.</summary>

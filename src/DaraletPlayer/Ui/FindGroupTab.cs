@@ -6,7 +6,7 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The Fellowship tab's Find a group: looking for a group (/lfgroup) or for more players (/lfmore), from a form that
+    /// The Social tab's Find a group: looking for a group (/lfgroup) or for more players (/lfmore), from a form that
     /// shows the command it sends, and the fellowships and players looking now (@playerui lfg), to join or invite. Every button
     /// sends an /lfgroup or /lfmore command, which the server checks; what the reply says about fit and leaders is only there to help.
     /// </summary>

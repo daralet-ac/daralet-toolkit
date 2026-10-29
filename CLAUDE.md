@@ -180,7 +180,11 @@ second at most, with every window open: keep it inside those limits, or its wind
 comes (`PlayerFeed.RequestTimeout`). Polling goes through `PlayerFeed.Refresh`. `bankwindow` and `lootwindow`
 (`on|off`, answering `{"on":...}`) are described below. `rollranges` sends the ranges loot rolls each filter stat in (`{"ranges":[{"category","stat","tier","min","max"}]}`), for
 the loot rules' tooltips. `character` sends your character stats (`{"sections":[{"title",
-"lines"}]}`), for the Character tab. `lfg` sends looking for group, for Find a group (see the Fellowship tab). The server can also send a reply unasked (`PlayerUiProtocol.Send`),
+"lines"}]}`), for the Character tab. `lfg` sends looking for group, for Find a group (see the Social tab). `social`
+sends your friends, squelches, allegiance and the Appear Offline and fellowship options (`PlayerUiSocialData`), and
+`friend`, `squelch`, `allegiance` and `fellowcreate` are the Social tab's buttons (see it). `fellowship spells` adds
+each fellow's buffs and debuffs as spell ids; every `fellowship` reply has each fellow's Combat Focus (name and icon
+layers), and leaves nulls out. The server can also send a reply unasked (`PlayerUiProtocol.Send`),
 which the plugin reads the same as one it asked for.
 
 **Map places indoors:** the game's `GetMapCoords` gives nothing for any indoor cell (0x0100 and up), buildings included.
@@ -368,8 +372,45 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   filter keys exist and that the colorless one still matches the other. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet Toolkit\Loot
   Profiles` (`LootFiles`).
 
-- **Fellowship tab** (`Ui/FellowshipTab.cs`): sub tabs Members (the members and their vitals, and the fellowship window)
-  and **Find a group** (`Ui/FindGroupTab.cs`, `Feed/LfgChoice.cs`, `Feed/LfgCommands.cs`, `Feed/LfgInfo.cs`), looking for
+- **Social tab** (`Ui/SocialTab.cs`; once the Fellowship tab, its Fellowship sub tab once Members): sub tabs Allegiance, Fellowship, Find a group,
+  Friends and Squelch, and the **Social window** (`social`, hidden to start), the same tabs in a `FloatingWindow`, which
+  the toolbar's Social button opens (see Toolbar buttons). Friends, Squelch and Allegiance, and Create Fellowship's
+  options, read `@playerui social` every 2 seconds while shown (`SocialActions.RefreshInterval`). The buttons that change
+  them are `@playerui friend add <name> | remove <guid>`, `squelch character|account <name> | remove <guid>` (lifting an
+  account squelch too), `allegiance swear <guid> | break | kick <guid>` and `fellowcreate <0|1> <name>`
+  (`PlayerUiSocialData` in daralet-ACE), each handing on to the game's own handler (`HandleActionAddFriend`,
+  `SquelchManager.HandleActionModify...Squelch`, `HandleActionSwearAllegiance`, `HandleActionBreakAllegiance` for a
+  patron or a vassal, `FellowshipCreate`), so its checks and messages are the game's: the client's own messages for these
+  carry a name (a `PStringBase`), which a plugin can't send. `FellowshipCreate` doesn't check you're out of a
+  fellowship (the game's panel has no button then), so `fellowcreate` does. After each, `PlayerFeed.RefreshSocialSoon`.
+  Appear Offline and the four fellowship options (Ignore Fellowship Requests, Automatically Accept, Share XP, Share
+  Loot) are the client's own `AcClient.CM_Character.Event_PlayerOptionChangedEvent(PlayerOption, value)`, the message
+  its checkboxes send (the server's `GameActionSetSingleCharacterOption`, which also tells friends for Appear Offline);
+  the client's own copy of its options (`PlayerModule`) isn't changed, so the game's panels show the old value until
+  the next login, and Apply in the game's options panel sends them all back. A ticked box shows as ticked for up to 4
+  seconds, until a social reply has caught up (`SocialActions.Option`). The fellowship's own buttons are Decal's
+  (`Actions.FellowshipGrantLeader`, `Dismiss`, `SetOpen`, `Recruit`, `Quit`, `Disband`), greyed out with the reason as
+  their tooltip: Leader and Dismiss need you to lead and a member selected, Open needs you to lead an unlocked one,
+  Recruit a selected player not in it and room (`SocialActions.CanRecruit`, the fellowship's `maxMembers` from the server:
+  9, or no cap for a Town Defense fellowship, `Fellowship.MaxMembers`), Disband the leader. Friends'
+  right-click menu: Invite (`FellowshipRecruit`), Send tell (a popup, `/tell name, text`), Remove. Break and Kick ask
+  first in a modal; Kick takes the vassal picked in the list, else the selection when it's a vassal.
+  **The fellowship window** (`FellowshipTab.Window.cs`): Side by side puts a fellow's bars in a row, Bar width
+  (`FellowshipBarWidth`, 130 to start) sizes each bar, and the name line can carry the Combat Focus's icon, the level,
+  the distance and the buffs' (only those with a duration: the server leaves out any that never runs out) and debuffs'
+  icons (`FellowshipShowLevel`, `Focus`, `Distance`, `Buffs`, `Debuffs`; the
+  spells off to start), wrapping inside the bars' width. Spells are only asked for while the window shows them
+  (`PlayerFeed.WantFellowSpells`): every tab asks for the fellowship through `PlayerFeed.RefreshFellowship`, since
+  different arguments from different tabs would each count as new and never wait their interval.
+  **Big fellowships** (`FellowshipTab.Layout.cs`, `Feed/FellowshipOrder.cs`, the window settings' Big fellowships): a
+  Town Defense fellowship has no cap. Layout List scrolls past Scroll after (10), in a child as tall as that many members
+  (measured the frame before); Pages is tabs of Page size, a tab red while someone on it is below half health; Grid is
+  a tile each (name cut to fit, a health bar, stamina and mana strips), Columns to a row. In all three `FellowshipOrder.Arrange`
+  puts pinned members first (right-click Pin to top, `FellowshipPinned`, by name), then Sort (the server's order,
+  name, lowest health, nearest), leaves out ones too far to say with Hide far away, and stops at Show up to (0 for
+  all); "+N not shown" says how many it left out. Spells are only asked for up to Spells up to (12) members, and a
+  fellowship of more than 9 is asked for every 2 seconds, not every second.
+  **Find a group** (`Ui/FindGroupTab.cs`, `Feed/LfgChoice.cs`, `Feed/LfgCommands.cs`, `Feed/LfgInfo.cs`), looking for
   group, whose server side came first so it works without Decal (daralet-ACE `docs/lfg.md`, `apps/server/Lfg/`):
   `/lfgroup <activity>` (join the first fellowship looking for more for it), `/lfgroup join <name>`, `/lfmore
   <activity> [manual]` (leaders: players looking for it join, or with manual the leader's asked about each), `/lfmore
@@ -379,7 +420,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   name. The tab is a form that builds the words a player would type (`LfgChoice.Words`, which `LfgParser` in daralet-ACE reads) and shows the
   commands, then the fellowships and players looking (`@playerui lfg`, every 2 seconds while you're looking, 4
   otherwise), green where they fit you, with Join (Ask for a manual lfm) and Invite. Whether they fit, and why a button
-  can't be used (`cantSeek`, `cantList`), is the server's say, from its own matching. Members' "You aren't in a
+  can't be used (`cantSeek`, `cantList`), is the server's say, from its own matching. Fellowship's "You aren't in a
   fellowship" has a Find a group button, which opens that tab (`Widgets.TabItem(..., select)`: ImGui.NET only takes
   tab flags with a close button's bool, so it calls `ImGuiNative.igBeginTabItem` with none).
   **LFG chat links** (`Ui/LfgChatLinks.cs`, `Feed/LfgChatLine.cs`, `SettingsData.LfgChatLinks`, on to start, under Find a
@@ -415,6 +456,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   slot's right-click menu also carries the window's Lock, size, background and Hide (`FloatingWindow.RenderMenuItems`),
   since a bar is all items and the window's own menu doesn't open over items. Bars use less window padding
   (`FloatingWindow`'s `padding`, set and put back like the border).
+  **Layouts** (`Feed/HotbarLayout.cs`, `Ui/Hotbars.Layouts.cs`, under the page's bar list): Export layout saves every bar
+  (layout, look, keys), each bar's window placement, and with With my items the saving character's items, as a
+  `.json` in `Documents\Decal Plugins\Daralet Toolkit\Hotbar Layouts`; Import layout asks, then puts its bars in place
+  of yours (`HotbarLayout.Apply`): its items become the loader's, other characters keep theirs on bars of the same number,
+  and a layout without items leaves the loader's own. The windows are made again (`Hotbars.RemakeWindows`, as on a
+  profile swap).
   **Hotkeys** are a key per place (row and column, whichever page shows), page keys, and Bind keys (hover and press).
   They're read from Windows (`GetAsyncKeyState`, every bindable key, once a frame from `Hotbars.Frame`), not ImGui, which
   only hears keys while it wants them; they fire only with the game's window in front, the chat bar not active
@@ -495,11 +542,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `FloatingWindow`, sharing the tab's search and picked quest.
 
 - **Toolbar buttons** (`Ui/ToolbarButtons.cs`, `Ui/ToolbarButton.cs`, `Ui/ClientElements.cs`): the game toolbar's
-  backpack, Contracts (quill) and Map (compass) buttons, and the Character Information button in the indicators beside
-  it (the burden pack), drawn again over the game's own, opening the Inventory, Quests, Map and Character windows instead
-  of the game's panels; each on or off by itself, together in the Config tab's **Client UI Override** section
-  (`ClientUiOverride`, with Bank window and Loot window; `ToolbarButtons.RenderToggles`; `SettingsData.ToolbarInventory`,
-  `ToolbarQuests`, `ToolbarMap`, `ToolbarCharacter`, off to start), all six in one row under **Enable all** and
+  backpack, Contracts (quill), Social (two heads) and Map (compass) buttons, and the Character Information button in the
+  indicators beside it (the burden pack), drawn again over the game's own, opening the Inventory, Quests, Social, Map and
+  Character windows instead of the game's panels; each on or off by itself, together in the Config tab's **Client UI
+  Override** section (`ClientUiOverride`, with Bank window and Loot window; `ToolbarButtons.RenderToggles`;
+  `SettingsData.ToolbarInventory`, `ToolbarQuests`, `ToolbarSocial`, `ToolbarMap`, `ToolbarCharacter`, off to start),
+  all seven in one row under **Enable all** and
   **Disable all**. Enable all asks first when it would turn Bank window or Loot window on (`Windows.ConfirmAllOn`), as
   their own checkboxes do, and leaves them off on a server too old for them; Disable all says what follows when either
   was on (`Windows.NoticeAllOff`). The rest is the game's.
@@ -523,7 +571,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   again over themselves while it's held there (`GameDrag.DrawIcon`, as the hotbars do). The ids and pictures came from the toolbar's LayoutDesc, `0x21000016` in
   `client_local_English.dat` (inside `0x21000070`, the frame, inside `0x21000005`, the main UI, as TBAR `0x10000603`):
   backpack `0x100001B1` (`06004CF7`, open `06004CF8`), Contracts `0x1000055A` (`060069AE` / `060069AF`), Map `0x1000019A`
-  (`06001116` / `06001118`). daralet-ACE's `libs/dat-loader` reads LayoutDescs (`LayoutDesc`, `ElementDesc`, `MediaDesc`)
+  (`06001116` / `06001118`), Social `0x10000197` (`0600111F` / `06001121`). daralet-ACE's `libs/dat-loader` reads LayoutDescs (`LayoutDesc`, `ElementDesc`, `MediaDesc`)
   and exports textures (`Texture.GetBitmap`); it needs `ConfigManager.Initialize(new MasterConfiguration())`, code page
   1252 registered, and `DatManager.PortalDat` set (for `BaseProperty`), without `DatManager.Initialize`, which fails on
   Daralet's dats reading their iteration.
@@ -549,6 +597,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   tool up, the hotbars' key capture, Bind keys and Move, Hide game UI's key capture) reads it in that frame, in whatever
   order the windows draw, and calls `EscapeCloses.Taken`. A press with the chat bar, a text box or a popup menu active on
   that frame or the one before does nothing, as Escape's job there is leaving it.
+- **Toolkit button and key** (`Ui/Launcher.cs`, the Config tab's section of that name): a button that opens and closes
+  the /dap window, like UtilityBelt's bar button, in a `FloatingWindow` of its own (`launcher`, hidden to start) that can
+  go anywhere and be any Size, and a key for the same (`SettingsData.ToolkitKey`, none to start), read from Windows on
+  Decal's RenderFrame like Hide game UI's.
 
 - **Arena and Leaderboards tabs** (`Ui/ArenaTab.cs`, `Ui/LeaderboardsTab.cs`, `Feed/ArenaCommands.cs`,
   `Feed/Leaderboards.cs`): the leaderboards are the website's (`leaderboards.js`), read from `/api/leaderboards/...` with
@@ -748,15 +800,29 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   window's Begin and put back in `Hud_OnRender` (or the next `Core_RenderFrame`), since UB begins the window between the two.
   Locking takes the title bar away, so `Locked` moves the window down by the title bar's height (measured while unlocked,
   `titleBarHeight`) and back up when unlocked: what's in it stays exactly where it was. `RememberPosition` skips a frame
-  whose new position is still on its way (`positioned` false), or it would save the old one back.
+  whose new position is still on its way (`positioned` false), or it would save the old one back. **Only a drag moves a
+  window**: every frame the left button isn't down, `SetNextPlacement` puts it where it was saved (`ImGuiCond.Always`),
+  and `RememberPosition` only saves while the button is down. ImGui pulls a window back inside a screen smaller than where
+  it is, which the game's is for a moment around login: the hotbars came back in the middle of the screen every login,
+  and that place was saved over theirs.
   These windows have `NoFocusOnAppearing`; `BringToFront` focuses one once (Appraisal uses it, so a new appraisal isn't
-  hidden behind the main window). `menuItems` adds to a window's right-click menu: the fellowship window's is the vitals of
+  hidden behind the main window). `menuItems` adds to a window's right-click menu, which never opens over an item, so whatever draws the item opens it
+  (`FloatingWindow.OpenMenu`, at the window's own ID scope): the fellowship window's is the vitals and Pin of
   the fellow right-clicked (`SettingsData.FellowVitals`, by name, each vital null to follow the Stamina/Mana checkboxes).
   Vital and threat bars are never shorter than the font (`Widgets.Bar`), nor narrower than their numbers
   (`Widgets.VitalBarWidth`): a big font wrote each bar's numbers over the next. Clicking a threat row selects that
   creature or player. The **Map window** is the World tab's map in a `FloatingWindow` with its own `MapView` (its own pan,
   zoom and Follow me); the arrow window's **Details** box leaves the arrow alone.
 - **The game's UI pictures** (`Resources/ui`, embedded as `DaraletPlayer.Resources.ui.<name>.png`, drawn by `ItemIcons.DrawArt`): taken from the client by hand, since they aren't item icons: the main pack (`main-pack`), the green behind each pack in the Retail column (`pack-background`, with the pack's icon on it without its usual tile), the ring over the slot an item is held over in a drag (`drop-ring`, 17x16, scaled to the slot's width; a frame over a list line), and the red crossed-out circle (`drop-invalid`, not the reticle's) where it can't go, letting go there doing nothing (`Accepted(allowed)`: a pack only in a pack slot, on a pack, the main pack or the bank's own slots, never among a pack's items; an item not in a full pack; a paperdoll square only for what its `EquipableSlots` include), the empty slot (`empty-slot`: a pack's room left in the grids, which show a pack as its every slot, `InventoryBrowser.Slots`, and the side pack slots left in the Retail column), the selection frame (`selected`: the selected item, as `Actions.CurrentSelection` says, in the grids, the paperdoll and the Retail pack column, a click in a list selecting it as the game's pack does), and the target reticles (`reticle`, `reticle-invalid`). The Retail chosen pack's arrow is still drawn with shapes: the game's own hasn't been found. The grids have no gap between squares, as the game's pack has none.
+  **Retail bars** (`SettingsData.RetailVitalBars`, off to start, ticked in the fellowship window's or the Target tab's
+  settings): `Widgets.Bar` draws any bar in a vital's colour (`Colors.Health`, `Stamina`, `Mana`) with the game's vitals
+  panel art instead of ImGui's progress bar (`ItemIcons.DrawVitalBar`, `ItemIcons.Bars.cs`), its numbers outlined on
+  top (bold, `SettingsData.BoldVitalText`, drawn twice a pixel apart: ImGui has no bold font; plain bars too, their
+  numbers then drawn by `Widgets.Bar` in the middle). The panel is layout `0x2100006C`, its meters `0x100000E6` (health), `0x100000EC` (stamina) and `0x100000EE`
+  (mana), each a dark empty layer (`0600747E`-`80`, `06007484`-`86`, `0600748A`-`8C`) under a coloured full one
+  (`06007481`-`83`, `06007487`-`89`, `0600748D`-`8F`) cut off at the fraction: a 10x16 left cap, a 100x16 middle
+  stretched (130 wide in the game) and a 10x16 right cap (`vital-<vital>-<empty|full>-<left|middle|right>.png`). Each
+  meter also has an emblem (heart, sword, serpent: `06007490`-`95`) for a state the plugin doesn't use.
 - **The installer** (`installer/DaraletToolkit.iss`, Inno Setup 6, built and released by `.github/workflows/release.yml` on a
   `v*` tag that must match the csproj's `<Version>`): copies `DaraletToolkit.dll` and writes Decal's entry itself, the values
   UtilityBelt's plugin template installer writes (`(Default)` name, `Enabled`, `Object`, `Assembly`, `Path`, and
@@ -782,7 +848,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   their Update link falls back to their own `LatestPageUrl`, since a release page under the new name isn't one of theirs. No Decal plugin known (October 2026) downloads and installs its own updates; UtilityBelt's
   is a notice like this one, and the loader updating the plugin itself was left for later.
 - **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet Toolkit` (`DataFolder`): `settings.json`,
-  `profiles.json`, `Settings Profiles`, `Settings Exports`, `log.txt`, `Loot Profiles`, `world-data`. It was `Decal Plugins\Daralet` before the rename: `PluginCore.Startup` moves
+  `profiles.json`, `Settings Profiles`, `Settings Exports`, `log.txt`, `Loot Profiles`, `Hotbar Layouts`, `world-data`. It was `Decal Plugins\Daralet` before the rename: `PluginCore.Startup` moves
   that folder over first thing (`DataFolder.MoveOldFolder`, `FolderMove.Once`, copying instead if a file's held open),
   unless the new one is already there. Only startup does it, so a test that asks `DataFolder` for a path doesn't move
   the developer's real folder. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
@@ -801,6 +867,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   Text drawn inside a square of a fixed size (stack counts, `ItemIcons.OutlinedText`; every hotbar slot label,
   `SlotPainter`) leaves the Text size out (`Widgets.SquareFontSize`, `SquareTextSize`, from `Widgets.TextScale`, which
   `PlayerHud` and `FloatingWindow` set as they apply it), or it spills out of the square; a window's own Size still counts.
+  Item details have a size of their own on top (`SettingsData.ItemTextScale`, the Loot tab's Settings): item tooltips
+  (`ItemTooltip.Scale`, passed to `Widgets.BeginTooltip`) and the Appraisal windows (`FloatingWindow`'s `textScale`).
 - **Settings profiles** (`Settings.Profiles.cs`, `ProfileChoices.cs`, `Ui/ConfigTab.cs`, the **Config** tab, first):
   a profile is a whole `SettingsData`. Default is `settings.json` itself (so a plugin from before profiles still finds
   its settings), the rest `Settings Profiles\<name>.json`, named by file (`Settings.CleanName`), and which character uses

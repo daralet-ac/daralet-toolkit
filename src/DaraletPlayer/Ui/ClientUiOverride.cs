@@ -30,7 +30,7 @@ namespace DaraletPlayer.Ui {
 
             RenderAllButtons();
 
-            // all six in one row, wrapping only when the tab is too narrow
+            // all seven in one row, wrapping only when the tab is too narrow
             var first = true;
             ToolbarButtons.RenderToggles(ref first, settings);
             Form.Flow(ref first, Form.CheckWidth("Bank window"));
@@ -56,7 +56,7 @@ namespace DaraletPlayer.Ui {
 
             ImGui.BeginDisabled(allOn);
 
-            if (Form.FlowSmallButton(ref first, "Enable all##client-ui", "Ticks all six: the four toolbar buttons, Bank "
+            if (Form.FlowSmallButton(ref first, "Enable all##client-ui", "Ticks all seven: the five toolbar buttons, Bank "
                 + "window and Loot window. Bank window and Loot window have the server leave the game's windows out, so "
                 + "this asks first when either is about to go on, as their own checkboxes do.")) {
                 var windowsGoingOn = (BankSupported && !data.BankWindow) || (LootSupported && !data.LootWindow);
@@ -73,7 +73,7 @@ namespace DaraletPlayer.Ui {
             ImGui.EndDisabled();
             ImGui.BeginDisabled(!anyOn);
 
-            if (Form.FlowSmallButton(ref first, "Disable all##client-ui", "Unticks all six, so the game's own toolbar "
+            if (Form.FlowSmallButton(ref first, "Disable all##client-ui", "Unticks all seven, so the game's own toolbar "
                 + "buttons, bank window and corpse window are back.")) {
                 var windowsWereOn = data.BankWindow || data.LootWindow;
                 SetAll(false);

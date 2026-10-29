@@ -24,6 +24,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>Space between the longest line and the roll quality column, in widths of the font's size.</summary>
         private const float QualityGap = 1.5f;
 
+        /// <summary>The Loot tab's Item details text size (SettingsData.ItemTextScale), set by PlayerHud.</summary>
+        public static Func<float> Scale = () => 1;
+
         /// <summary>
         /// Shows lines as a tooltip for the item drawn just before this, while the mouse is over it, or over the item's icon
         /// (iconHovered, from ItemIcons.Draw). With a rule (the first in the active loot profile it matches), says which at the
@@ -34,7 +37,7 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            Widgets.BeginTooltip();
+            Widgets.BeginTooltip(Scale());
 
             var wrapWidth = ImGui.GetFontSize() * 30;
             ImGui.PushTextWrapPos(wrapWidth);

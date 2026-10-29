@@ -55,7 +55,8 @@ namespace DaraletPlayer.Ui {
             this.icons = icons;
 
             window = new FloatingWindow(id, title, settings, position, Render,
-                inUse: () => guid != 0 ? (object)guid : null, alwaysOnlyInUse: true, onClose: () => guid = 0);
+                inUse: () => guid != 0 ? (object)guid : null, alwaysOnlyInUse: true, onClose: () => guid = 0,
+                textScale: () => settings.Data.ClampedItemTextScale);
 
             // shown whenever there's an item to show; closing it is the X, which forgets the item
             window.Visible = true;
