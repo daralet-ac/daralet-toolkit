@@ -301,6 +301,7 @@ namespace DaraletPlayer.Ui {
         /// <summary>A wield's next step, and whether a tool is still up after Escape, a right-click or its going.</summary>
         private static bool Frame() {
             Step();
+            StepWorldPick();
 
             if (!Targeting) {
                 return false;
@@ -322,7 +323,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private static void RenderBar() {
-            Widgets.TextColored(Colors.Info, $"Using the {toolName}: click what to use it on.");
+            Widgets.TextColored(Colors.Info, $"Using the {toolName}: click what to use it on, here or in the world.");
             Widgets.Tip("The tool works on what its kind allows, the game's own rules: the reticle under the mouse is the game's yellow one, and turns red over something it doesn't work on. Escape or right-click puts it down.");
 
             if (UseRules.Targets(toolUsable, UsePlace.Self)) {
@@ -341,7 +342,7 @@ namespace DaraletPlayer.Ui {
                 ImGui.SameLine();
 
                 if (ImGui.SmallButton($"On {selection.Name}##use-on-selection")) {
-                    UseOn(selection.Id, CanUseOn(selection.Id, UsePlace.Remote) || CanUseOn(selection.Id, UsePlace.Viewed));
+                    UseOn(selection.Id, MayUseOn(selection.Id, UsePlace.Remote) || MayUseOn(selection.Id, UsePlace.Viewed));
                 }
                 Widgets.Tip($"Uses the {toolName} on what you have selected in the world.");
             }

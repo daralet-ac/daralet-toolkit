@@ -736,7 +736,13 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   game's cursor), and the next item clicked in any list gets it (`Actions.ApplyItem`). Anything else is `UseItem`. A target
   must be in a place the flags allow (worn = Wielded, packs = Contained, the open bank = Viewed, the tool itself = ObjSelf)
   and of a kind its TargetType has (`TargetType & ItemType`, the server's own check in `HandleActionUseWithTarget`); the
-  bar above the list adds "On yourself" (Self) and "On <selection>" (Remote or Viewed). Escape or right-click puts the
+  bar above the list adds "On yourself" (Self) and "On <selection>" (Remote or Viewed). A click outside every plugin
+  window picks a target in the world (a door or chest for a key or lockpick: `ItemUser.World.cs`): the click reaches the
+  game, which selects what's under it, and that's the target. The selection is cleared as the button goes down (unless
+  the press already changed it), so a click on what's already selected still counts and a click on nothing leaves the
+  tool up; a drag puts the old selection back. No click is posted, as `WorldDrop` does: one straight after the player's
+  own would be a double-click, which opens the door or chest. A world target is checked against the TargetType only when
+  the client knows both kinds (`MayUseOn`); otherwise the server decides. Escape or right-click puts the
   tool down. Decal's names for these keys come from the network header flags: `LongValueKey.Unknown10` is the use flags
   (flag 0x10), `UsageMask` the TargetType, `Category` the ItemType. Each use logs them to log.txt (`[use]` lines).
 
