@@ -283,6 +283,19 @@ namespace DaraletPlayer.Ui {
             return found != null && found.Values(LongValueKey.Container, 0) == unchecked((int)container);
         }
 
+        /// <summary>Whether the item is in your main pack or one of your side packs.</summary>
+        private static bool IsCarried(uint item) {
+            var world = CoreManager.Current.WorldFilter;
+            var me = CoreManager.Current.CharacterFilter.Id;
+            var container = world[unchecked((int)item)]?.Values(LongValueKey.Container, 0) ?? 0;
+
+            if (container == 0) {
+                return false;
+            }
+
+            return container == me || world[container]?.Values(LongValueKey.Container, 0) == me;
+        }
+
         /// <summary>What the looter heard and did, in log.txt only, for working out why a corpse showed wrong.</summary>
         private static void LogCorpse(string text) {
             PluginCore.LogFile("[loot] " + text);

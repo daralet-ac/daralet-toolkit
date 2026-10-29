@@ -324,7 +324,16 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   Market API parameter without min/max, in the filter's own units, the lowest to the highest any item of the kind rolls).
   Stats whose range depends on the piece itself (armor level, an armor's ward) have none. A Salvage rule only takes items with a
   workmanship (`Loot.Decide`); anything else falls to the rules after it. The looter moves one item at a time
-  (`Actions.MoveItem` into the main pack, the next once the last has left the corpse), and salvages after. The server
+  (`Actions.MoveItem`, the next once the last has left the corpse), and salvages after. The server puts a picked-up item
+  only in the pack it was sent to (`TryAddToInventory` with `limitToMainPackOnly`), so a full main pack refused every
+  loot while side packs had room, and players were told their main pack was full: each item now goes to a pack with
+  room, the main pack first, then the side packs in order (`LootDestination`, `Looter.PacksWithRoom`, counted from
+  every object's Container), each retry to the next one in case a specialized pack won't hold it. With no room anywhere
+  it stops and says so; an item given up on says why it most likely was (`LootDestination.WhyNot`: packs full, over
+  300% burden, the corpse closed first, or the server didn't hand it over). An item counts as looted once it's in your
+  packs (`Looter.IsCarried`), not only once it's been seen in the corpse and then not: what was seen is forgotten when
+  the corpse closes or another opens (`Forget`), so an item landing after that was waited on for 8 seconds and reported
+  as a failure: a player was told "is your main pack full?" with the main pack at 25/102 (likely this; not confirmed). The server
   refuses a pickup that comes while the last is still starting ("You're too busy", `GameEventInventoryServerSaveFailed`,
   event 0x00A0), which back-to-back looting hits, and a move sent while the last is still going can get no answer at all;
   the looter sends the same item again 150ms after a refusal, or after silence for 1.5 times the last clean pickup (at

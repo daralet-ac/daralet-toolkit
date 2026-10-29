@@ -131,7 +131,18 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            moving = toLoot.First.Value;
+            var next = toLoot.First.Value;
+
+            // nowhere to put it: everything after it would fail the same way, so stop here rather than wait on each
+            if (PacksWithRoom(next).Count == 0) {
+                var name = CoreManager.Current.WorldFilter[unchecked((int)next)]?.Name ?? "an item";
+                Chat($"Couldn't loot {name}: your packs are full. Stopped looting.", NotifyColor);
+                LogCorpse($"0x{next:X8} not sent: no pack has room");
+                Cancel();
+                return;
+            }
+
+            moving = next;
             toLoot.RemoveFirst();
             movingFrom = openCorpse;
             firstTriedAt = now;
@@ -140,8 +151,16 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The move in flight: true once it's over (landed, or given up on), so the next can go.</summary>
         private bool FinishMoving(DateTime now) {
-            // landed, or taken by hand
-            if (Left(moving, movingFrom)) {
+            // gone from the client altogether (out of sight): nothing more can be done with it, and nothing to say
+            if (CoreManager.Current.WorldFilter[unchecked((int)moving)] == null) {
+                LogCorpse($"0x{moving:X8} gone from the client while moving, after {tries} tries");
+                StopMoving();
+                return true;
+            }
+
+            // landed, or taken by hand. In your packs counts by itself: what was seen in the corpse is forgotten when it
+            // closes or another opens, and an item landing after that was given up on and called a failure
+            if (Left(moving, movingFrom) || IsCarried(moving)) {
                 var plural = tries == 1 ? "try" : "tries";
                 LogCorpse($"0x{moving:X8} landed {(now - firstTriedAt).TotalMilliseconds:0}ms after the first try, {tries} {plural}");
 
@@ -167,7 +186,11 @@ namespace DaraletPlayer.Ui {
             }
 
             var name = CoreManager.Current.WorldFilter[unchecked((int)moving)]?.Name ?? "an item";
-            Chat($"Couldn't loot {name}: is your main pack full?", NotifyColor);
+            var why = movingFrom != openCorpse
+                ? "the corpse closed before it was picked up"
+                : LootDestination.WhyNot(PacksWithRoom(moving).Count > 0, CoreManager.Current.CharacterFilter.Burden);
+            Chat($"Couldn't loot {name}: {why}.", NotifyColor);
+            LogCorpse($"0x{moving:X8} given up after {tries} tries: {why}");
             StopMoving();
             return true;
         }
@@ -195,12 +218,23 @@ namespace DaraletPlayer.Ui {
             retryAt = DateTime.MinValue;
         }
 
-        /// <summary>Moves the item into your main pack, where the server picks its slot.</summary>
+        /// <summary>
+        /// Moves the item into a pack with room, where the server picks its slot: the main pack first. Each retry goes to the
+        /// next pack with room, in case one can't hold that kind of item (a specialized pack).
+        /// </summary>
         private void Send(uint item) {
             tries = item == lastSent ? tries + 1 : 1;
             lastSent = item;
             movedAt = DateTime.UtcNow;
-            CoreManager.Current.Actions.MoveItem(unchecked((int)item), CoreManager.Current.CharacterFilter.Id, 0, true);
+
+            var packs = PacksWithRoom(item);
+            var pack = packs.Count == 0 ? CoreManager.Current.CharacterFilter.Id : packs[(tries - 1) % packs.Count];
+
+            if (pack != CoreManager.Current.CharacterFilter.Id) {
+                LogCorpse($"0x{item:X8} to side pack 0x{pack:X8}");
+            }
+
+            CoreManager.Current.Actions.MoveItem(unchecked((int)item), pack, 0, true);
         }
 
         /// <summary>The server refusing a move. Only one is ever in flight, so a refusal is that one's.</summary>
