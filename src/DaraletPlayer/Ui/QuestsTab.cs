@@ -12,7 +12,8 @@ namespace DaraletPlayer.Ui {
     /// what you're doing first, with each one's stage, progress and timers; under it the picked quest's description, who
     /// starts it and who takes it back, and where they are, each a destination for the World tab's arrow.
     /// </summary>
-    internal class QuestsTab : IDisposable {
+    /// <remarks>The Quest Tracker window is in <c>QuestsTab.Tracker.cs</c>.</remarks>
+    internal partial class QuestsTab : IDisposable {
         /// <summary>Quick enough to follow a kill count; it's only asked for while the tab or the window is open.</summary>
         private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
 
@@ -26,6 +27,9 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The quests in a window of their own: the same list, search and picked quest as the tab's.</summary>
         private readonly FloatingWindow window;
+
+        /// <summary>The quests you're doing, each opening out to its details, in a small window that sizes itself.</summary>
+        private readonly FloatingWindow tracker;
 
         private string search = "";
         private string show = "all";
@@ -42,12 +46,15 @@ namespace DaraletPlayer.Ui {
 
             window = new FloatingWindow("quests", "Quests", settings, new Vector2(380, 120), RenderQuests,
                 visibleByDefault: false, defaultSize: new Vector2(560, 520));
+            tracker = new FloatingWindow("quest-tracker", "Quest Tracker", settings, new Vector2(20, 420), RenderTracker,
+                visibleByDefault: false, inUse: TrackerInUse, menuItems: RenderTrackerMenu);
         }
 
         public FloatingWindow Window => window;
 
         public void Dispose() {
             window.Dispose();
+            tracker.Dispose();
         }
 
         public void Render() {
@@ -57,15 +64,20 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderSettings() {
-            if (!Form.SettingsHeader("quests-settings", "The Quests window: whether it's on screen, its size and "
-                + "background. Its toolbar button is under the Config tab's Client UI Override.")) {
+            if (!Form.SettingsHeader("quests-settings", "The Quests window and the Quest Tracker: whether they're on screen, "
+                + "their size and background. The Quests window's toolbar button is under the Config tab's Client UI "
+                + "Override.")) {
                 return;
             }
 
+            Form.Columns("quests-settings-grid", RenderWindowSettings, RenderTrackerSettings);
+            ImGui.Spacing();
+        }
+
+        private void RenderWindowSettings() {
             Form.Section("Quests window");
             window.RenderControls("Your quests in a window of their own, to keep on screen while you play. Drag its "
                 + "corner to size it.");
-            ImGui.Spacing();
         }
 
         /// <summary>The quests, in the tab and in the window.</summary>
@@ -143,7 +155,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderList(List<QuestInfo> quests) {
-            if (!Widgets.BeginTable("quests-table", 4, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
+            if (!Widgets.BeginTable("quests-table", 5, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
                 return;
             }
 
@@ -152,11 +164,13 @@ namespace DaraletPlayer.Ui {
             ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, ImGui.GetFontSize() * 9);
             ImGui.TableSetupColumn("Progress", ImGuiTableColumnFlags.WidthFixed, ImGui.GetFontSize() * 7);
             ImGui.TableSetupColumn("Time", ImGuiTableColumnFlags.WidthFixed, ImGui.GetFontSize() * 7);
+            ImGui.TableSetupColumn("Track", ImGuiTableColumnFlags.WidthFixed, ImGui.GetFontSize() * 3);
             Widgets.HeadersRow(
                 "The quest. Click it for its description, its NPCs and where they are.",
                 "Started, not started yet, or done (and when it can be done again).",
                 "How far along it is, for a quest that counts (kills, items handed in).",
-                "Time left on a timed quest, or until a done one can be done again.");
+                "Time left on a timed quest, or until a done one can be done again.",
+                "Whether the Quest Tracker lists it. Done quests are never listed.");
 
             foreach (var quest in quests) {
                 ImGui.TableNextRow();
@@ -164,7 +178,10 @@ namespace DaraletPlayer.Ui {
 
                 var label = $"{quest.Name}##quest-{quest.Id}";
 
-                if (ImGui.Selectable(label, quest.Id == selected, ImGuiSelectableFlags.SpanAllColumns)) {
+                // AllowOverlap: the Track checkbox drawn after it, at the row's end, takes its own clicks
+                var flags = ImGuiSelectableFlags.SpanAllColumns | ImGuiSelectableFlags.AllowOverlap;
+
+                if (ImGui.Selectable(label, quest.Id == selected, flags)) {
                     selected = quest.Id;
                     abandoning = 0;
                 }
@@ -177,13 +194,23 @@ namespace DaraletPlayer.Ui {
 
                 ImGui.TableNextColumn();
                 Widgets.TextDisabled(TimeText(quest) ?? "");
+
+                ImGui.TableNextColumn();
+                RenderTrackCheckbox(quest);
             }
 
             ImGui.EndTable();
         }
 
-        private void RenderDetails(QuestInfo quest) {
-            Widgets.TextColored(ItemTooltip.Title, quest.Name ?? "");
+        /// <summary>
+        /// The quest's details. In the tracker (inTracker) its name is already on the line above, Abandon is left to the
+        /// tab, and the text wraps at a set width, since the window sizes itself to what's in it.
+        /// </summary>
+        private void RenderDetails(QuestInfo quest, bool inTracker = false) {
+            if (!inTracker) {
+                Widgets.TextColored(ItemTooltip.Title, quest.Name ?? "");
+            }
+
             var time = TimeText(quest);
             var timer = time != null ? $"  ({TimeLabel(quest)} {time})" : "";
             Widgets.TextColored(StageColor(quest), StageText(quest) + timer);
@@ -198,7 +225,7 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.Spacing();
-            ImGui.PushTextWrapPos(0);
+            ImGui.PushTextWrapPos(inTracker ? ImGui.GetCursorPosX() + ImGui.GetFontSize() * TrackerWrapLines : 0);
             Widgets.Text(quest.Description ?? "No description.");
             ImGui.PopTextWrapPos();
             ImGui.Spacing();
@@ -207,8 +234,10 @@ namespace DaraletPlayer.Ui {
             RenderPlace("Hand in to", quest.EndNpc, quest.EndAt, quest.Id, "end");
             RenderPlace("Quest area", null, quest.Area, quest.Id, "area");
 
-            ImGui.Spacing();
-            RenderAbandon(quest);
+            if (!inTracker) {
+                ImGui.Spacing();
+                RenderAbandon(quest);
+            }
         }
 
         /// <summary>An NPC or place: its name, where it is on the map, and Go, which points the World tab's arrow at it.</summary>

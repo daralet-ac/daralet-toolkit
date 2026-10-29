@@ -158,6 +158,15 @@ namespace DaraletPlayer {
         /// </summary>
         [DataMember(Name = "paneSizes")] public Dictionary<string, float> PaneSizes;
 
+        /// <summary>The quests opened out in the Quest Tracker window, by contract id; the rest show only their line.</summary>
+        [DataMember(Name = "questTrackerOpen")] public List<uint> QuestTrackerOpen;
+
+        /// <summary>The Quest Tracker lists quests not started yet as well as started ones.</summary>
+        [DataMember(Name = "questTrackerAvailable")] public bool QuestTrackerAvailable;
+
+        /// <summary>Quests left out of the Quest Tracker, by contract id: unticked in the tab, or hidden from its menu.</summary>
+        [DataMember(Name = "questTrackerHidden")] public List<uint> QuestTrackerHidden;
+
         /// <summary>The Carried and Bank views mark items the way the active loot list's rules do (LootMarks).</summary>
         [DataMember(Name = "bankLootMarks")] public bool InventoryLootMarks;
 
@@ -303,6 +312,8 @@ namespace DaraletPlayer {
             Loot = new LootData();
             Hotbars = new HotbarData();
             PaneSizes = new Dictionary<string, float>();
+            QuestTrackerOpen = new List<uint>();
+            QuestTrackerHidden = new List<uint>();
             OneClickHeal = true;
             LfgChatLinks = true;
             EscapeClosesWindows = true;

@@ -557,7 +557,15 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (asked twice) is `@playerui abandon <contract id>`, the Contracts panel's own `HandleActionAbandonContract`, which
   keeps the starter contracts until they're done (`Player.CanAbandonContract`). Stages are available, started (a
   progress counter too) and done. The **Quests window** (`quests`, hidden to start) is the same list in a
-  `FloatingWindow`, sharing the tab's search and picked quest.
+  `FloatingWindow`, sharing the tab's search and picked quest. The **Quest Tracker** (`QuestsTab.Tracker.cs`,
+  `quest-tracker`, hidden to start, switched on under the tab's Settings) is a small self-sizing window of the started
+  quests (with Not started too, `QuestTrackerAvailable`, the ones given but not started as well), each a line with its
+  progress and time left that opens out to the tab's details but Abandon (`RenderDetails(..., inTracker: true)`, the
+  description wrapping at 22 lines of text). A quest is left out by unticking its Track box, the tab's last column (the
+  row's Selectable has `AllowOverlap`, or it would take the box's clicks), or with Hide from tracker in the tracker's
+  right-click menu, opened from the quest's line (`menuQuest`, `FloatingWindow.OpenMenu`); both are
+  `QuestTrackerHidden`, and Show hidden under its settings clears it. Which are open is saved by contract id (`QuestTrackerOpen`); it asks for
+  `quests` on the same 5 seconds while shown, and Only when needed hides it with nothing to track.
 
 - **Toolbar buttons** (`Ui/ToolbarButtons.cs`, `Ui/ToolbarButton.cs`, `Ui/ClientElements.cs`): the game toolbar's
   backpack, Contracts (quill), Social (two heads) and Map (compass) buttons, and the Character Information button in the
