@@ -28,6 +28,12 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual("/bank inscribe clear", BankCommands.Inscribe(0, ""));
             Assert.AreEqual("/bank icon sack red", BankCommands.Icon(0, "sack", "red"));
             Assert.AreEqual("/bank icon default", BankCommands.IconDefault(0));
+
+            // or, on a server with the packid feature, by its id, which nothing examined in between can change
+            Assert.AreEqual("/bank inscribe #8000ABCD weapons, armor", BankCommands.Inscribe(0, "weapons, armor", 0x8000ABCD));
+            Assert.AreEqual("/bank inscribe #0000ABCD clear", BankCommands.Inscribe(0, "", 0xABCD));
+            Assert.AreEqual("/bank icon #8000ABCD sack red", BankCommands.Icon(0, "sack", "red", 0x8000ABCD));
+            Assert.AreEqual("/bank icon #8000ABCD default", BankCommands.IconDefault(0, 0x8000ABCD));
         }
 
         [TestMethod]

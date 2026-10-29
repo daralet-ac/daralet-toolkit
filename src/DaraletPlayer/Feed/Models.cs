@@ -18,6 +18,11 @@ namespace DaraletPlayer.Feed {
         /// so it says so instead of waiting for a reply that won't come.
         /// </summary>
         [DataMember(Name = "kinds")] public string[] Kinds;
+        /// <summary>
+        /// What else the server's commands take that older servers' don't (PlayerUi.Features), such as "packid": /bank
+        /// inscribe and /bank icon naming a pack by its id. Null from an older server.
+        /// </summary>
+        [DataMember(Name = "features")] public string[] Features;
     }
 
     [DataContract]

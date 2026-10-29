@@ -18,6 +18,9 @@ namespace DaraletPlayer.Feed {
     /// </summary>
     public class PlayerFeed : IDisposable {
         public const string KindHello = "hello";
+
+        /// <summary>The server's /bank inscribe and /bank icon take a pack's id ("#8000ABCD").</summary>
+        public const string FeaturePackId = "packid";
         public const string KindFellowship = "fellowship";
         public const string KindTargets = "targets";
         public const string KindPosition = "position";
@@ -148,6 +151,11 @@ namespace DaraletPlayer.Feed {
         /// <summary>Whether the server answers this request. False before hello comes back.</summary>
         public bool Supports(string kind) {
             return Hello?.Kinds != null && Array.IndexOf(Hello.Kinds, kind) >= 0;
+        }
+
+        /// <summary>Whether the server's commands take this (HelloInfo.Features). False before hello comes back.</summary>
+        public bool HasFeature(string feature) {
+            return Hello?.Features != null && Array.IndexOf(Hello.Features, feature) >= 0;
         }
 
         public bool IsWaitingFor(string kind) {

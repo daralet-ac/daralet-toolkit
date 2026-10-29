@@ -98,27 +98,38 @@ namespace DaraletPlayer.Feed {
         private static string[] PouchColors() => new[] { "brown", "black", "gray", "blue", "teal", "green", "yellow", "red", "purple" };
 
         /// <summary>
-        /// /bank icon for a pack in the bank, by its number: a style and color, or its own icon back. With no number (0)
-        /// it's for the pack last examined, which is how a pack you carry is named.
+        /// /bank icon for a pack in the bank, by its number: a style and color, or its own icon back. With a pack id it's
+        /// for that pack, carried or banked (servers with PlayerFeed.FeaturePackId); with neither (0) it's for the pack
+        /// last examined, which is how an older server names a pack you carry.
         /// </summary>
-        public static string Icon(int packNumber, string style, string color) {
-            return $"/bank icon {Number(packNumber)}{style} {color}";
+        public static string Icon(int packNumber, string style, string color, uint packId = 0) {
+            return $"/bank icon {Pack(packNumber, packId)}{style} {color}";
         }
 
-        public static string IconDefault(int packNumber) {
-            return $"/bank icon {Number(packNumber)}default";
+        public static string IconDefault(int packNumber, uint packId = 0) {
+            return $"/bank icon {Pack(packNumber, packId)}default";
         }
 
         /// <summary>
-        /// /bank inscribe for a pack in the bank, by its number, or with no number (0) the pack last examined, carried or
-        /// banked. "clear" clears it, which the server reads as no tags.
+        /// /bank inscribe for a pack in the bank, by its number, or by its id, carried or banked; with neither (0) the
+        /// pack last examined. "clear" clears it, which the server reads as no tags.
         /// </summary>
-        public static string Inscribe(int packNumber, string tags) {
+        public static string Inscribe(int packNumber, string tags, uint packId = 0) {
             var cleaned = Clean(tags);
-            return $"/bank inscribe {Number(packNumber)}{(cleaned.Length == 0 ? "clear" : cleaned)}";
+            return $"/bank inscribe {Pack(packNumber, packId)}{(cleaned.Length == 0 ? "clear" : cleaned)}";
         }
 
-        private static string Number(int packNumber) => packNumber > 0 ? packNumber + " " : "";
+        /// <summary>
+        /// How a command names its pack: "#8000ABCD " by id (BankCommand.TryParsePackId in daralet-ACE), else "2 " by
+        /// number, else nothing, for the pack last examined.
+        /// </summary>
+        private static string Pack(int packNumber, uint packId) {
+            if (packId != 0) {
+                return $"#{packId:X8} ";
+            }
+
+            return packNumber > 0 ? packNumber + " " : "";
+        }
 
         /// <summary>
         /// Whether an inscription has this tag word, alone or in a group ("swords t6" has both "swords" and "t6").

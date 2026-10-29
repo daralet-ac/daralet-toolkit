@@ -171,6 +171,9 @@ records in `PlayerUiSnapshots.cs`; tests on both sides pin the names (`PlayerUiP
 
 The `hello` reply lists every request the server answers (`kinds`, from `PlayerUi.Kinds`). Add each new request there, and
 have its tab check `PlayerFeed.Supports(kind)`, so a newer plugin on an older server says what's missing instead of waiting.
+A change to what an existing command takes goes in `features` instead (`PlayerUi.Features`, checked with
+`PlayerFeed.HasFeature`), so the plugin only sends a form the server reads: `packid` is `/bank inscribe` and `/bank icon`
+naming a pack by its id.
 
 `/dap` (or `@dap`) shows and hides the window; `/dap hideui` and `/dap showui` are Hide game UI's (below).
 
@@ -649,10 +652,14 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   for rather than what goes in it, each always a tag of its own: deposit packs are what `/bank deposit packs` empties
   and withdrawals never fill, keep packs are left alone by deposits of a kind and `/sort`), ticked when the pack has it (`BankCommands.HasTag` / `ToggleTag`, comma-separated
   groups), each tick sending `/bank inscribe` at once (the plugin keeps what it sent until the next bank reply). A carried
-  pack has no number, so the plugin appraises it (`Actions.RequestId`) and sends the command without one: the server
-  takes the pack last examined (`FindPack` with `carriedToo`, which `/bank inscribe` only allows since daralet-ACE's
-  `carried-pack-inscribe`). Decal only learns an inscription from an appraisal, and the server sends none when it
-  changes, so the pack is appraised again a second later (`InventoryBrowser.RefreshCarried`). Groups are
+  pack has no number, so the command names it by its id (`/bank inscribe #8000ABCD weapons`, `BankCommand.FindPackById`,
+  on a server with the `packid` feature). An older server only takes the pack last examined, so there the plugin
+  appraises it (`Actions.RequestId`) first; but anything appraised in between (another add-on, or this list's own
+  appraisal of the pack changed before) took the change instead: a player's "Weapons, Armor" landed on their "Salvage"
+  pack while the list showed each where it was meant to be, and `/sort` filled the salvage pack with weapons. Decal only
+  learns an inscription from an appraisal, and the server sends none when it changes, so the pack is appraised again a
+  second later (`InventoryBrowser.RefreshCarried`), and a second after that the list shows the tags Decal has, not the
+  ones it sent (`adoptPack`). Groups are
   OR (a comma) and the words in one AND (a space): the list's **OR** makes each tick its own group (`ToggleTag`), its
   **AND** adds the word to a picked group, or a new one (`ToggleInGroup`), and ticks then show that group. And an
   **Icon** drop-down of every style and color `/bank icon` takes (`BankCommands.PackIcons`, copied from daralet-ACE's

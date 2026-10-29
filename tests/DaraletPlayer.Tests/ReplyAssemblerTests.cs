@@ -126,5 +126,16 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual(0x50000001u, hello.Guid);
             CollectionAssert.AreEqual(new[] { "hello" }, hello.Kinds);
         }
+
+        [TestMethod]
+        public void ReadsHelloFeaturesAndTheirAbsence() {
+            var hello = Json.Read<HelloInfo>(
+                "{\"protocol\":2,\"name\":\"Bob\",\"guid\":1,\"kinds\":[\"hello\"],\"features\":[\"packid\"]}");
+            CollectionAssert.AreEqual(new[] { "packid" }, hello.Features);
+
+            // an older server sends none
+            var older = Json.Read<HelloInfo>("{\"protocol\":2,\"name\":\"Bob\",\"guid\":1,\"kinds\":[\"hello\"]}");
+            Assert.IsNull(older.Features);
+        }
     }
 }
