@@ -683,7 +683,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   out as the game's equipment panel by `EquipSlots` (the game's EquipMask bits, one square per slot; an item covering
   several shows in each; Pants leave out AbdomenWear, which shirts have too, and anything worn on the feet
   (`EquipSlot.Except`): boots are worn on the lower legs as well, and showed as pants while none were on; an empty one shows the game's own picture of it, `EquipSlot.EmptyIcon`, found in portal.dat by the
-  bevelled blue frame they share and drawn as it is, `ItemIcons.DrawPlain`). The window grows by the panel's width when
+  bevelled blue frame they share and drawn as it is, `ItemIcons.DrawPlain`). A sigil slot you haven't unlocked isn't
+  drawn at all (`AetheriaSlots`, `Feed/AetheriaFlags.cs`): the player's `AetheriaBitfield`, PropertyInt 322 (blue 1,
+  yellow 2, red 4), which the server checks before wielding a sigil, sends at login (`SendOnLogin`, read with
+  `CharacterFilter.GetCharProperty`) and sends again when it changes (a private int update, `0x02CD`, read from the
+  message itself in case Decal doesn't follow it; `/enable-aetheria [flags]` sets it for a developer). `[aetheria]` lines
+  in log.txt. The window grows by the panel's width when
   Worn is turned on and shrinks when it's off, once per window (`wornShownAs`, by host), and the Worn checkbox is above the
   packs, where it can't be squeezed out. Its items have the list's hover and right-click; dragging one onto a pack or onto
   the items takes it off into that pack, and dropping an item on a square wears it (`Actions.UseItem`, the game's own

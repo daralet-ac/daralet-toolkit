@@ -60,6 +60,7 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.ContainerOpened += Core_ContainerOpened;
             CoreManager.Current.RenderFrame += Core_RenderFrame;
             InventoryChanges.Start();
+            AetheriaSlots.Start();
         }
 
         public FloatingWindow CarriedWindow => carriedWindow;
@@ -74,6 +75,7 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.ContainerOpened -= Core_ContainerOpened;
             CoreManager.Current.RenderFrame -= Core_RenderFrame;
             InventoryChanges.Stop();
+            AetheriaSlots.Stop();
             bankWindow.Dispose();
             carriedWindow.Dispose();
         }

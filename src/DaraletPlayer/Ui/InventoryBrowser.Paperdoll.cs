@@ -85,6 +85,11 @@ namespace DaraletPlayer.Ui {
             var wornBy = worn.Select(i => (i.Guid, i.Worn)).ToList();
 
             foreach (var slot in EquipSlots.All) {
+                // a sigil slot you haven't unlocked isn't there at all, as in the game's panel
+                if (!AetheriaSlots.Unlocked(slot.Mask)) {
+                    continue;
+                }
+
                 // row 1 is the empty row, replaced by sigilGap
                 var y = slot.Row == 0 ? 0 : cell + sigilGap + (slot.Row - 2) * (cell + WornGap);
                 var offset = new Vector2(slot.Column * (cell + WornGap), y);
