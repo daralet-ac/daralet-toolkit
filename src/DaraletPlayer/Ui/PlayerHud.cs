@@ -27,6 +27,8 @@ namespace DaraletPlayer.Ui {
         private readonly QuestsTab questsTab;
         private readonly LootTab lootTab;
         private readonly LeaderboardsTab leaderboardsTab;
+        private readonly SharedWindow sharedWindow;
+        private readonly GameHotbar gameHotbar;
         private readonly ToolbarButtons toolbarButtons;
         private readonly HideGameUi hideGameUi;
         private readonly EscapeCloses escapeCloses;
@@ -59,8 +61,11 @@ namespace DaraletPlayer.Ui {
             // the hud is made below: these read the field when called
             hideGameUi = new HideGameUi(settings, () => hud.Visible, shown => hud.Visible = shown);
             launcher = new Launcher(settings, () => hud.Visible, Toggle);
-            configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow), hideGameUi,
-                launcher);
+            gameHotbar = new GameHotbar(settings);
+            sharedWindow = new SharedWindow(settings, inventoryTab.CarriedWindow, worldTab.MapWindow, socialTab.Window,
+                questsTab.Window, characterTab.Window);
+            configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow, sharedWindow),
+                hideGameUi, launcher);
             leaderboardsTab = new LeaderboardsTab(feed, api);
             toolbarButtons = new ToolbarButtons(settings, icons, inventoryTab.CarriedWindow, questsTab.Window,
                 worldTab.MapWindow, characterTab.Window, socialTab.Window);
@@ -269,7 +274,7 @@ namespace DaraletPlayer.Ui {
 
             // the game's UI back first, whatever fails after
             var pieces = new IDisposable[] {
-                hideGameUi, escapeCloses, launcher, hud, toolbarButtons, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
+                hideGameUi, escapeCloses, launcher, hud, toolbarButtons, sharedWindow, gameHotbar, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
                 lootTab, api, icons,
             };
 

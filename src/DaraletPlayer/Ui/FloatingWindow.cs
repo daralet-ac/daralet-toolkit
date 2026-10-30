@@ -104,6 +104,24 @@ namespace DaraletPlayer.Ui {
 
         private WindowPlacement Placement => settings.Window(id);
 
+        /// <summary>
+        /// Where it is, how big, locked or not, its Size and its background: its own placement, or the shared window's while
+        /// it's one of those (SharedWindow). Whether it's on, and Only when needed, stay its own.
+        /// </summary>
+        private WindowPlacement Look => SharedLook?.Invoke() ?? Placement;
+
+        /// <summary>The shared window's placement while this is one of its windows (SharedWindow), else null.</summary>
+        public Func<WindowPlacement> SharedLook { get; set; }
+
+        /// <summary>
+        /// A box on screen the window is held to (the shared window attached to the toolbar), else null: no title bar, no
+        /// dragging or sizing, and nothing saved.
+        /// </summary>
+        public Func<(Vector2 Position, Vector2 Size)?> Anchor { get; set; }
+
+        /// <summary>Drawn above what's in the window (the shared window's tabs), or null.</summary>
+        public Action Header { get; set; }
+
         /// <summary>Whether the window may show at all (its tab's checkbox). Saved.</summary>
         public bool Visible {
             get => Placement.Visible;
@@ -118,34 +136,34 @@ namespace DaraletPlayer.Ui {
         }
 
         public bool Locked {
-            get => Placement.Locked;
+            get => Look.Locked;
             set {
-                if (Placement.Locked == value) {
+                if (Look.Locked == value) {
                     return;
                 }
 
                 // locking takes the title bar away, so the window moves down by its height (and back up on unlocking):
                 // what's in it stays exactly where it was
                 var title = TitleBarHeight();
-                Placement.Y = (Placement.Y ?? defaultPosition.Y) + (value ? title : -title);
+                Look.Y = (Look.Y ?? defaultPosition.Y) + (value ? title : -title);
                 positioned = false;
 
-                Placement.Locked = value;
+                Look.Locked = value;
                 settings.Changed();
             }
         }
 
         /// <summary>How big the window is drawn: 1 is normal. Whatever draws in it multiplies its own sizes by this.</summary>
         public float Scale {
-            get => Placement.ClampedScale;
+            get => Look.ClampedScale;
             set {
                 var scale = Math.Max(WindowPlacement.MinScale, Math.Min(WindowPlacement.MaxScale, value));
 
-                if (Placement.Scale == scale) {
+                if (Look.Scale == scale) {
                     return;
                 }
 
-                Placement.Scale = scale;
+                Look.Scale = scale;
                 settings.Changed();
             }
         }
@@ -178,10 +196,10 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>Puts the window back where it starts out, for one that's been dragged off screen.</summary>
         public void ResetPosition() {
-            Placement.X = null;
-            Placement.Y = null;
-            Placement.Width = null;
-            Placement.Height = null;
+            Look.X = null;
+            Look.Y = null;
+            Look.Width = null;
+            Look.Height = null;
             positioned = false;
             settings.Changed();
         }
@@ -277,10 +295,10 @@ namespace DaraletPlayer.Ui {
         }
 
         public void BackgroundSlider(string label) {
-            var percent = (int)Math.Round(Placement.BackgroundAlpha * 100);
+            var percent = (int)Math.Round(Look.BackgroundAlpha * 100);
 
             if (ImGui.SliderInt(label, ref percent, 0, 100, "%d%%")) {
-                Placement.Background = percent / 100f;
+                Look.Background = percent / 100f;
                 settings.Changed();
             }
             Widgets.Tip("How solid the window's background is. At 0% there's no box at all, only what's in it (lock the window too, to lose the title bar). Right-click what's left to get this back.");
@@ -428,7 +446,7 @@ namespace DaraletPlayer.Ui {
                     flags |= ImGuiWindowFlags.AlwaysAutoResize;
                 }
 
-                if (Locked) {
+                if (Locked || Anchor?.Invoke() != null) {
                     flags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize;
                 }
 
@@ -462,13 +480,32 @@ namespace DaraletPlayer.Ui {
             // ImGui pulls a window back inside the screen by itself whenever the screen is smaller than where it is, and the
             // game's screen is for a moment around login: the hotbars came back in the middle, and that place was saved. So
             // only a drag moves a window: the rest of the time it's put where it was saved, which ImGui doesn't pull back.
+            var anchor = Anchor?.Invoke();
+
+            if (anchor.HasValue) {
+                ImGui.SetNextWindowPos(anchor.Value.Position, ImGuiCond.Always);
+                ImGui.SetNextWindowSize(anchor.Value.Size, ImGuiCond.Always);
+                positioned = true;
+                return;
+            }
+
             if (!positioned || !ImGui.IsMouseDown(ImGuiMouseButton.Left)) {
-                ImGui.SetNextWindowPos(new Vector2(Placement.X ?? defaultPosition.X, Placement.Y ?? defaultPosition.Y), ImGuiCond.Always);
+                ImGui.SetNextWindowPos(new Vector2(Look.X ?? defaultPosition.X, Look.Y ?? defaultPosition.Y), ImGuiCond.Always);
+            }
+
+            // the shared window's windows each take its size whenever they show, not only the first time: the last one
+            // shown may have been sized since
+            var shared = SharedLook?.Invoke() != null;
+
+            if (shared && positioned && defaultSize.HasValue && !ImGui.IsMouseDown(ImGuiMouseButton.Left)
+                && !pendingWidth.HasValue) {
+                var size = new Vector2(Look.Width ?? defaultSize.Value.X, Look.Height ?? defaultSize.Value.Y);
+                ImGui.SetNextWindowSize(size, ImGuiCond.Always);
             }
 
             if (!positioned) {
                 if (defaultSize.HasValue) {
-                    var size = new Vector2(Placement.Width ?? defaultSize.Value.X, Placement.Height ?? defaultSize.Value.Y);
+                    var size = new Vector2(Look.Width ?? defaultSize.Value.X, Look.Height ?? defaultSize.Value.Y);
                     ImGui.SetNextWindowSize(size, ImGuiCond.Always);
                 }
 
@@ -482,7 +519,7 @@ namespace DaraletPlayer.Ui {
             if (pendingWidth.HasValue) {
                 // allowed under the usual smallest, so it's exactly what was asked
                 minWidth = Math.Min(DefaultMinWidth, pendingWidth.Value);
-                ImGui.SetNextWindowSize(new Vector2(pendingWidth.Value, Placement.Height ?? defaultSize.Value.Y), ImGuiCond.Always);
+                ImGui.SetNextWindowSize(new Vector2(pendingWidth.Value, Look.Height ?? defaultSize.Value.Y), ImGuiCond.Always);
                 pendingWidth = null;
             }
 
@@ -494,7 +531,7 @@ namespace DaraletPlayer.Ui {
         /// put back in Hud_OnRender (or next frame at the latest).
         /// </summary>
         private void SetNextBackground(ImGuiWindowFlags flags) {
-            var alpha = Placement.BackgroundAlpha;
+            var alpha = Look.BackgroundAlpha;
 
             if (alpha > 0) {
                 ImGui.SetNextWindowBgAlpha(alpha);
@@ -544,9 +581,14 @@ namespace DaraletPlayer.Ui {
 
                 // a drag from the game's pack let go over this window mustn't drop the item on the ground
                 GameDrag.Cover();
+                Header?.Invoke();
                 render();
                 RenderContextMenu();
-                RememberPosition();
+
+                // held to a box on screen: nothing to save
+                if (Anchor?.Invoke() == null) {
+                    RememberPosition();
+                }
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
@@ -562,9 +604,9 @@ namespace DaraletPlayer.Ui {
             var position = ImGui.GetWindowPos();
 
             // only a drag moves a window (SetNextPlacement): anything else is ImGui keeping it on a smaller screen
-            if (ImGui.IsMouseDown(ImGuiMouseButton.Left) && (Placement.X != position.X || Placement.Y != position.Y)) {
-                Placement.X = position.X;
-                Placement.Y = position.Y;
+            if (ImGui.IsMouseDown(ImGuiMouseButton.Left) && (Look.X != position.X || Look.Y != position.Y)) {
+                Look.X = position.X;
+                Look.Y = position.Y;
                 settings.Changed();
             }
 
@@ -574,9 +616,9 @@ namespace DaraletPlayer.Ui {
 
             var size = ImGui.GetWindowSize();
 
-            if (Placement.Width != size.X || Placement.Height != size.Y) {
-                Placement.Width = size.X;
-                Placement.Height = size.Y;
+            if (Look.Width != size.X || Look.Height != size.Y) {
+                Look.Width = size.X;
+                Look.Height = size.Y;
                 settings.Changed();
             }
         }

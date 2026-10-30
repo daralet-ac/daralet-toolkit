@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace DaraletPlayer.Ui {
@@ -44,6 +45,41 @@ namespace DaraletPlayer.Ui {
             }
 
             return -1;
+        }
+
+        /// <summary>The bar's slots, by element id, for Hide hotbar (GameHotbar).</summary>
+        public static IReadOnlyList<uint> SlotIds => Slots;
+
+        /// <summary>
+        /// Whether every slot on the bar is empty (gmToolbarUI::IsShortcutSlotAvailable on each), or null when the
+        /// toolbar can't be reached.
+        /// </summary>
+        public static unsafe bool? AllEmpty() {
+            if (broken) {
+                return null;
+            }
+
+            try {
+                var toolbar = FindToolbarUi(0);
+
+                if (toolbar == null) {
+                    return null;
+                }
+
+                for (var slot = 0; slot < Slots.Length; slot++) {
+                    if (IsShortcutSlotAvailable(toolbar, slot) == 0) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's shortcut bar can't be reached, so it's left alone until the plugin next starts: "
+                    + ex);
+                return null;
+            }
         }
 
         /// <summary>A slot's box on screen, while it and the toolbar are shown.</summary>
@@ -124,6 +160,10 @@ namespace DaraletPlayer.Ui {
 
         private static unsafe int GetFirstEmptyShortcutToTheRightOf(void* toolbar, uint slot) {
             return ((delegate* unmanaged[Thiscall]<void*, uint, int>)0x4BE1F0)(toolbar, slot);
+        }
+
+        private static unsafe byte IsShortcutSlotAvailable(void* toolbar, int slot) {
+            return ((delegate* unmanaged[Thiscall]<void*, int, byte>)0x4BE270)(toolbar, slot);
         }
 
         private static unsafe void AddShortcut(void* toolbar, uint item, int slot, byte broadcast) {

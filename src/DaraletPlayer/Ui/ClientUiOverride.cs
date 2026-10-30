@@ -14,8 +14,10 @@ namespace DaraletPlayer.Ui {
         private readonly Settings settings;
         private readonly PlayerFeed feed;
         private readonly FloatingWindow corpseWindow;
+        private readonly SharedWindow sharedWindow;
 
-        public ClientUiOverride(Settings settings, PlayerFeed feed, FloatingWindow corpseWindow) {
+        public ClientUiOverride(Settings settings, PlayerFeed feed, FloatingWindow corpseWindow, SharedWindow sharedWindow) {
+            this.sharedWindow = sharedWindow;
             this.settings = settings;
             this.feed = feed;
             this.corpseWindow = corpseWindow;
@@ -30,13 +32,18 @@ namespace DaraletPlayer.Ui {
 
             RenderAllButtons();
 
-            // all seven in one row, wrapping only when the tab is too narrow
+            // all eight in one row, wrapping only when the tab is too narrow
             var first = true;
             ToolbarButtons.RenderToggles(ref first, settings);
+            GameHotbar.RenderCheckbox(ref first, settings);
             Form.Flow(ref first, Form.CheckWidth("Bank window"));
             RenderBankWindow();
             Form.Flow(ref first, Form.CheckWidth("Loot window"));
             RenderLootWindow();
+            ImGui.Spacing();
+
+            // on a row of its own: the windows that share one place, as the game's panels do
+            sharedWindow.RenderSettings();
             ImGui.Spacing();
         }
 

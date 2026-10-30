@@ -577,6 +577,29 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   **Disable all**. Enable all asks first when it would turn Bank window or Loot window on (`Windows.ConfirmAllOn`), as
   their own checkboxes do, and leaves them off on a server too old for them; Disable all says what follows when either
   was on (`Windows.NoticeAllOff`). The rest is the game's.
+  **Shared window** (`Ui/SharedWindow.cs`, a row of its own in Client UI Override; `SettingsData.SharedWindow`, off to
+  start): the Inventory, Map, Social, Quests and Character windows ticked beside it (`SharedWindowMembers`, by window
+  id) share one place on screen, as the game's panels do. They stay windows of their own: the one opened last, from
+  anywhere, shows, and the others are closed (`FollowOpening`, by each one's Visible from frame to frame); they take one
+  position, size, lock, Size and background, the window `shared` (`FloatingWindow.SharedLook`, with Visible and Only
+  when needed kept their own; the size is put on every frame the mouse isn't down, so whichever shows takes it), and
+  with **Tabs** (`SharedWindowTabs`, on to start) a row of buttons at the top of each to switch
+  (`FloatingWindow.Header`). **Attach to toolbar** (`SharedWindowAttach`) holds it to the game's panel frame
+  (`ClientElements.PanelFrame`, `0x100005FF`: the gmPanelUI-type element, `0x1000004F`, that holds every game panel,
+  310x372 right above the toolbar at 800x600, read whether shown or not with `ClientElements.TryGetBox`), with no title
+  bar, dragging or sizing and nothing saved (`FloatingWindow.Anchor`). The frame is shown while a game panel is open, so
+  it turning on (a toolbar button not drawn over, the skills or options, a game key) closes the shared window, for the
+  game's panel to be seen there; only the turning on counts, so one of the plugin's windows opened over a game panel
+  stays. `[shared-window]` lines in log.txt say when the frame opens and closes.
+  **Hide hotbar** (`Ui/GameHotbar.cs`, `SettingsData.HideGameHotbar`, off to start; in Client UI Override's row and the
+  Hotbars page's Using, one setting): the game's shortcut bar is hidden while every slot is empty
+  (`GameShortcuts.AllEmpty`: `gmToolbarUI::IsShortcutSlotAvailable`, `0x4BE270`, 1 for a slot in range whose item list
+  holds nothing). Its 18 slots and the 6-pixel caps at each row's ends (`0x100001A6`, `0x100001B0`, `0x100006B6`,
+  `0x100006C0`) are the toolbar root's own children in layout `0x21000016`, under its buttons (rows at y 58 and 90),
+  with nothing behind them but the frame's border (layout `0x21000070` is border pieces only), so each is hidden with
+  `ClientElements.SetVisible` (`UIElement::SetVisible`) and the toolbar's buttons stay; the frame doesn't shrink. Looked
+  at once a second, hidden again each time in case the game showed it, and shown again when the setting goes off or the
+  plugin shuts down. `[hotbar]` lines in log.txt.
   The burden pack is element `0x100000F7` in the indicators' layout `0x21000071` (INDI `0x10000611`, the panel it's
   checked against instead of TBAR), its pictures by burden `060074A2` / `060074A3` / `060074A4` (states E, F, 0x10), with
   `0600749B` framed over it while its panel's open (its child `0x100000F2`'s state 3). The game's cut-offs aren't in the

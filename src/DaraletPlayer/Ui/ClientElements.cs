@@ -20,6 +20,13 @@ namespace DaraletPlayer.Ui {
         public const uint ToolbarMap = 0x1000019A;
         public const uint ToolbarSocial = 0x10000197;
 
+        /// <summary>
+        /// The frame the game shows its panels in (inventory, character, skills, options...: element type 0x1000004F, its
+        /// layout 0x2100006E), right above the toolbar and as wide, in the main UI's layout 0x21000005: 310x372 at
+        /// 490,128 at 800x600, its panels 300x362 inside a 5-pixel border. Shown while one of them is open.
+        /// </summary>
+        public const uint PanelFrame = 0x100005FF;
+
         // the indicators by the toolbar (INDI), and their Character Information button (the burden pack), in layout
         // 0x21000071
         public const uint Indicators = 0x10000611;
@@ -200,6 +207,79 @@ namespace DaraletPlayer.Ui {
                 PluginCore.Log("The game's UI can't be " + (shown ? "shown" : "hidden") + ", so the plugin's lookups are off "
                     + "until it next starts: " + ex);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Shows or hides one element (UIElement::SetVisible, as SetUiVisible does for the whole UI). False when there's no
+        /// such element or the call fails. Showing is tried even after another lookup broke, so it can always be put back.
+        /// </summary>
+        public static unsafe bool SetVisible(uint id, bool shown) {
+            if (broken && !shown) {
+                return false;
+            }
+
+            try {
+                var element = FindElement(id);
+
+                if (element == null) {
+                    return false;
+                }
+
+                ((delegate* unmanaged[Thiscall]<void*, byte, void>)0x462390)(element, (byte)(shown ? 1 : 0));
+                return true;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be " + (shown ? "shown" : "hidden") + ", so the plugin's lookups are off "
+                    + "until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Where the element is on screen whether it's shown or not (the game's panel frame, while no panel is open). False
+        /// when there's no such element or the client's functions can't be called.
+        /// </summary>
+        public static unsafe bool TryGetBox(uint id, out Vector2 min, out Vector2 max) {
+            min = max = Vector2.Zero;
+
+            if (broken) {
+                return false;
+            }
+
+            try {
+                var element = FindElement(id);
+
+                if (element == null || GetWidth(element) <= 0 || GetHeight(element) <= 0) {
+                    return false;
+                }
+
+                min = new Vector2(GetScreenX0(element), GetScreenY0(element));
+                max = min + new Vector2(GetWidth(element), GetHeight(element));
+                return true;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be found, so the plugin's lookups are off until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>Whether the element is there and shown; null when that can't be told.</summary>
+        public static unsafe bool? IsShown(uint id) {
+            if (broken) {
+                return null;
+            }
+
+            try {
+                var element = FindElement(id);
+                return element == null ? (bool?)null : IsVisible(element);
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be found, so the plugin's lookups are off until it next starts: " + ex);
+                return null;
             }
         }
 

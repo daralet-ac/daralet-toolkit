@@ -193,6 +193,26 @@ namespace DaraletPlayer {
         /// <summary>The Social button (the two heads) opens the Social window.</summary>
         [DataMember(Name = "toolbarSocial")] public bool ToolbarSocial;
 
+        /// <summary>
+        /// The Inventory, Map, Social, Quests and Character windows ticked in SharedWindowMembers share one place on screen,
+        /// as the game's panels do: opening one closes the others (SharedWindow). Its place is the window "shared".
+        /// </summary>
+        [DataMember(Name = "sharedWindow")] public bool SharedWindow;
+
+        /// <summary>The windows that share it, by window id (carried, map, social, quests, character).</summary>
+        [DataMember(Name = "sharedWindowMembers")] public List<string> SharedWindowMembers;
+
+        /// <summary>A row of tabs at the top of the shared window, one for each window in it.</summary>
+        [DataMember(Name = "sharedWindowTabs")] public bool SharedWindowTabs;
+
+        /// <summary>The shared window sits where the game shows its panels, right above the toolbar, and moves with it.</summary>
+        [DataMember(Name = "sharedWindowAttach")] public bool SharedWindowAttach;
+
+        /// <summary>
+        /// The game's shortcut bar (its two rows of slots on the toolbar) is hidden while nothing is on it (GameHotbar).
+        /// </summary>
+        [DataMember(Name = "hideGameHotbar")] public bool HideGameHotbar;
+
         /// <summary>The key that opens and closes the /dap window (Launcher); none to start.</summary>
         [DataMember(Name = "toolkitKey")] public HotkeyBinding ToolkitKey;
 
@@ -314,6 +334,8 @@ namespace DaraletPlayer {
             PaneSizes = new Dictionary<string, float>();
             QuestTrackerOpen = new List<uint>();
             QuestTrackerHidden = new List<uint>();
+            SharedWindowMembers = new List<string> { "carried", "map", "social", "quests", "character" };
+            SharedWindowTabs = true;
             OneClickHeal = true;
             LfgChatLinks = true;
             EscapeClosesWindows = true;

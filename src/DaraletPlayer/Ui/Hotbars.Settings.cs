@@ -102,6 +102,10 @@ namespace DaraletPlayer.Ui {
             Section("Using");
             Check("One-click Heal", ref settings.Data.OneClickHeal, "Clicking a healing, stamina or mana kit on a hotbar (or pressing its key) uses it on you at once, instead of asking you to pick yourself. A kit's slot set to Your selection or Pick each time (in its right-click menu, Use on) still does that, to heal someone else.");
 
+            // the same setting as the Config tab's Client UI Override has
+            var first = true;
+            GameHotbar.RenderCheckbox(ref first, settings);
+
             Section("Arrange");
 
             if (ModeButton("Move slots", editMode)) {
