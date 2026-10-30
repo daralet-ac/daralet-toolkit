@@ -12,9 +12,9 @@ namespace DaraletPlayer.Ui {
     /// own, but take one place, size, lock, Size and background (the window "shared", FloatingWindow.SharedLook), and
     /// carry a row of tabs for each other (FloatingWindow.Header). Which ones share is the player's (SharedWindowMembers),
     /// from the Config tab's Client UI Override section.
-    /// Attach to toolbar holds it where the game shows its panels (ClientElements.PanelFrame, FloatingWindow.Anchor), and
-    /// a game panel opening there (one of the toolbar's buttons that isn't overridden, or the game's own key) closes it,
-    /// so the game's can be seen.
+    /// Attach to toolbar holds it right above the toolbar, as wide, wherever the toolbar is moved (FloatingWindow.Anchor),
+    /// and it takes turns with the game's panels: a game panel opening (one of the toolbar's buttons that isn't
+    /// overridden, or the game's own key) closes it, and one of its windows opening closes the game's panel.
     /// </summary>
     internal class SharedWindow : IDisposable {
         /// <summary>The placement the shared windows use, in SettingsData.Windows.</summary>
@@ -31,6 +31,12 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>Whether the game's panel frame was shown last frame, or null before it's known.</summary>
         private bool? panelWasShown;
+
+        /// <summary>The attached box last logged, so each new place goes in log.txt once.</summary>
+        private static (Vector2 Position, Vector2 Size)? loggedBox;
+
+        /// <summary>The game's panels' height at 800x600, for when the panel frame can't be measured.</summary>
+        private const float DefaultPanelHeight = 372;
 
         private bool disposed;
 
@@ -95,9 +101,13 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>The window opened since last frame becomes the one showing; any other sharing window is closed.</summary>
+        /// <summary>
+        /// The window opened since last frame becomes the one showing; any other sharing window is closed, and attached,
+        /// so is the game's panel, as the game's toolbar buttons close the one open before.
+        /// </summary>
         private void FollowOpening() {
             var sharing = windows.Where(w => Shares(w.Id)).ToList();
+            var opened = false;
 
             foreach (var (id, _, window) in sharing) {
                 var on = window.Visible;
@@ -105,7 +115,12 @@ namespace DaraletPlayer.Ui {
                 // a window opened since last frame: the last one opened wins. On the first frame nothing was opened
                 if (on && wasOn.TryGetValue(id, out var was) && !was) {
                     current = id;
+                    opened = true;
                 }
+            }
+
+            if (opened && settings.Data.SharedWindowAttach && ClientElements.CloseGamePanel()) {
+                PluginCore.LogFile($"[shared-window] {current} opened: the game's panel closed");
             }
 
             if (current == null || !sharing.Any(w => w.Id == current && w.Window.Visible)) {
@@ -124,9 +139,9 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// Attached, it's where the game shows its panels, so a game panel opening (one of the toolbar's buttons the plugin
-        /// doesn't draw over, the skills or options, or a game key) closes it. Only the frame turning on counts: one of the
-        /// plugin's windows opened while a game panel's open stays.
+        /// Attached, it takes the game's panels' place, so a game panel opening (one of the toolbar's buttons the plugin
+        /// doesn't draw over, the skills or options, or a game key) closes it. Only the frame turning on counts: the other
+        /// way round, FollowOpening closes the game's panel.
         /// </summary>
         private void CloseForGamePanel() {
             var shown = ClientElements.IsShown(ClientElements.PanelFrame);
@@ -152,13 +167,30 @@ namespace DaraletPlayer.Ui {
             panelWasShown = shown;
         }
 
-        /// <summary>Where the game shows its panels, right above the toolbar, or null when it can't be found.</summary>
+        /// <summary>
+        /// Right above the toolbar's frame and as wide, as tall as the game's panels, or below it when there's no room
+        /// above (the toolbar moved to the top), or null when the toolbar can't be found. Not the panel frame's own place:
+        /// it's a floaty window the game keeps where it was last put (gmFloatyPanelUI saves its position), so it never
+        /// follows the toolbar.
+        /// </summary>
         private static (Vector2 Position, Vector2 Size)? PanelBox() {
-            if (!ClientElements.TryGetBox(ClientElements.PanelFrame, out var min, out var max)) {
+            if (!ClientElements.TryGetFrameBox(ClientElements.Toolbar, out var barMin, out var barMax)) {
                 return null;
             }
 
-            return (min, max - min);
+            var height = ClientElements.TryGetBox(ClientElements.PanelFrame, out var min, out var max)
+                ? max.Y - min.Y : DefaultPanelHeight;
+            var y = barMin.Y - height >= 0 ? barMin.Y - height : barMax.Y;
+            (Vector2 Position, Vector2 Size) box = (new Vector2(barMin.X, y), new Vector2(barMax.X - barMin.X, height));
+
+            // logged once it settles, not every frame of a drag
+            if (!ImGui.IsMouseDown(ImGuiMouseButton.Left) && loggedBox != box) {
+                loggedBox = box;
+                PluginCore.LogFile($"[shared-window] attached at {box.Position} size {box.Size}: the toolbar's frame "
+                    + $"{barMin} to {barMax}");
+            }
+
+            return box;
         }
 
         /// <summary>
@@ -248,9 +280,10 @@ namespace DaraletPlayer.Ui {
             }
 
             if (Form.FlowCheck(ref first, "Attach to toolbar##shared-window", ref data.SharedWindowAttach,
-                "Puts the shared window where the game shows its panels, right above the toolbar and as wide, and keeps "
-                + "it there: it can't be dragged or sized. A game panel opening there (the skills, the options, or any "
-                + "toolbar button not drawn over) closes it, so the game's can be seen.")) {
+                "Puts the shared window right above the toolbar and as wide, as tall as the game's panels, and keeps it "
+                + "there, following the toolbar when it's moved: it can't be dragged or sized. It takes turns with the "
+                + "game's panels: one opening (the skills, the options, or any toolbar button not drawn over) closes it, "
+                + "and opening one of its windows closes the game's panel.")) {
                 settings.Changed();
             }
 

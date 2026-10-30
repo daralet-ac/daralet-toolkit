@@ -23,7 +23,8 @@ namespace DaraletPlayer.Ui {
         /// <summary>
         /// The frame the game shows its panels in (inventory, character, skills, options...: element type 0x1000004F, its
         /// layout 0x2100006E), right above the toolbar and as wide, in the main UI's layout 0x21000005: 310x372 at
-        /// 490,128 at 800x600, its panels 300x362 inside a 5-pixel border. Shown while one of them is open.
+        /// 490,128 at 800x600, its panels 300x362 inside a 5-pixel border. Shown while one of them is open. A
+        /// gmFloatyPanelUI: a window of its own that stays where it was last put, not where the toolbar is.
         /// </summary>
         public const uint PanelFrame = 0x100005FF;
 
@@ -49,6 +50,19 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>UIElementManager.m_focusElement, as AcClient lays it out: the element typed into.</summary>
         private const int FocusOffset = 0x328;
+
+        /// <summary>UIRegion.m_parent, which UIRegion::GetScreenX0 climbs.</summary>
+        private const int ParentOffset = 0xAC;
+
+        /// <summary>How much bigger than an element its parent may be, each way, and still be taken for its frame.</summary>
+        private const float FrameSlack = 48;
+
+        /// <summary>
+        /// gmPanelUI's element type (its DynamicCast, which gmFloatyPanelUI's, type 0x1000004F, passes on), and where its
+        /// notice handler starts in it (gmPanelUI::gmPanelUI sets its vtable at +0x5F8).
+        /// </summary>
+        private const uint PanelUiType = 0x10000008;
+        private const int PanelNoticeOffset = 0x5F8;
 
         /// <summary>Set once a call has failed: logged once, and nothing is looked up again until the next start.</summary>
         private static bool broken;
@@ -265,6 +279,217 @@ namespace DaraletPlayer.Ui {
             catch (Exception ex) {
                 broken = true;
                 PluginCore.Log("The game's UI can't be found, so the plugin's lookups are off until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Where the element's frame is on screen, shown or not: its parent (UIRegion.m_parent) when that fits snugly round
+        /// it (a border's width or so, the toolbar's frame round TBAR), else the element itself. False as TryGetBox.
+        /// </summary>
+        public static unsafe bool TryGetFrameBox(uint id, out Vector2 min, out Vector2 max) {
+            if (!TryGetBox(id, out min, out max)) {
+                return false;
+            }
+
+            try {
+                var parent = *(void**)((byte*)FindElement(id) + ParentOffset);
+
+                if (parent == null || GetWidth(parent) <= 0 || GetHeight(parent) <= 0) {
+                    return true;
+                }
+
+                var parentMin = new Vector2(GetScreenX0(parent), GetScreenY0(parent));
+                var parentMax = parentMin + new Vector2(GetWidth(parent), GetHeight(parent));
+                var snug = parentMin.X <= min.X && parentMin.Y <= min.Y && parentMax.X >= max.X && parentMax.Y >= max.Y
+                    && (parentMax - parentMin - (max - min)).X <= FrameSlack
+                    && (parentMax - parentMin - (max - min)).Y <= FrameSlack;
+
+                if (snug) {
+                    min = parentMin;
+                    max = parentMax;
+                }
+
+                return true;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be found, so the plugin's lookups are off until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Closes whichever of the game's panels is open (inventory, spellbook, options...), as its toolbar button does:
+        /// CM_UI::SendNotice_SetPanelVisibility(panel id, 0), which gmPanelUI (the panel frame) and gmToolbarUI (its
+        /// button's light) both hear. Closing a panel that stood in for another (gmPanelUI's m_previous, +0x14) opens that
+        /// one again, so it's closed too. False when none was open, or the call fails.
+        /// </summary>
+        public static unsafe bool CloseGamePanel() {
+            if (broken) {
+                return false;
+            }
+
+            try {
+                var frame = (byte*)FindElement(PanelFrame);
+
+                // gmFloatyPanelUI, or plain gmPanelUI: UIElement::DynamicCast (vtable +0x94) to gmPanelUI's type
+                if (frame == null || !IsVisible(frame)
+                    || ((delegate* unmanaged[Thiscall]<void*, uint, void*>)(*(void***)frame)[0x94 / 4])(frame,
+                        PanelUiType) != frame) {
+                    return false;
+                }
+
+                var closed = false;
+
+                for (var tries = 0; tries < 3; tries++) {
+                    var id = OpenPanelId(frame + PanelNoticeOffset);
+
+                    if (id == 0) {
+                        break;
+                    }
+
+                    ((delegate* unmanaged[Cdecl]<uint, byte, byte>)0x47A4A0)(id, 0);
+                    closed = true;
+                }
+
+                return closed;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's panels can't be reached, so the plugin's lookups are off until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// The id of the panel open in gmPanelUI (its notice handler, as gmPanelUI::RecvNotice_SetPanelVisibility reads
+        /// it: the panels as (element, id) pairs, a SmartArray at +0x4 with its count at +0xC, and the open one at +0x10),
+        /// or 0.
+        /// </summary>
+        private static unsafe uint OpenPanelId(byte* notices) {
+            var open = *(void**)(notices + 0x10);
+            var panels = *(byte**)(notices + 0x4);
+            var count = *(uint*)(notices + 0xC);
+
+            if (open == null || panels == null) {
+                return 0;
+            }
+
+            for (var i = 0; i < count && i < 64; i++) {
+                if (*(void**)(panels + i * 8) == open) {
+                    return *(uint*)(panels + i * 8 + 4);
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// Where the element is in its parent (UIRegion's m_x0 and m_y0, +0x7C and +0x80, which UIElement::MoveTo takes),
+        /// its size, and its parent's height. False as TryGetBox.
+        /// </summary>
+        public static unsafe bool TryGetPlace(uint id, out int x, out int y, out int width, out int height,
+            out int parentHeight) {
+            x = y = width = height = parentHeight = 0;
+
+            if (broken) {
+                return false;
+            }
+
+            try {
+                var element = (byte*)FindElement(id);
+                var parent = element == null ? null : *(void**)(element + ParentOffset);
+
+                if (element == null || parent == null) {
+                    return false;
+                }
+
+                x = *(int*)(element + 0x7C);
+                y = *(int*)(element + 0x80);
+                width = GetWidth(element);
+                height = GetHeight(element);
+                parentHeight = GetHeight(parent);
+                return width > 0 && height > 0;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be found, so the plugin's lookups are off until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Moves and sizes an element with UIElement::MoveTo and UIElement::ResizeTo, which lay its children out again.
+        /// Called as themselves, not through the element's vtable: the floaty windows' own (gmFloatyToolbarUI's, say) save
+        /// the new place in the player's UI preferences, and the plugin's changes are never meant to outlast it.
+        /// ResizeTo holds the size inside the element's own limits (attributes 0x3C to 0x3F, SetIntAttribute). False when
+        /// there's no such element or the calls fail.
+        /// </summary>
+        public static unsafe bool Place(uint id, int x, int y, int width, int height) {
+            if (broken) {
+                return false;
+            }
+
+            try {
+                var element = FindElement(id);
+
+                if (element == null) {
+                    return false;
+                }
+
+                ((delegate* unmanaged[Thiscall]<void*, int, int, void>)0x463D60)(element, width, height);
+                ((delegate* unmanaged[Thiscall]<void*, int, int, void>)0x4634C0)(element, x, y);
+                return true;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be moved, so the plugin's lookups are off until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>An element's whole-number attribute (UIElement::GetAttribute_Int), or null when it has none.</summary>
+        public static unsafe int? GetIntAttribute(uint id, uint attribute) {
+            if (broken) {
+                return null;
+            }
+
+            try {
+                var element = FindElement(id);
+                var value = 0;
+
+                if (element == null
+                    || ((delegate* unmanaged[Thiscall]<void*, uint, int*, byte>)0x460B30)(element, attribute, &value) == 0) {
+                    return null;
+                }
+
+                return value;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be found, so the plugin's lookups are off until it next starts: " + ex);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Sets an element's whole-number attribute (UIElement::SetAttribute_Int), in memory only: the next login reads
+        /// the layout's own again. False when there's no such element or the game didn't take it.
+        /// </summary>
+        public static unsafe bool SetIntAttribute(uint id, uint attribute, int value) {
+            if (broken) {
+                return false;
+            }
+
+            try {
+                var element = FindElement(id);
+                return element != null
+                    && ((delegate* unmanaged[Thiscall]<void*, uint, int, byte>)0x4606B0)(element, attribute, value) != 0;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be changed, so the plugin's lookups are off until it next starts: " + ex);
                 return false;
             }
         }

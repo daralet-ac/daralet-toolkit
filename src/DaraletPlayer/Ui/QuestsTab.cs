@@ -155,24 +155,50 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderList(List<QuestInfo> quests) {
-            if (!Widgets.BeginTable("quests-table", 5, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
+            // Status, Progress and Time as wide as what's in them, and Progress and Time left out while no quest listed has
+            // one: at set widths, a narrow window (the shared window attached to the toolbar, 310 pixels wide at 800x600)
+            // squeezed the Quest column to a letter and pushed Track off the edge
+            var progress = quests.Select(ProgressText).ToList();
+            var times = quests.Select(TimeText).ToList();
+            var showProgress = progress.Any(p => p != null);
+            var showTime = times.Any(t => t != null);
+            var tips = new List<string> {
+                "The quest. Click it for its description, its NPCs and where they are.",
+                "Started, not started yet, or done (and when it can be done again).",
+            };
+
+            if (showProgress) {
+                tips.Add("How far along it is, for a quest that counts (kills, items handed in).");
+            }
+
+            if (showTime) {
+                tips.Add("Time left on a timed quest, or until a done one can be done again.");
+            }
+
+            tips.Add("Whether the Quest Tracker lists it. Done quests are never listed.");
+
+            if (!Widgets.BeginTable("quests-table", tips.Count, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
                 return;
             }
 
             ImGui.TableSetupScrollFreeze(0, 1);
             ImGui.TableSetupColumn("Quest", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, ImGui.GetFontSize() * 9);
-            ImGui.TableSetupColumn("Progress", ImGuiTableColumnFlags.WidthFixed, ImGui.GetFontSize() * 7);
-            ImGui.TableSetupColumn("Time", ImGuiTableColumnFlags.WidthFixed, ImGui.GetFontSize() * 7);
-            ImGui.TableSetupColumn("Track", ImGuiTableColumnFlags.WidthFixed, ImGui.GetFontSize() * 3);
-            Widgets.HeadersRow(
-                "The quest. Click it for its description, its NPCs and where they are.",
-                "Started, not started yet, or done (and when it can be done again).",
-                "How far along it is, for a quest that counts (kills, items handed in).",
-                "Time left on a timed quest, or until a done one can be done again.",
-                "Whether the Quest Tracker lists it. Done quests are never listed.");
+            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, FitColumn("Status", quests.Select(StageText)));
 
-            foreach (var quest in quests) {
+            if (showProgress) {
+                ImGui.TableSetupColumn("Progress", ImGuiTableColumnFlags.WidthFixed, FitColumn("Progress", progress));
+            }
+
+            if (showTime) {
+                ImGui.TableSetupColumn("Time", ImGuiTableColumnFlags.WidthFixed, FitColumn("Time", times));
+            }
+
+            ImGui.TableSetupColumn("Track", ImGuiTableColumnFlags.WidthFixed,
+                Math.Max(ImGui.CalcTextSize("Track").X, ImGui.GetFrameHeight()));
+            Widgets.HeadersRow(tips.ToArray());
+
+            for (var i = 0; i < quests.Count; i++) {
+                var quest = quests[i];
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
 
@@ -189,11 +215,15 @@ namespace DaraletPlayer.Ui {
                 ImGui.TableNextColumn();
                 Widgets.TextColored(StageColor(quest), StageText(quest));
 
-                ImGui.TableNextColumn();
-                RenderProgress(quest, ImGui.GetContentRegionAvail().X);
+                if (showProgress) {
+                    ImGui.TableNextColumn();
+                    RenderProgress(quest, ImGui.GetContentRegionAvail().X);
+                }
 
-                ImGui.TableNextColumn();
-                Widgets.TextDisabled(TimeText(quest) ?? "");
+                if (showTime) {
+                    ImGui.TableNextColumn();
+                    Widgets.TextDisabled(times[i] ?? "");
+                }
 
                 ImGui.TableNextColumn();
                 RenderTrackCheckbox(quest);
@@ -302,11 +332,26 @@ namespace DaraletPlayer.Ui {
         private static void RenderProgress(QuestInfo quest, float width) {
             if (quest.MaxSolves is int max && max > 0) {
                 var solves = Math.Min(quest.Solves ?? 0, max);
-                Widgets.Bar(solves / (float)max, Colors.Info, $"{solves} / {max}", width);
+                Widgets.Bar(solves / (float)max, Colors.Info, ProgressText(quest), width);
             }
             else if (quest.Solves > 0) {
-                Widgets.TextDisabled($"{quest.Solves} so far");
+                Widgets.TextDisabled(ProgressText(quest));
             }
+        }
+
+        /// <summary>What RenderProgress writes: the bar's count, or how many so far, or null for neither.</summary>
+        private static string ProgressText(QuestInfo quest) {
+            if (quest.MaxSolves is int max && max > 0) {
+                return $"{Math.Min(quest.Solves ?? 0, max)} / {max}";
+            }
+
+            return quest.Solves > 0 ? $"{quest.Solves} so far" : null;
+        }
+
+        /// <summary>A column as wide as its header or the widest of its texts, with a frame's padding either side.</summary>
+        private static float FitColumn(string header, IEnumerable<string> texts) {
+            var widest = texts.Where(t => t != null).Select(t => ImGui.CalcTextSize(t).X).DefaultIfEmpty(0).Max();
+            return Math.Max(ImGui.CalcTextSize(header).X, widest) + ImGui.GetStyle().FramePadding.X * 2;
         }
 
         private static string StageText(QuestInfo quest) {

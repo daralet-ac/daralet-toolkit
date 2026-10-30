@@ -587,22 +587,33 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   position, size, lock, Size and background, the window `shared` (`FloatingWindow.SharedLook`, with Visible and Only
   when needed kept their own; the size is put on every frame the mouse isn't down, so whichever shows takes it), and
   with **Tabs** (`SharedWindowTabs`, on to start) a row of buttons at the top of each to switch
-  (`FloatingWindow.Header`). **Attach to toolbar** (`SharedWindowAttach`) holds it to the game's panel frame
-  (`ClientElements.PanelFrame`, `0x100005FF`: the gmPanelUI-type element, `0x1000004F`, that holds every game panel,
-  310x372 right above the toolbar at 800x600, read whether shown or not with `ClientElements.TryGetBox`), with no title
-  bar, dragging or sizing and nothing saved (`FloatingWindow.Anchor`). The frame is shown while a game panel is open, so
-  it turning on (a toolbar button not drawn over, the skills or options, a game key) closes the shared window, for the
-  game's panel to be seen there; only the turning on counts, so one of the plugin's windows opened over a game panel
-  stays. `[shared-window]` lines in log.txt say when the frame opens and closes.
+  (`FloatingWindow.Header`). **Attach to toolbar** (`SharedWindowAttach`) holds it right above the toolbar's frame and
+  as wide (`ClientElements.TryGetFrameBox(Toolbar)`: TBAR's parent, `UIRegion.m_parent` at `+0xAC`, when it fits snugly
+  round it), as tall as the game's panel frame (`ClientElements.PanelFrame`, `0x100005FF`, 310x372 at 800x600), below
+  the toolbar when there's no room above, with no title bar, dragging or sizing and nothing saved
+  (`FloatingWindow.Anchor`). Not on the panel frame itself, as the first build had it: that's a `gmFloatyPanelUI`
+  (element type `0x1000004F`, a gmPanelUI), a window of its own whose place the game saves (`gmFloatyPanelUI`'s
+  attributes `0x10000086`-`89`), so it stayed put when the toolbar was moved. The frame is shown while a game panel is
+  open, so it turning on (a toolbar button not drawn over, the skills or options, a game key) closes the shared window;
+  and one of its windows opening closes the game's panel (`ClientElements.CloseGamePanel`): what the toolbar's own
+  buttons send, `CM_UI::SendNotice_SetPanelVisibility(panel id, 0)` (static cdecl, `0x47A4A0`), the id the open panel's
+  in gmPanelUI's notice handler (`+0x5F8` in the element: its (element, id) pairs at `+0x4`, count `+0xC`, the open one
+  at `+0x10`, as `gmPanelUI::RecvNotice_SetPanelVisibility`, `0x4BD380`, reads them). `[shared-window]` lines in
+  log.txt say when the frame opens and closes, where the window's attached, and when a game panel was closed.
   **Hide hotbar** (`Ui/GameHotbar.cs`, `SettingsData.HideGameHotbar`, off to start; in Client UI Override's row and the
   Hotbars page's Using, one setting): the game's shortcut bar is hidden while every slot is empty
   (`GameShortcuts.AllEmpty`: `gmToolbarUI::IsShortcutSlotAvailable`, `0x4BE270`, 1 for a slot in range whose item list
-  holds nothing). Its 18 slots and the 6-pixel caps at each row's ends (`0x100001A6`, `0x100001B0`, `0x100006B6`,
-  `0x100006C0`) are the toolbar root's own children in layout `0x21000016`, under its buttons (rows at y 58 and 90),
-  with nothing behind them but the frame's border (layout `0x21000070` is border pieces only), so each is hidden with
-  `ClientElements.SetVisible` (`UIElement::SetVisible`) and the toolbar's buttons stay; the frame doesn't shrink. Looked
-  at once a second, hidden again each time in case the game showed it, and shown again when the setting goes off or the
-  plugin shuts down. `[hotbar]` lines in log.txt.
+  holds nothing). Its 18 slots are the toolbar root's own children in layout `0x21000016` (300x122), under its buttons
+  (rows at y 58 and 90), and the toolbar's frame (TBAR `0x10000603`, a gmFloatyToolbarUI from layout `0x21000070`, its
+  content at 5,5) clips them to its own height: 100 shows the buttons and one row, 132 both, and the game holds it
+  between the two (attributes `0x3E` and `0x3C`, the least and most height, which `UIElement::ResizeTo` keeps to). So
+  the first build, which hid the slots (`UIElement::SetVisible`), changed nothing to see: the frame stayed as big.
+  Now the least height is lowered to 68, the buttons and the borders (`UIElement::SetAttribute_Int`, `0x4606B0`), and
+  the frame made that height (`ClientElements.Place`: the base `UIElement::ResizeTo`, `0x463D60`, and `MoveTo`,
+  `0x4634C0`, not gmFloatyToolbarUI's own, `0x4D0A90` and `0x4D0C00`, which save the place in the player's UI
+  preferences), keeping its bottom edge where it was (its top in the top half of the screen). Nothing of it is saved,
+  and logging out makes the toolbar again. Looked at once a second, shrunk again if it grew, and put back when the
+  setting goes off, the bar gets an item, or the plugin shuts down. `[hotbar]` lines in log.txt.
   The burden pack is element `0x100000F7` in the indicators' layout `0x21000071` (INDI `0x10000611`, the panel it's
   checked against instead of TBAR), its pictures by burden `060074A2` / `060074A3` / `060074A4` (states E, F, 0x10), with
   `0600749B` framed over it while its panel's open (its child `0x100000F2`'s state 3). The game's cut-offs aren't in the

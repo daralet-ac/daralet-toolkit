@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Numerics;
 
 namespace DaraletPlayer.Ui {
@@ -46,9 +45,6 @@ namespace DaraletPlayer.Ui {
 
             return -1;
         }
-
-        /// <summary>The bar's slots, by element id, for Hide hotbar (GameHotbar).</summary>
-        public static IReadOnlyList<uint> SlotIds => Slots;
 
         /// <summary>
         /// Whether every slot on the bar is empty (gmToolbarUI::IsShortcutSlotAvailable on each), or null when the
