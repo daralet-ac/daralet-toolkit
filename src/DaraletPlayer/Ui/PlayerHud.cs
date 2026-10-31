@@ -33,6 +33,7 @@ namespace DaraletPlayer.Ui {
         private readonly HideGameUi hideGameUi;
         private readonly EscapeCloses escapeCloses;
         private readonly Launcher launcher;
+        private readonly BorderlessWindow borderless;
         private readonly MarketApi api = new MarketApi();
 
         /// <summary>
@@ -62,10 +63,11 @@ namespace DaraletPlayer.Ui {
             hideGameUi = new HideGameUi(settings, () => hud.Visible, shown => hud.Visible = shown);
             launcher = new Launcher(settings, () => hud.Visible, Toggle);
             gameHotbar = new GameHotbar(settings);
+            borderless = new BorderlessWindow(settings);
             sharedWindow = new SharedWindow(settings, inventoryTab.CarriedWindow, worldTab.MapWindow, socialTab.Window,
                 questsTab.Window, characterTab.Window);
             configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow, sharedWindow),
-                hideGameUi, launcher);
+                hideGameUi, launcher, borderless);
             leaderboardsTab = new LeaderboardsTab(feed, api);
             toolbarButtons = new ToolbarButtons(settings, icons, inventoryTab.CarriedWindow, questsTab.Window,
                 worldTab.MapWindow, characterTab.Window, socialTab.Window);
@@ -89,7 +91,8 @@ namespace DaraletPlayer.Ui {
                     + "place anywhere), Find a group (/lfgroup and /lfmore), your friends and your squelches.",
                     socialTab.Render),
                 ("Combat", "Your selected target's vitals, buffs, debuffs and threat table, a tracked target to watch "
-                    + "alongside it, and hotbars of items to use with a click or a hotkey.", combatTab.Render),
+                    + "alongside it, hotbars of items to use with a click or a hotkey, and floating combat text and a "
+                    + "combat log.", combatTab.Render),
                 ("Character", "What the game's Character Information panel says (age, deaths, innate attributes, "
                     + "augmentations, burden), then your character stats, as the Combat Focus appraisal shows them: gear "
                     + "mods, ratings, ward, armor level, resistances and jewel effects.", characterTab.Render),
@@ -274,7 +277,7 @@ namespace DaraletPlayer.Ui {
 
             // the game's UI back first, whatever fails after
             var pieces = new IDisposable[] {
-                hideGameUi, escapeCloses, launcher, hud, toolbarButtons, sharedWindow, gameHotbar, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
+                hideGameUi, borderless, escapeCloses, launcher, hud, toolbarButtons, sharedWindow, gameHotbar, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
                 lootTab, api, icons,
             };
 

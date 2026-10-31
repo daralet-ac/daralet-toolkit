@@ -13,6 +13,12 @@ namespace DaraletPlayer {
     public class SettingsData {
         public const float MinTextScale = 0.5f;
         public const float MaxTextScale = 2.5f;
+        public const int MinCombatTextSize = 12;
+        public const int MaxCombatTextSize = 72;
+        public const int MinCombatTextTenths = 5;
+        public const int MaxCombatTextTenths = 50;
+        public const int MinCombatTextHeadSize = 10;
+        public const int MaxCombatTextHeadSize = 300;
 
         [DataMember(Name = "windows")] public Dictionary<string, WindowPlacement> Windows;
         /// <summary>How big the plugin's text is drawn in every window: 1 is normal. A window's own size multiplies it.</summary>
@@ -242,6 +248,32 @@ namespace DaraletPlayer {
         /// <summary>Escape closes the /dap, Inventory, Bank, Character and Quests windows (EscapeCloses).</summary>
         [DataMember(Name = "escapeClosesWindows")] public bool EscapeClosesWindows;
 
+        /// <summary>The game's window has no title bar or border (BorderlessWindow).</summary>
+        [DataMember(Name = "borderlessWindow")] public bool BorderlessWindow;
+
+        // Floating combat text (CombatText): its text height in pixels, how long each stays in tenths of a second, and where
+        // what you do and what's done to you start, in percent of the screen.
+        [DataMember(Name = "combatTextOn")] public bool CombatTextOn;
+        [DataMember(Name = "combatTextSize")] public int CombatTextSize;
+        [DataMember(Name = "combatTextTenths")] public int CombatTextTenths;
+        [DataMember(Name = "combatTextYoursX")] public int CombatTextYoursX;
+        [DataMember(Name = "combatTextYoursY")] public int CombatTextYoursY;
+        [DataMember(Name = "combatTextTheirsX")] public int CombatTextTheirsX;
+        [DataMember(Name = "combatTextTheirsY")] public int CombatTextTheirsY;
+
+        // Numbers over the head of whoever they landed on (CombatHeadText): their size in percent of Decal's 3D text, how far
+        // above the head they start in tenths of a meter, and whether they keep their size with distance.
+        [DataMember(Name = "combatTextOverHead")] public bool CombatTextOverHead;
+        [DataMember(Name = "combatTextHeadSize")] public int CombatTextHeadSize;
+        [DataMember(Name = "combatTextHeadHeight")] public int CombatTextHeadHeight;
+        [DataMember(Name = "combatTextHeadFixedSize")] public bool CombatTextHeadFixedSize;
+
+        /// <summary>Combat is written to a file for each character and day (CombatLogFile).</summary>
+        [DataMember(Name = "combatLogSave")] public bool CombatLogSave;
+
+        /// <summary>What happens to each kind of combat line, by CombatKindInfo.Key; one that isn't here is as it starts.</summary>
+        [DataMember(Name = "combatKinds")] public Dictionary<string, CombatKindOptions> CombatKinds;
+
         [DataMember(Name = "loot")] public LootData Loot;
 
         /// <summary>The hotbars (the Combat tab's Hotbars): their layout, looks and hotkeys, and each character's items.</summary>
@@ -297,6 +329,27 @@ namespace DaraletPlayer {
 
         public float ClampedItemTextScale => Math.Max(MinTextScale, Math.Min(MaxTextScale, ItemTextScale));
 
+        public int ClampedCombatTextSize => Math.Max(MinCombatTextSize, Math.Min(MaxCombatTextSize, CombatTextSize));
+
+        public int ClampedCombatTextHeadSize =>
+            Math.Max(MinCombatTextHeadSize, Math.Min(MaxCombatTextHeadSize, CombatTextHeadSize));
+
+        public double ClampedCombatTextSeconds =>
+            Math.Max(MinCombatTextTenths, Math.Min(MaxCombatTextTenths, CombatTextTenths)) / 10.0;
+
+        /// <summary>What happens to one kind of combat line, made as it starts when asked for the first time.</summary>
+        public CombatKindOptions CombatOptions(CombatKind kind) {
+            var info = CombatKindInfo.For(kind);
+            CombatKinds = CombatKinds ?? new Dictionary<string, CombatKindOptions>();
+
+            if (!CombatKinds.TryGetValue(info.Key, out var options) || options == null) {
+                options = new CombatKindOptions { Color = info.Color };
+                CombatKinds[info.Key] = options;
+            }
+
+            return options;
+        }
+
         private void SetDefaults() {
             Windows = new Dictionary<string, WindowPlacement>();
             TextScale = 1;
@@ -317,6 +370,14 @@ namespace DaraletPlayer {
             FellowshipShowDistance = true;
             ItemTextScale = 1;
             ToolkitKey = new HotkeyBinding();
+            CombatTextSize = 26;
+            CombatTextTenths = 15;
+            CombatTextYoursX = 60;
+            CombatTextYoursY = 45;
+            CombatTextTheirsX = 40;
+            CombatTextTheirsY = 45;
+            CombatTextHeadSize = 50;
+            CombatKinds = new Dictionary<string, CombatKindOptions>();
             TargetShowBuffs = true;
             TargetShowDebuffs = true;
             TargetShowThreat = true;

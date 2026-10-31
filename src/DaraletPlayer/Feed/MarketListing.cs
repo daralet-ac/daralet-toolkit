@@ -24,7 +24,7 @@ namespace DaraletPlayer.Feed {
         [DataMember(Name = "iconOverlayHex")] public string IconOverlayHex;
         /// <summary>The kind of tile behind the icon: Weapon, Armor, Misc... (IconLayers.Underlays).</summary>
         [DataMember(Name = "iconUnderlay")] public string IconUnderlay;
-        /// <summary>What colour the icon's outline is: Fire, Cold, Magical... (IconLayers.OutlineColors).</summary>
+        /// <summary>What the icon's outline is drawn with: Fire, Cold, Magical... (IconLayers.EffectImages).</summary>
         [DataMember(Name = "iconEffect")] public string IconEffect;
         [DataMember(Name = "itemCategory")] public string ItemCategory;
         [DataMember(Name = "weaponClass")] public string WeaponClass;

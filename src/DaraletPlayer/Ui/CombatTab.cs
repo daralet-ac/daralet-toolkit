@@ -9,10 +9,12 @@ namespace DaraletPlayer.Ui {
     internal class CombatTab : IDisposable {
         private readonly TargetTab targetTab;
         private readonly Hotbars hotbars;
+        private readonly CombatLogTab combatLog;
 
         public CombatTab(PlayerFeed feed, Settings settings, ItemIcons icons) {
             targetTab = new TargetTab(feed, settings);
             hotbars = new Hotbars(feed, settings, icons);
+            combatLog = new CombatLogTab(settings, icons);
         }
 
         public void Render() {
@@ -33,12 +35,18 @@ namespace DaraletPlayer.Ui {
                 ImGui.EndTabItem();
             }
 
+            if (Widgets.TabItem("Combat log", "Floating combat text, a window listing recent combat, what's kept out of chat, "
+                + "and combat saved to files by day.")) {
+                combatLog.Render();
+                ImGui.EndTabItem();
+            }
+
             ImGui.EndTabBar();
         }
 
         /// <summary>Each on its own, so one that fails can't leave the other's windows drawing.</summary>
         public void Dispose() {
-            foreach (var piece in new IDisposable[] { targetTab, hotbars }) {
+            foreach (var piece in new IDisposable[] { targetTab, hotbars, combatLog }) {
                 try {
                     piece.Dispose();
                 }

@@ -23,7 +23,9 @@ the game with:
 - **Combat**: what you're fighting: its health, stamina and mana, every buff and debuff on it, and its threat table (who
   it wants to attack), with a window that stays on screen too. And hotbars: drag potions, kits, weapons or spells onto them
   and use or cast them with a click or a hotkey. Each bar can have as many slots, rows and pages as you like, its own colours, and
-  shows cooldowns and how many uses an item has left.
+  shows cooldowns and how many uses an item has left. Floating combat text shows your damage, what's done to you and your
+  healing as numbers rising on screen, or over the head of whoever they landed on. A Combat log window lists it all, and you choose which kinds of line show, stay out of
+  chat, and are saved to a file for each character and day.
 - **Loot**: a looter with loot profiles (sets of rules) you write yourself, using the same filters as the market search. Each character picks
   a loot profile, and you can swap them at any time. When you open a corpse or a chest, it can loot automatically, ask first, or just point
   out what matches. It can also salvage what you tell it to. A rule can ask for how well a stat rolled rather than the stat
@@ -36,6 +38,9 @@ the game with:
   search of the whole market like the website's.
 - **Arena**: queue, challenge, leave and watch duels, with your ratings and the latest results.
 - **Leaderboards**: the website's leaderboards: level, arena, capstones, deaths and more.
+
+The Config tab can also take the title bar and border off the game's window (Borderless window). With the game in windowed
+mode at your screen's resolution, it then fills your screen.
 
 Type `/dap` to open and close the window, or set a key or a button you can put anywhere for it (the Config tab).
 Hover over almost anything for a tooltip saying what it does.

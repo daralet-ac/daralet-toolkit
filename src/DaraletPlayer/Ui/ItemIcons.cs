@@ -12,7 +12,7 @@ using UtilityBelt.Service.Views;
 namespace DaraletPlayer.Ui {
     /// <summary>
     /// Item icons read from portal.dat by UtilityBelt's own loader (ScriptHudManager.GetIconTexture), one texture per icon
-    /// and outline colour. With Compact lists on, list icons aren't drawn.
+    /// and outline effect. With Compact lists on, list icons aren't drawn.
     /// </summary>
     /// <remarks>Split across files: <c>.Marks</c> (loot marks, stack counts) and <c>.Labels</c> (sharp text).</remarks>
     internal partial class ItemIcons : IDisposable {
@@ -40,8 +40,8 @@ namespace DaraletPlayer.Ui {
 
         private readonly Settings settings;
 
-        private readonly Dictionary<(uint, (byte, byte, byte)?), ManagedTexture> textures = new Dictionary<(uint, (byte, byte, byte)?), ManagedTexture>();
-        private readonly Dictionary<(uint, (byte, byte, byte)?), DateTime> failedAt = new Dictionary<(uint, (byte, byte, byte)?), DateTime>();
+        private readonly Dictionary<(uint, string), ManagedTexture> textures = new Dictionary<(uint, string), ManagedTexture>();
+        private readonly Dictionary<(uint, string), DateTime> failedAt = new Dictionary<(uint, string), DateTime>();
         private readonly List<ManagedTexture> recolored = new List<ManagedTexture>();
 
         /// <summary>Each UI picture once made, or null for one that couldn't be, so it isn't tried every frame.</summary>
@@ -105,11 +105,12 @@ namespace DaraletPlayer.Ui {
             }
 
             var corner = at + new Vector2(size, size);
-            var icon = Texture(layers.Icon, layers.OutlineColor);
+            var icon = Texture(layers.Icon, layers.Effect);
 
             AddImage(drawList, Texture(layers.Underlay, null), at, corner, tint);
             AddImage(drawList, icon, at, corner, tint);
-            AddImage(drawList, Texture(layers.Overlay, null), at, corner, tint);
+            // the client puts the overlay on the icon before it paints the white, so the overlay's white is painted too
+            AddImage(drawList, Texture(layers.Overlay, layers.Effect), at, corner, tint);
             return icon != null;
         }
 
@@ -119,7 +120,7 @@ namespace DaraletPlayer.Ui {
                 return false;
             }
 
-            var icon = Texture(layers.Icon, layers.OutlineColor);
+            var icon = Texture(layers.Icon, layers.Effect);
             AddImage(drawList, icon, at, at + new Vector2(size, size));
             return icon != null;
         }
@@ -241,13 +242,15 @@ namespace DaraletPlayer.Ui {
             return Of(Decal.Adapter.CoreManager.Current.WorldFilter[unchecked((int)guid)]);
         }
 
-        /// <summary>The tile behind an item that doesn't name its own, by its kind, as the Market API picks it.</summary>
+        /// <summary>The tile behind an item that doesn't name its own, by its kind (IconLayers.Underlays).</summary>
         private static string UnderlayKind(ObjectClass objectClass) {
             switch (objectClass) {
                 case ObjectClass.MeleeWeapon:
+                    return "MeleeWeapon";
                 case ObjectClass.MissileWeapon:
-                case ObjectClass.WandStaffOrb:
                     return "Weapon";
+                case ObjectClass.WandStaffOrb:
+                    return "Caster";
                 case ObjectClass.Armor:
                     return "Armor";
                 case ObjectClass.Clothing:
@@ -262,15 +265,15 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// An icon's texture, made the first time it's asked for. With an outline colour, the icon's white outline is
-        /// recoloured, as the website does, but only at the icon's edge (AtEdge).
+        /// An icon's texture, made the first time it's asked for. With an effect, its white is painted (Painted). Null for
+        /// the picture as portal.dat has it.
         /// </summary>
-        private ManagedTexture Texture(uint id, (byte R, byte G, byte B)? outline) {
+        private ManagedTexture Texture(uint id, string effect) {
             if (id == 0) {
                 return null;
             }
 
-            var key = (id, outline);
+            var key = (id, effect);
 
             if (textures.TryGetValue(key, out var texture)) {
                 return texture;
@@ -285,7 +288,7 @@ namespace DaraletPlayer.Ui {
             }
 
             try {
-                texture = outline.HasValue ? Recolored(id, outline.Value) : Load(id);
+                texture = effect != null ? Painted(id, effect) : Load(id);
             }
             catch (Exception ex) {
                 // the whole error once, then one line per icon
@@ -358,40 +361,43 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        private ManagedTexture Recolored(uint id, (byte R, byte G, byte B) outline) {
-            // the plain icon, kept for drawing it plain too
-            if (!textures.TryGetValue((id, null), out var original)) {
-                original = Load(id);
+        /// <summary>The picture as portal.dat has it, kept for drawing it plain too.</summary>
+        private ManagedTexture Plain(uint id) {
+            if (!textures.TryGetValue((id, null), out var plain)) {
+                plain = Load(id);
 
-                if (original != null) {
-                    textures[(id, null)] = original;
+                if (plain != null) {
+                    textures[(id, null)] = plain;
                 }
             }
+
+            return plain;
+        }
+
+        /// <summary>
+        /// The picture with its pure white painted as the client does it (IconLayers.EffectImages): each such pixel, wherever
+        /// it is, takes the colour at the same spot in the effect's picture, or a sigil's one colour.
+        /// </summary>
+        private ManagedTexture Painted(uint id, string effect) {
+            var original = Plain(id);
 
             if (original?.Bitmap == null) {
                 return null;
             }
 
+            var isSigil = IconLayers.SigilOutlines.TryGetValue(effect, out var sigil);
+            var paint = isSigil ? null : Plain(IconLayers.EffectImage(effect))?.Bitmap;
+
+            // like the client, which leaves the white alone with no picture, or one smaller than the icon
+            if (!isSigil && (paint == null || paint.Width < original.Bitmap.Width || paint.Height < original.Bitmap.Height)) {
+                return original;
+            }
+
             using (var bitmap = new Bitmap(original.Bitmap)) {
-                var color = Color.FromArgb(outline.R, outline.G, outline.B);
-                var width = bitmap.Width;
-                var height = bitmap.Height;
-
-                // see-through pixels, read before any is changed
-                var clear = new bool[width, height];
-
-                for (var y = 0; y < height; y++) {
-                    for (var x = 0; x < width; x++) {
-                        clear[x, y] = bitmap.GetPixel(x, y).A == 0;
-                    }
-                }
-
-                for (var y = 0; y < height; y++) {
-                    for (var x = 0; x < width; x++) {
-                        var pixel = bitmap.GetPixel(x, y);
-
-                        if (pixel.A > 0 && IsOutline(pixel) && AtEdge(clear, x, y)) {
-                            bitmap.SetPixel(x, y, Color.FromArgb(pixel.A, color));
+                for (var y = 0; y < bitmap.Height; y++) {
+                    for (var x = 0; x < bitmap.Width; x++) {
+                        if (bitmap.GetPixel(x, y).ToArgb() == IconLayers.OutlinePixel) {
+                            bitmap.SetPixel(x, y, isSigil ? Color.FromArgb(sigil.R, sigil.G, sigil.B) : paint.GetPixel(x, y));
                         }
                     }
                 }
@@ -401,34 +407,6 @@ namespace DaraletPlayer.Ui {
                 recolored.Add(texture);
                 return texture;
             }
-        }
-
-        /// <summary>
-        /// Whether a pixel is on the icon's edge: next to a see-through one (diagonals too) or the picture's border. The
-        /// outline is the white line round the item, so only there is white the outline: an item's own white parts (a
-        /// shovel's blade, a whisk) are inside it, and recolouring every white pixel turned them black.
-        /// </summary>
-        private static bool AtEdge(bool[,] clear, int x, int y) {
-            var width = clear.GetLength(0);
-            var height = clear.GetLength(1);
-
-            for (var dy = -1; dy <= 1; dy++) {
-                for (var dx = -1; dx <= 1; dx++) {
-                    var nx = x + dx;
-                    var ny = y + dy;
-
-                    if (nx < 0 || ny < 0 || nx >= width || ny >= height || clear[nx, ny]) {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        private static bool IsOutline(Color pixel) {
-            const int threshold = IconLayers.OutlineThreshold;
-            return pixel.R >= threshold && pixel.G >= threshold && pixel.B >= threshold;
         }
 
         public void Dispose() {

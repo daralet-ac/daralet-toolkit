@@ -15,6 +15,23 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void AWeaponsTileGoesByItsClass() {
+            uint Tile(string weaponClass) {
+                return IconLayers.Of(new MarketListing { IconHex = "06001234", IconUnderlay = "Weapon", WeaponClass = weaponClass }).Underlay;
+            }
+
+            foreach (var melee in new[] { "Martial", "Dagger", "Staff", "Unarmed" }) {
+                Assert.AreEqual(0x060011CBu, Tile(melee), melee);
+            }
+
+            Assert.AreEqual(0x060011D2u, Tile("Missile"));
+            Assert.AreEqual(0x060011D2u, Tile("Thrown"), "thrown weapons are missile weapons to the game");
+            Assert.AreEqual(0x060011D4u, Tile("WarMagic"));
+            Assert.AreEqual(0x060011D4u, Tile("LifeMagic"));
+            Assert.AreEqual(0x060011D2u, Tile(null), "with no class, the tile the API named");
+        }
+
+        [TestMethod]
         public void AnUnknownKindGetsTheMiscTileAndNoIconIsEmpty() {
             var icon = IconLayers.FromHex(null, null, "SomethingNew");
 
@@ -26,21 +43,35 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
-        public void TheOutlineIsBlackUnlessTheItemHasAnEffect() {
-            Assert.AreEqual(((byte)0, (byte)0, (byte)0), IconLayers.FromHex("06001234", null, "Misc").OutlineColor);
-            Assert.AreEqual(((byte)0, (byte)0, (byte)0), IconLayers.FromHex("06001234", null, "Misc", "SomethingNew").OutlineColor);
-            Assert.AreEqual(((byte)102, (byte)194, (byte)255), IconLayers.Of(new MarketListing { IconHex = "06001234", IconEffect = "Magical" }).OutlineColor);
-            Assert.AreEqual(((byte)30, (byte)110, (byte)255), IconLayers.FromHex("06001234", null, "SigilBlue", "SigilBlue").OutlineColor);
+        public void TheOutlineIsTheDefaultPictureUnlessTheItemHasAnEffect() {
+            const uint black = 0x060011C5;
+
+            Assert.AreEqual(black, IconLayers.EffectImage(IconLayers.FromHex("06001234", null, "Misc").Effect));
+            Assert.AreEqual(black, IconLayers.EffectImage("SomethingNew"));
+            Assert.AreEqual(black, IconLayers.EffectImage(null));
+            Assert.AreEqual(0x060011CAu, IconLayers.EffectImage(IconLayers.Of(new MarketListing { IconHex = "06001234", IconEffect = "Magical" }).Effect));
+            Assert.AreEqual(0x06001B2Eu, IconLayers.EffectImage("fire"), "the Market API's names, whatever their case");
+            Assert.IsTrue(IconLayers.SigilOutlines.ContainsKey("SigilBlue"), "a sigil's outline is a colour, not a picture");
         }
 
         [TestMethod]
-        public void TheClientsUiEffectsPickTheSameEffectAsTheMarketApi() {
+        public void TheLowestUiEffectBitDecidesAsInTheClient() {
             Assert.AreEqual("Undef", IconLayers.EffectOf(0));
             Assert.AreEqual("Magical", IconLayers.EffectOf(0x0001));
-            Assert.AreEqual("Fire", IconLayers.EffectOf(0x0020 | 0x0001), "an element before magic");
+            Assert.AreEqual("Magical", IconLayers.EffectOf(0x0020 | 0x0001), "magic before an element");
+            Assert.AreEqual("Fire", IconLayers.EffectOf(0x0020 | 0x0080));
             Assert.AreEqual("Electric", IconLayers.EffectOf(0x0040));
             Assert.AreEqual("Cold", IconLayers.EffectOf(0x0080));
             Assert.AreEqual("Acid", IconLayers.EffectOf(0x0100));
+            Assert.AreEqual("Slashing", IconLayers.EffectOf(0x0400));
+            Assert.AreEqual("Undef", IconLayers.EffectOf(0x1000), "Nether has no picture");
+        }
+
+        [TestMethod]
+        public void EveryEffectTheFlagsNameHasAPicture() {
+            for (var bit = 0; bit < 12; bit++) {
+                Assert.IsTrue(IconLayers.EffectImages.ContainsKey(IconLayers.EffectOf(1u << bit)), $"bit {bit}");
+            }
         }
 
         [TestMethod]

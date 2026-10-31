@@ -21,6 +21,11 @@
       <HintPath>..\..\deps\Decal.Adapter.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <!-- The types behind Decal.Adapter's 3D text (CombatHeadText). Installed with Decal, so only referenced for compiling. -->
+    <Reference Include="Decal.Interop.D3DService">
+      <HintPath>..\..\deps\Decal.Interop.D3DService.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <!-- UtilityBelt.Service's dat readers (ACE.DatLoader), for the dungeon maps. Installed with UtilityBelt.Service, next to
          it, so only referenced for compiling: this copy is from 2.2.12. -->
     <Reference Include="UtilityBelt.Common">

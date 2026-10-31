@@ -19,6 +19,8 @@ namespace DaraletPlayer.Ui {
         private readonly Dictionary<(string Text, int Pixels), (ManagedTexture Texture, Vector2 Size)> labels =
             new Dictionary<(string, int), (ManagedTexture, Vector2)>();
         private readonly HashSet<(string, int)> failedLabels = new HashSet<(string, int)>();
+        private readonly List<ManagedTexture> retiredLabels = new List<ManagedTexture>();
+        private int retiredLabelsFrame;
         private bool loggedLabelFailure;
         private static FontFamily labelFamily;
 
@@ -49,6 +51,7 @@ namespace DaraletPlayer.Ui {
                 return null;
             }
 
+            FreeRetiredLabels(ImGui.GetFrameCount());
             var key = (text, Math.Min(pixels, 200));
 
             if (labels.TryGetValue(key, out var label)) {
@@ -60,7 +63,7 @@ namespace DaraletPlayer.Ui {
             }
 
             if (labels.Count >= MaxLabels) {
-                FreeLabels();
+                RetireLabels();
             }
 
             try {
@@ -127,12 +130,41 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>
+        /// Empties the cache, freeing its textures only from the next frame: labels already drawn this frame are on a draw
+        /// list that hasn't been rendered yet, and a freed texture there could crash the game. Floating combat text's many
+        /// numbers fill the cache in a way a hotbar's few labels never did.
+        /// </summary>
+        private void RetireLabels() {
+            foreach (var label in labels.Values) {
+                retiredLabels.Add(label.Texture);
+            }
+
+            labels.Clear();
+            retiredLabelsFrame = ImGui.GetFrameCount();
+        }
+
+        private void FreeRetiredLabels(int frame) {
+            if (retiredLabels.Count == 0 || frame == retiredLabelsFrame) {
+                return;
+            }
+
+            foreach (var texture in retiredLabels) {
+                texture.Dispose();
+            }
+
+            retiredLabels.Clear();
+        }
+
         private void FreeLabels() {
             foreach (var label in labels.Values) {
                 label.Texture.Dispose();
             }
 
             labels.Clear();
+
+            // the plugin's going, and nothing more will be drawn with these
+            FreeRetiredLabels(retiredLabelsFrame + 1);
         }
     }
 }
