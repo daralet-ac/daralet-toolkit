@@ -1,7 +1,7 @@
 using System.Runtime.Serialization;
 
 namespace DaraletPlayer.Feed {
-    /// <summary>What happens to one kind of combat line (the Combat tab's Combat log).</summary>
+    /// <summary>What happens to one kind of combat line (the Combat tab's Combat Text).</summary>
     [DataContract]
     public class CombatKindOptions {
         /// <summary>Shown as floating text.</summary>

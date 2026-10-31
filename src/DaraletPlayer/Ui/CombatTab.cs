@@ -35,7 +35,7 @@ namespace DaraletPlayer.Ui {
                 ImGui.EndTabItem();
             }
 
-            if (Widgets.TabItem("Combat log", "Floating combat text, a window listing recent combat, what's kept out of chat, "
+            if (Widgets.TabItem("Combat Text", "Floating combat text, a window listing recent combat, what's kept out of chat, "
                 + "and combat saved to files by day.")) {
                 combatLog.Render();
                 ImGui.EndTabItem();

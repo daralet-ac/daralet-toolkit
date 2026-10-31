@@ -294,9 +294,11 @@ namespace DaraletPlayer.Ui {
 
             if (Form.FlowSmallButton(ref first, "Export", "Copies this loot profile as text, to paste somewhere or give to "
                 + "someone.")) {
-                ImGui.SetClipboardText(Loot.Export(active));
+                var exported = SystemClipboard.Set(Loot.Export(active));
                 importProblem = null;
-                ShowListMessage($"Copied \"{active.Name}\" ({Words.Count(active.Rules.Count, "rule")}) to the clipboard: paste it anywhere to share it.");
+                ShowListMessage(exported
+                    ? $"Copied \"{active.Name}\" ({Words.Count(active.Rules.Count, "rule")}) to the clipboard: paste it anywhere to share it."
+                    : "Couldn't reach the clipboard. Try again, or use To file.");
             }
 
             if (Form.FlowSmallButton(ref first, "To file", $"Saves this loot profile as a file, named after it, in {folder}, "
@@ -305,7 +307,7 @@ namespace DaraletPlayer.Ui {
             }
 
             if (Form.FlowSmallButton(ref first, "Import", "Adds a loot profile from text you've copied (an Export).")) {
-                var imported = Loot.Import(ImGui.GetClipboardText(), out importProblem);
+                var imported = Loot.Import(SystemClipboard.Get(), out importProblem);
 
                 if (imported != null) {
                     AddImported(imported, "");

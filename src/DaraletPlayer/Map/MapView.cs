@@ -502,7 +502,7 @@ namespace DaraletPlayer.Map {
 
             if (ImGui.MenuItem("Copy coordinates")) {
                 var spot = MenuCoordinates();
-                ImGui.SetClipboardText(MapProjection.Format(spot.X, spot.Y));
+                SystemClipboard.Set(MapProjection.Format(spot.X, spot.Y));
             }
 
             ImGui.EndPopup();

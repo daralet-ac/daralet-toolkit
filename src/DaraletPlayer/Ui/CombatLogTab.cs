@@ -6,13 +6,16 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The Combat tab's Combat log: the settings for floating combat text, the Combat log window and the saved logs, with a
+    /// The Combat tab's Combat Text: the settings for floating combat text, the Combat log window and the saved logs, with a
     /// row for each kind of combat line saying where it goes, and the Combat log window itself (`combat-log`, hidden to
     /// start). Every choice is in the settings profile.
     /// </summary>
     internal sealed class CombatLogTab : IDisposable {
         /// <summary>The most lines drawn at once, the newest: each is wrapped text, so they can't be skipped cheaply.</summary>
         private const int Drawn = 300;
+
+        /// <summary>How long a line stays lit up after Copy, saying how it went.</summary>
+        private const double CopiedSeconds = 1.5;
 
         private readonly Settings settings;
         private readonly CombatWatch watch;
@@ -23,6 +26,9 @@ namespace DaraletPlayer.Ui {
         private bool follow = true;
         private int lastCount;
         private string problem;
+        private CombatLine copied;
+        private double copiedAt;
+        private bool copyWorked;
 
         public CombatLogTab(Settings settings, ItemIcons icons) {
             this.settings = settings;
@@ -231,7 +237,9 @@ namespace DaraletPlayer.Ui {
 
             for (var i = first; i < lines.Count; i++) {
                 if (Shows(lines[i])) {
+                    ImGui.PushID(i);
                     DrawLine(lines[i]);
+                    ImGui.PopID();
                 }
             }
 
@@ -250,9 +258,61 @@ namespace DaraletPlayer.Ui {
 
         private void DrawLine(CombatLine line) {
             var color = PackedColor.Unpack(settings.Data.CombatOptions(line.Kind).Color);
+            var shown = $"{line.At:HH:mm:ss} {line.Text}";
             ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(color.R, color.G, color.B, 1));
-            Widgets.TextWrapped($"{line.At:HH:mm:ss} {line.Text}");
+            Widgets.TextWrapped(shown);
             ImGui.PopStyleColor();
+            DrawCopy(line, shown);
+        }
+
+        /// <summary>A Copy button at the end of the line's first row, while the mouse is anywhere along the line.</summary>
+        private void DrawCopy(CombatLine line, string shown) {
+            var top = ImGui.GetItemRectMin();
+            var bottom = ImGui.GetItemRectMax().Y;
+            var right = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
+            var mouse = ImGui.GetMousePos();
+
+            // a pressed button is an active item, which plain IsWindowHovered says blocks the window: the button would go
+            // the moment it was pressed, before its release could count as a click
+            var hovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem)
+                && mouse.X >= top.X && mouse.X <= right && mouse.Y >= top.Y && mouse.Y < bottom;
+            var result = ReferenceEquals(copied, line) && ImGui.GetTime() - copiedAt < CopiedSeconds;
+
+            if (!hovered && !result) {
+                return;
+            }
+
+            var tint = !result ? PackedColor.Pack(1, 1, 1, 0.08f)
+                : copyWorked ? PackedColor.Pack(0.2f, 0.8f, 0.35f, 0.3f)
+                : PackedColor.Pack(0.9f, 0.25f, 0.2f, 0.3f);
+            ImGui.GetWindowDrawList().AddRectFilled(top, new Vector2(right, bottom), tint);
+
+            var label = !result ? "Copy" : copyWorked ? "Copied!" : "Couldn't copy";
+            var width = ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 2;
+            var after = ImGui.GetCursorScreenPos();
+            ImGui.SetCursorScreenPos(new Vector2(right - width, top.Y));
+
+            if (result) {
+                ImGui.PushStyleColor(ImGuiCol.Button, copyWorked ? new Vector4(0.15f, 0.55f, 0.25f, 1) : new Vector4(0.7f, 0.2f, 0.15f, 1));
+            }
+
+            var clicked = ImGui.SmallButton(label + "###copy");
+
+            if (result) {
+                ImGui.PopStyleColor();
+            }
+
+            if (clicked) {
+                copyWorked = SystemClipboard.Set(shown);
+                copied = line;
+                copiedAt = ImGui.GetTime();
+            }
+            Widgets.Tip("Copies this line, with its time, to the clipboard.");
+
+            // ImGui asserts on a cursor moved past what's been drawn with nothing drawn after it. An empty item, which adds
+            // only the gap between items, lands the cursor back where the line had left it
+            ImGui.SetCursorScreenPos(new Vector2(after.X, after.Y - ImGui.GetStyle().ItemSpacing.Y));
+            ImGui.Dummy(Vector2.Zero);
         }
 
         /// <summary>Each on its own, so one that fails can't leave the others listening.</summary>

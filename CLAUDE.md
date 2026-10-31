@@ -109,6 +109,13 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
   with its own. `CursorKeeper` answers it instead (the system cursor ImGui's code would pick, `SetCursor`, and `e.Eat`
   on Decal's `WindowMessage`) while ImGui's cursor isn't the plain arrow, which is left to the game. It covers other
   plugins' ImGui windows too: there's one ImGui.
+- **Putting ImGui's cursor back after drawing out of place asserts** ("Code uses SetCursorPos()/SetCursorScreenPos() to
+  extend window/parent boundaries"), in a dialog over the game, if nothing is drawn after it. Move it to one item gap
+  above where it was and draw `ImGui.Dummy(Vector2.Zero)`, which lands it there (`CombatLogTab.DrawCopy`).
+- **The clipboard goes through `SystemClipboard`**, which uses Windows directly and says if it couldn't, not ImGui's calls,
+  which can't say. `[clipboard]` lines in log.txt.
+- **A button drawn only while `IsWindowHovered()` never gets clicked.** A pressed button is an active item, which that says
+  blocks the window, so the button goes before its release counts. Pass `AllowWhenBlockedByActiveItem` (`CombatLogTab.DrawCopy`).
 - **Every Decal event handler and render callback is wrapped in try/catch.** An exception escaping into Decal can crash the
   client.
 - **JSON:** System.Text.Json writes dictionaries as objects; `DataContractJsonSerializer` only reads them with
@@ -672,7 +679,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   at shutdown. A true fullscreen game has no caption, so nothing happens. Centre and Top left move it, having no title bar
   to drag. `[borderless]` lines in log.txt. Untested in the game when written.
 
-- **Combat log** (the Combat tab's sub tab: `Ui/CombatLogTab.cs`, `Ui/CombatWatch.cs`, `Ui/CombatText.cs`,
+- **Combat Text** (the Combat tab's sub tab, with the Combat log window, whose lines show a Copy button while hovered: `Ui/CombatLogTab.cs`, `Ui/CombatWatch.cs`, `Ui/CombatText.cs`,
   `Feed/CombatLines.cs`, `CombatKindInfo.cs`, `CombatFloats.cs`, `CombatLogFile.cs`): everything is read from
   `ChatBoxMessage` by `CombatLines.Read`, since chat is the one place all combat comes through: the client writes its own
   line for `GameEventAttackerNotification` (`You %s %s for %d point%s of %sdamage!` in `acclient.exe`; the line for being hit
