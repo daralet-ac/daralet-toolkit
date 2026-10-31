@@ -76,24 +76,14 @@ namespace DaraletPlayer.Ui {
             if (Form.Check("Over their head##combat-text-over", ref data.CombatTextOverHead, "Your hits float over the creature "
                 + "you hit, and what's done to you over your own head. Chat only gives a name, so among several of that name "
                 + "it's the one you hit last, then your selection, then the nearest. Anything it can't place uses the places "
-                + "on screen below. These are Decal's 3D text, so a wall can hide them, and Size above doesn't change them.")) {
+                + "on screen below. They're drawn on top of everything, so a wall doesn't hide them.")) {
                 settings.Changed();
             }
 
             if (data.CombatTextOverHead) {
-                Form.Label("Size over target", "How big the numbers over a head are.");
-                Changed(Form.Slider("##combat-text-head-size", ref data.CombatTextHeadSize, SettingsData.MinCombatTextHeadSize,
-                    SettingsData.MaxCombatTextHeadSize, "%d%%"));
-
-                Form.Label("Height", "How far above where they'd start the numbers begin, in tenths of a meter.");
+                Form.Label("Height", "How far above a person's height the numbers begin, in tenths of a meter. The game "
+                    + "doesn't say how tall a creature is, so this is one height for all of them.");
                 Changed(Form.Slider("##combat-text-head-height", ref data.CombatTextHeadHeight, -20, 40, "%d tenths"));
-
-                Form.Label("Distance", "Whether numbers shrink as the creature gets further away.");
-
-                if (Form.Check("Same size far away##combat-text-head-fixed", ref data.CombatTextHeadFixedSize,
-                    "Numbers stay the same size however far away the creature is, rather than shrinking with distance.")) {
-                    settings.Changed();
-                }
             }
 
             Form.Label("You: across", "Where what you do starts, as a percent of the way across the screen.");

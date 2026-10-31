@@ -17,8 +17,6 @@ namespace DaraletPlayer {
         public const int MaxCombatTextSize = 72;
         public const int MinCombatTextTenths = 5;
         public const int MaxCombatTextTenths = 50;
-        public const int MinCombatTextHeadSize = 10;
-        public const int MaxCombatTextHeadSize = 300;
 
         [DataMember(Name = "windows")] public Dictionary<string, WindowPlacement> Windows;
         /// <summary>How big the plugin's text is drawn in every window: 1 is normal. A window's own size multiplies it.</summary>
@@ -264,9 +262,7 @@ namespace DaraletPlayer {
         // Numbers over the head of whoever they landed on (CombatHeadText): their size in percent of Decal's 3D text, how far
         // above the head they start in tenths of a meter, and whether they keep their size with distance.
         [DataMember(Name = "combatTextOverHead")] public bool CombatTextOverHead;
-        [DataMember(Name = "combatTextHeadSize")] public int CombatTextHeadSize;
         [DataMember(Name = "combatTextHeadHeight")] public int CombatTextHeadHeight;
-        [DataMember(Name = "combatTextHeadFixedSize")] public bool CombatTextHeadFixedSize;
 
         /// <summary>Combat is written to a file for each character and day (CombatLogFile).</summary>
         [DataMember(Name = "combatLogSave")] public bool CombatLogSave;
@@ -331,9 +327,6 @@ namespace DaraletPlayer {
 
         public int ClampedCombatTextSize => Math.Max(MinCombatTextSize, Math.Min(MaxCombatTextSize, CombatTextSize));
 
-        public int ClampedCombatTextHeadSize =>
-            Math.Max(MinCombatTextHeadSize, Math.Min(MaxCombatTextHeadSize, CombatTextHeadSize));
-
         public double ClampedCombatTextSeconds =>
             Math.Max(MinCombatTextTenths, Math.Min(MaxCombatTextTenths, CombatTextTenths)) / 10.0;
 
@@ -376,7 +369,6 @@ namespace DaraletPlayer {
             CombatTextYoursY = 45;
             CombatTextTheirsX = 40;
             CombatTextTheirsY = 45;
-            CombatTextHeadSize = 50;
             CombatKinds = new Dictionary<string, CombatKindOptions>();
             TargetShowBuffs = true;
             TargetShowDebuffs = true;

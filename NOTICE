@@ -17,7 +17,7 @@ The source code is at <https://github.com/daralet-ac/daralet-toolkit>.
 Additional permission under GNU GPL version 3 section 7
 
 If you modify this program, or any covered work, by linking or combining it with Decal (including Decal.Adapter and
-Decal.Interop.Core and Decal.Interop.D3DService), UtilityBelt.Service, Managed DirectX or the Asheron's Call client (or a
+Decal.Interop.Core), UtilityBelt.Service, Managed DirectX or the Asheron's Call client (or a
 modified version of any of them), containing parts covered by the terms of their own licenses, the licensors of this program grant you additional
 permission to convey the resulting work.
 
@@ -27,7 +27,7 @@ Not covered by this license
 These are in this repository, or built into or shipped with the plugin, but aren't the Daralet developers' work. They
 keep their own owners' terms:
 
-- deps/Decal.Adapter.dll, deps/Decal.Interop.Core.dll and deps/Decal.Interop.D3DService.dll: from Decal 2.9.8.3.
+- deps/Decal.Adapter.dll and deps/Decal.Interop.Core.dll: from Decal 2.9.8.3.
 - deps/UtilityBelt.Common.dll: from UtilityBelt.Service 2.2.12, under the MIT License
   (installer/UtilityBelt.Service-LICENSE.txt). Only compiled against; the copy installed with UtilityBelt.Service is used.
 - src/DaraletPlayer/Resources/ui/*.png: pictures taken from the Asheron's Call client.

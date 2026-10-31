@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using DaraletPlayer.Feed;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -27,10 +28,53 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
-        public void ColourGoesFromImGuisOrderToDecals() {
-            Assert.AreEqual(unchecked((int)0xFF112233), CombatTargets.ToArgb(0xFF332211, 1));
-            Assert.AreEqual(unchecked((int)0x80112233), CombatTargets.ToArgb(0xFF332211, 0.5f));
-            Assert.AreEqual(0x00112233, CombatTargets.ToArgb(0xFF332211, 0));
+        public void APlaceInTheWorldLandsWhereTheGamesCameraPutsIt() {
+            // the camera as the game had it in a dungeon, 1920x1200, with the player's feet at (113.13, -55.87, 0)
+            var view = new[] { -1f, 0.001f, 0.004f, 0, 0, 0.958f, -0.287f, 0, -0.004f, -0.287f, -0.958f, 0, 112.915f, -17.621f, -46.261f, 1 };
+            var projection = new[] { 1.04f, 0, 0, 0, 0, 1.663f, 0, 0, 0, 0, 1, 1, 0, 0, -0.1f, 0 };
+
+            Assert.IsTrue(CombatProjection.ToScreen(view, projection, 0, 0, 1920, 1200, 113.13f, 0, -55.87f, out var x, out var y));
+            Assert.AreEqual(961, x, 1);
+            Assert.AreEqual(791, y, 1);
+            Assert.AreEqual(7.85f, CombatProjection.DistanceFromCamera(view, 113.13f, 0, -55.87f), 0.05f);
+            Assert.IsFalse(CombatProjection.ToScreen(view, projection, 0, 0, 1920, 1200, 113.13f, 0, -40, out _, out _), "behind it");
+        }
+
+        [TestMethod]
+        public void ACleaveGoesToTheNearestThatHasntHadANumber() {
+            var three = new[] { (Id: 10, Distance: 5.0), (Id: 20, Distance: 1.0), (Id: 30, Distance: 9.0) };
+
+            Assert.AreEqual(20, CombatTargets.NearestNotUsed(three, new List<int>()));
+            Assert.AreEqual(10, CombatTargets.NearestNotUsed(three, new List<int> { 20 }));
+            Assert.AreEqual(20, CombatTargets.NearestNotUsed(three, new List<int> { 10, 30 }));
+            Assert.AreEqual(0, CombatTargets.NearestNotUsed(three, new List<int> { 10, 20, 30 }), "more hits than creatures");
+        }
+
+        [TestMethod]
+        public void TheSwappedCameraIsToldAndPutRight() {
+            var view = new[] { -1f, 0.001f, 0.004f, 0, 0, 0.958f, -0.287f, 0, -0.004f, -0.287f, -0.958f, 0, 112.915f, -17.621f, -46.261f, 1 };
+            var projection = new[] { 1.04f, 0, 0, 0, 0, 1.663f, 0, 0, 0, 0, 1, 1, 0, 0, -0.1f, 0 };
+            var swapped = (float[])view.Clone();
+            CombatProjection.Unswap(swapped);
+
+            Assert.AreEqual(view[13], swapped[14], "row 4 as the game had it: 119.61, -32.10, -13.08 for 119.61, -13.08, -32.10");
+            Assert.AreEqual(view[14], swapped[13]);
+            Assert.IsFalse(CombatProjection.IsSwapped(view, 113.13f, -55.87f, 0));
+            Assert.IsTrue(CombatProjection.IsSwapped(swapped, 113.13f, -55.87f, 0));
+            Assert.IsTrue(CombatProjection.IsSwapped(swapped, 113.13f, 20, 20), "Y and Z the same: by which way is up");
+            Assert.IsFalse(CombatProjection.IsSwapped(view, 113.13f, 20, 20));
+
+            CombatProjection.Unswap(swapped);
+            CollectionAssert.AreEqual(view, swapped);
+            Assert.IsTrue(CombatProjection.ToScreen(swapped, projection, 0, 0, 1920, 1200, 113.13f, 0, -55.87f, out var x, out var y));
+            Assert.AreEqual(961, x, 1);
+            Assert.AreEqual(791, y, 1);
+        }
+
+        [TestMethod]
+        public void ALandblockNextDoorIs192MetersAway() {
+            Assert.AreEqual((192f, -192f), CombatProjection.LandblockOffset(0xA9B30021, 0xA8B40021));
+            Assert.AreEqual((0f, 0f), CombatProjection.LandblockOffset(0x018A0239, 0x018A025A));
         }
 
         [TestMethod]

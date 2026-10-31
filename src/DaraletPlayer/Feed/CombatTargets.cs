@@ -41,13 +41,19 @@ namespace DaraletPlayer.Feed {
             return selectedIsThere ? selected : nearest;
         }
 
-        /// <summary>A colour packed for ImGui (ABGR) as Decal's 3D objects take it (ARGB), at this share of its opacity.</summary>
-        public static int ToArgb(uint color, float alpha) {
-            var a = (uint)Math.Round(((color >> 24) & 0xFF) * Math.Max(0, Math.Min(1, alpha)));
-            var b = (color >> 16) & 0xFF;
-            var g = (color >> 8) & 0xFF;
-            var r = color & 0xFF;
-            return unchecked((int)((a << 24) | (r << 16) | (g << 8) | b));
+        /// <summary>The nearest of these that hasn't had a number yet, or 0 if they all have.</summary>
+        public static int NearestNotUsed(IEnumerable<(int Id, double Distance)> around, ICollection<int> used) {
+            var nearest = 0;
+            var nearestDistance = double.MaxValue;
+
+            foreach (var (id, distance) in around) {
+                if (distance < nearestDistance && !used.Contains(id)) {
+                    nearest = id;
+                    nearestDistance = distance;
+                }
+            }
+
+            return nearest;
         }
     }
 }

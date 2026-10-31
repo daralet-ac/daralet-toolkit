@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Numerics;
 using Decal.Adapter;
@@ -23,6 +24,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>How much bigger a critical, a kill or a death is.</summary>
         private const float BigScale = 1.4f;
 
+        /// <summary>The gap between numbers stacked over a head, in text heights.</summary>
+        private const float StackGap = 0.15f;
+
         private static readonly (string Text, bool Yours, bool Big, CombatKind Kind)[] Samples = {
             ("128", true, false, CombatKind.YouHit),
             ("-54", false, false, CombatKind.HitYou),
@@ -39,6 +43,7 @@ namespace DaraletPlayer.Ui {
         private readonly CombatFloats floats = new CombatFloats();
         private readonly Stopwatch clock = Stopwatch.StartNew();
         private readonly CombatHeadText heads;
+        private readonly Dictionary<int, float> stackTops = new Dictionary<int, float>();
 
         private double nextSample;
         private int sample;
@@ -87,7 +92,6 @@ namespace DaraletPlayer.Ui {
 
                 if (!shown) {
                     floats.Clear();
-                    heads.Clear();
                 }
             }
             catch (Exception ex) {
@@ -117,7 +121,6 @@ namespace DaraletPlayer.Ui {
 
                 var duration = settings.Data.ClampedCombatTextSeconds;
                 floats.Expire(now, duration);
-                heads.Step(floats.All, now, duration);
 
                 var data = settings.Data;
                 var screen = ImGui.GetIO().DisplaySize;
@@ -125,9 +128,21 @@ namespace DaraletPlayer.Ui {
                 var theirs = new Vector2(screen.X * data.CombatTextTheirsX / 100f, screen.Y * data.CombatTextTheirsY / 100f);
                 var drawList = ImGui.GetBackgroundDrawList();
 
-                foreach (var one in floats.All) {
-                    if (one.Over != 0 && !heads.Failed) {
-                        continue;
+                heads.BeginFrame(floats.All);
+                stackTops.Clear();
+
+                // newest first: a new number starts lowest, and the older ones over the same head make room above it
+                for (var i = floats.All.Count - 1; i >= 0; i--) {
+                    var one = floats.All[i];
+                    var from = one.Yours ? yours : theirs;
+                    var overHead = one.Over != 0 && heads.HasCamera;
+
+                    if (overHead) {
+                        if (!heads.TryPlace(one.Over, out var over)) {
+                            continue;
+                        }
+
+                        from = over;
                     }
 
                     var pixels = (int)Math.Round(data.ClampedCombatTextSize * (one.Big ? BigScale : 1));
@@ -138,9 +153,19 @@ namespace DaraletPlayer.Ui {
                     }
 
                     var (rise, alpha) = CombatFloats.At(now - one.Start, duration);
-                    var from = one.Yours ? yours : theirs;
-                    var at = from + new Vector2(one.Lane * data.ClampedCombatTextSize * 2.5f - size.Value.X / 2,
-                        -rise * data.ClampedCombatTextSize);
+                    var at = from + new Vector2(-size.Value.X / 2, -rise * data.ClampedCombatTextSize);
+
+                    if (overHead) {
+                        if (stackTops.TryGetValue(one.Over, out var top)) {
+                            at.Y = Math.Min(at.Y, top - size.Value.Y - data.ClampedCombatTextSize * StackGap);
+                        }
+
+                        stackTops[one.Over] = at.Y;
+                    }
+                    else {
+                        at.X += one.Lane * data.ClampedCombatTextSize * 2.5f;
+                    }
+
                     icons.DrawLabel(drawList, one.Text, at, pixels, PackedColor.Fade(one.Color, alpha));
                 }
             }
@@ -168,7 +193,6 @@ namespace DaraletPlayer.Ui {
             hud.OnRender -= Hud_OnRender;
             hud.Visible = false;
             hud.Dispose();
-            heads.Dispose();
         }
     }
 }

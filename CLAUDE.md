@@ -17,7 +17,7 @@ up to date.
   README links the 2.2.12 installer. 3.x is out but untested here. Windows are
   `UBService.Huds.CreateHud(name)` with `OnRender`, drawn with ImGui (`ImGuiNET`). Images use `ManagedTexture`, made
   lazily the first time it's drawn, once the game's graphics device exists.
-- `deps/` holds `Decal.Adapter.dll`, `Decal.Interop.Core.dll` and `Decal.Interop.D3DService.dll` from Decal 2.9.8.3, and `UtilityBelt.Common.dll` from
+- `deps/` holds `Decal.Adapter.dll` and `Decal.Interop.Core.dll` from Decal 2.9.8.3, and `UtilityBelt.Common.dll` from
   UtilityBelt.Service 2.2.12 (installed beside it, with ACE's dat readers in it, `ACE.DatLoader`), all referenced with
   `Private=False`. The dungeon map uses `UtilityBelt.Common` directly; `ItemIcons.EnsurePortalDat` and `Spells` still reach
   it by reflection, from before it was referenced. It's a .NET Standard dll, so a throwaway console app (net48, x86) can
@@ -688,11 +688,20 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   it never takes a click, using `ItemIcons.DrawLabel`; so many numbers fill the label cache, which now frees a full cache's
   textures a frame later (`RetireLabels`), since this frame's draw lists still point at them. **Over their head**
   (`SettingsData.CombatTextOverHead`, off to start, `Ui/CombatHeadText.cs`) puts them over whoever they landed on instead:
-  a plugin isn't told where something is on screen, so these are Decal's own 3D text (`CoreManager.Current.D3DService`,
-  `D3DObj.Anchor(id, height, dx, dy, dz)`, re-anchored each frame to rise, used again rather than made anew), which stands in
-  the world and so can be hidden by a wall. Chat only gives a name (`CombatLine.Target`, a pattern's `target` group), so
-  `CombatTargets.Pick` takes the one you hit last, then your selection, then the nearest of that name; what can't be
-  placed, or if Decal fails (`CombatHeadText.Failed`, a `[combat]` line), uses the fixed places. **Saved logs**
+  the game leaves its camera on the Direct3D device (`UBService.Huds.D3Ddevice`, `Transform.View` and `Projection`, and
+  `Viewport`, read from a hud's OnRender), drawing in landblock meters as (X, Z, Y) of `LocationX/Y/Z`, so a place in the
+  world can be worked out on screen (`Feed/CombatProjection.cs`), and the numbers are drawn there like the rest, on top of
+  everything, centred and stacked upward per target (`stackTops`) rather than in the fixed places' lanes. While some effects draw (a streak spell in flight, for seconds at a time) the device holds the same camera with its
+  Y and Z swapped, which put numbers off screen (`CombatProjection.IsSwapped`, `Unswap`). Any other camera that isn't near
+  you is passed over for the last good one (`MostFromCamera`). Decal doesn't say how tall anything is: `HeadMeters` is a person's, plus the Height
+  slider. Worked out indoors; outdoors, a creature in the next landblock is taken to be 192 meters on
+  (`LandblockOffset`), untested when written. Decal's own 3D text (`D3DService`, `D3DObj`) was tried first and dropped:
+  the world's lighting darkened it, its font and size were its own, `Set2DText` failed with `0x8876086C`
+  (D3DERR_INVALIDCALL) from a render callback (it starts a scene with `D3DXCreateRenderToSurface`), and `Color` refused a
+  see-through colour. Chat only gives a name (`CombatLine.Target`, a pattern's `target` group), so
+  `CombatTargets.Pick` takes the one you hit last, then your selection, then the nearest of that name, and lines of one
+  kind and name within 100ms (a cleave) each take the next nearest (`NearestNotUsed`), a guess at which number is whose; what can't be
+  placed, or with no camera (`CombatHeadText.HasCamera`, `[combat]` lines), uses the fixed places. **Saved logs**
   (`SettingsData.CombatLogSave`, off to start) are text files in `Combat Logs`, `<character> yyyy-MM-dd.txt`, written about
   once a second; nothing deletes them. Untested in the game when written.
 
