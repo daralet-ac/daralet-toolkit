@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using Decal.Adapter;
+using DaraletPlayer.Feed;
 using ImGuiNET;
 using UtilityBelt.Service;
 using UtilityBelt.Service.Views;
@@ -429,8 +430,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>Every frame: shown or hidden, from the setting, what it's showing, and whether that was closed.</summary>
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
-                // in case the window wasn't drawn after all, the border it took away comes back
+                // in case the window wasn't drawn after all, the border it took away and the theme come back
                 RestoreStyle();
+                UiThemeStyle.Restore();
 
                 if (disposed) {
                     return;
@@ -488,6 +490,10 @@ namespace DaraletPlayer.Ui {
                 if (bringToFront) {
                     ImGui.SetNextWindowFocus();
                     bringToFront = false;
+                }
+
+                if (!disposed) {
+                    UiThemeStyle.Apply(UiThemes.Find(settings.Data.Theme));
                 }
             }
             catch (Exception ex) {
@@ -617,6 +623,10 @@ namespace DaraletPlayer.Ui {
             catch (Exception ex) {
                 PluginCore.Log(ex);
             }
+            finally {
+                // only the plugin's windows have the theme: other plugins' windows keep their own look
+                UiThemeStyle.Restore();
+            }
         }
 
         private void RememberPosition() {
@@ -681,6 +691,7 @@ namespace DaraletPlayer.Ui {
             hud.OnHide -= Hud_OnHide;
             hud.Visible = false;
             hud.Dispose();
+            UiThemeStyle.Restore();
         }
     }
 }

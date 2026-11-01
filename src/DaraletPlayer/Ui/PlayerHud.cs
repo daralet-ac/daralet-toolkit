@@ -157,6 +157,10 @@ namespace DaraletPlayer.Ui {
             try {
                 ImGui.SetNextWindowSize(new Vector2(760, 620), ImGuiCond.FirstUseEver);
                 ImGui.SetNextWindowSizeConstraints(new Vector2(360, 260), new Vector2(float.MaxValue, float.MaxValue));
+
+                if (!disposed) {
+                    UiThemeStyle.Apply(UiThemes.Find(settings.Data.Theme));
+                }
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
@@ -195,6 +199,10 @@ namespace DaraletPlayer.Ui {
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
+            }
+            finally {
+                // only this window has the theme: other plugins' windows keep their own look
+                UiThemeStyle.Restore();
             }
         }
 
@@ -298,6 +306,7 @@ namespace DaraletPlayer.Ui {
             hud.OnRender -= Hud_OnRender;
 
             try {
+                UiThemeStyle.Restore();
                 GameDrag.Stop();
                 CursorKeeper.Stop();
                 Appraisal.Stop();

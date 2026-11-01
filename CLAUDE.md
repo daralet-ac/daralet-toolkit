@@ -1120,6 +1120,16 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `PlayerHud` and `FloatingWindow` set as they apply it), or it spills out of the square; a window's own Size still counts.
   Item details have a size of their own on top (`SettingsData.ItemTextScale`, the Loot tab's Settings): item tooltips
   (`ItemTooltip.Scale`, passed to `Widgets.BeginTooltip`) and the Appraisal windows (`FloatingWindow`'s `textScale`).
+- **Themes** (`Feed/UiThemes.cs`, `Feed/UiTheme.cs`, `Ui/UiThemeStyle.cs`, the Config tab's Theme section,
+  `SettingsData.Theme`, null for Daralet, the default): ready-made looks for the plugin's windows. A theme is a few base colours
+  (window, frame, title, accent, text; optionally solid `Button`, `Selection` and `Edge` colours of their own, as
+  Daralet has, sampled from the game's keyboard and options panels) and a corner rounding; `UiTheme.Colors` works out every ImGuiCol from them, by
+  name, so a colour an ImGui version renamed (`TabActive`/`TabSelected`) is set under whichever it has. The UtilityBelt
+  theme (`Unstyled`) changes nothing: its own look. One ImGui serves every plugin, so `UiThemeStyle.Apply` changes the style in a hud's
+  OnPreRender (Begin draws the background, title and border) and `Restore` puts it back at the end of its OnRender (so
+  its popups and tooltips are themed too) and, for a window that began collapsed, on the next `Core_RenderFrame`. Not
+  PushStyleColor: a push before Begin popped before End trips ImGui's stack check. All are dark with light text, since
+  `Colors` is made for a dark window (a test checks). A new theme is a row in `UiThemes.All`.
 - **Settings profiles** (`Settings.Profiles.cs`, `ProfileChoices.cs`, `Ui/ConfigTab.cs`, the **Config** tab, first):
   a profile is a whole `SettingsData`. Default is `settings.json` itself (so a plugin from before profiles still finds
   its settings), the rest `Settings Profiles\<name>.json`, named by file (`Settings.CleanName`), and which character uses

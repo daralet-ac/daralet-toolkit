@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Numerics;
 using Decal.Adapter;
+using DaraletPlayer.Feed;
 using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
@@ -77,6 +79,7 @@ namespace DaraletPlayer.Ui {
 
             ImGui.Spacing();
             RenderText();
+            RenderTheme();
             RenderEscape();
 
             ImGui.Spacing();
@@ -123,6 +126,76 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Puts the text size back to 100%.");
 
             ImGui.EndTable();
+        }
+
+        private void RenderTheme() {
+            Form.Section("Theme");
+
+            if (!Form.BeginForm("config-theme")) {
+                return;
+            }
+
+            Form.Label("Theme", "A ready-made look for this window and every other one of the plugin's windows: their "
+                + "background, buttons, tabs and corners. Other plugins' windows keep their own.");
+
+            var current = UiThemes.Find(settings.Data.Theme);
+            ImGui.SetNextItemWidth(Form.ControlWidth);
+
+            if (ImGui.BeginCombo("##config-theme", current.Name)) {
+                foreach (var theme in UiThemes.All) {
+                    if (ImGui.Selectable($"{theme.Name}##config-theme-{theme.Name}", theme == current)) {
+                        SetTheme(theme);
+                    }
+                    Widgets.Tip(theme.Tip);
+                    DrawSwatches(theme);
+
+                    if (theme == current) {
+                        ImGui.SetItemDefaultFocus();
+                    }
+                }
+
+                ImGui.EndCombo();
+            }
+            Widgets.Tip($"{current.Tip} Pick another to see it at once.");
+
+            ImGui.EndTable();
+        }
+
+        /// <summary>
+        /// The theme's background, frame (or its button and selection colours, if it has them), accent and text, as little
+        /// squares at the right of its line.
+        /// </summary>
+        private static void DrawSwatches(UiTheme theme) {
+            if (theme.Unstyled) {
+                return;
+            }
+
+            var min = ImGui.GetItemRectMin();
+            var max = ImGui.GetItemRectMax();
+            var size = (float)Math.Round(ImGui.GetFontSize() * 0.8f);
+            var gap = Math.Max(2, (float)Math.Round(size / 4));
+            var top = (float)Math.Round(min.Y + (max.Y - min.Y - size) / 2);
+            var colors = theme.Button is Vector4 button && theme.Selection is Vector4 selection
+                ? new[] { theme.Window, button, selection, theme.Accent, theme.Text }
+                : new[] { theme.Window, theme.Frame, theme.Accent, theme.Text };
+            var left = max.X - colors.Length * (size + gap);
+            var drawList = ImGui.GetWindowDrawList();
+            var edge = ImGui.GetColorU32(new Vector4(0.5f, 0.5f, 0.5f, 1));
+
+            foreach (var color in colors) {
+                var a = new Vector2(left, top);
+                var b = new Vector2(left + size, top + size);
+                drawList.AddRectFilled(a, b, ImGui.GetColorU32(color));
+                drawList.AddRect(a, b, edge);
+                left += size + gap;
+            }
+        }
+
+        private void SetTheme(UiTheme theme) {
+            if (settings.Data.Theme != theme.Name) {
+                settings.Data.Theme = theme.Name;
+                settings.Changed();
+            }
         }
 
         private void RenderEscape() {

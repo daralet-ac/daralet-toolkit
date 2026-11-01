@@ -21,6 +21,10 @@ namespace DaraletPlayer {
         [DataMember(Name = "windows")] public Dictionary<string, WindowPlacement> Windows;
         /// <summary>How big the plugin's text is drawn in every window: 1 is normal. A window's own size multiplies it.</summary>
         [DataMember(Name = "textScale")] public float TextScale;
+        /// <summary>
+        /// The look of the plugin's windows, a UiThemes name; null (or one no longer there) for Daralet, the default.
+        /// </summary>
+        [DataMember(Name = "theme")] public string Theme;
 
         [DataMember(Name = "fellowshipShowStamina")] public bool FellowshipShowStamina;
         [DataMember(Name = "fellowshipShowMana")] public bool FellowshipShowMana;
