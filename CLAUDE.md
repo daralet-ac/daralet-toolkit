@@ -1011,7 +1011,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   so not `world-data`), and compares its tag with the assembly's version (both made four-part first: `Version` puts 0.5.0
   before 0.5.0.0). A newer one gets a line in chat once the character is logged in (`PluginCore.AnnounceUpdate`; a line
   added before login never shows), with a link to the release page, and an **Update** button on the window's top line that
-  opens the same page. It only tells: the player runs the new installer. Unauthenticated, GitHub allows 60 requests an
+  opens the same page. That line always shows the version you have, after the character's name, with the check's result
+  as its tooltip (`PlayerHud.RenderVersion`). It only tells: the player runs the new installer. Unauthenticated, GitHub allows 60 requests an
   hour from one address. Chat links are UtilityBelt's kind: `<Tell:IIDString:id:openurl|url>text</Tell>` in
   `AddChatText`, whose click comes back as `ChatNameClicked` with that id (`PluginCore.ChatLinkId`, a fixed number).
   Anyone can put a link with that id in a tell, so a click only opens this plugin's release pages

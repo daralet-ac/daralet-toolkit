@@ -191,12 +191,24 @@ namespace DaraletPlayer.Ui {
             Widgets.TextDisabled(feed.Hello.Name);
             Widgets.Tip("The character you're on. Type /dap to show or hide this window.");
 
+            RenderVersion();
             RenderUpdate();
             RenderCompactToggle();
             return true;
         }
 
-        /// <summary>An Update button after the character's name, while a newer release is out.</summary>
+        /// <summary>The plugin's version after the character's name, so a player can say which they have.</summary>
+        private void RenderVersion() {
+            if (updates == null) {
+                return;
+            }
+
+            ImGui.SameLine();
+            Widgets.TextDisabled($"v{updates.Current.ToString(3)}");
+            Widgets.Tip($"The version of Daralet Toolkit you have. {updates.Status}");
+        }
+
+        /// <summary>An Update button after the character's name and version, while a newer release is out.</summary>
         private void RenderUpdate() {
             var newer = updates?.Newer;
 
@@ -220,7 +232,7 @@ namespace DaraletPlayer.Ui {
                 }
             }
             Widgets.Tip($"Daralet Toolkit {version} is out (you have {updates.Current.ToString(3)}). Opens its download page in "
-                + $"your browser: close the game and the Decal agent, then run Daralet-Setup-{version}.exe from there. "
+                + $"your browser: close the game and the Decal agent, then run DaraletToolkit-Setup-{version}.exe from there. "
                 + "Your settings are kept.");
         }
 
