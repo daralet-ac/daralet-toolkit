@@ -139,7 +139,7 @@ namespace DaraletPlayer.Ui {
                 Cell("##log", ref options.Log, $"{info.Label} are listed in the Combat log window.");
                 Cell("##save", ref options.Save, $"{info.Label} are written to the day's file, while Save to files is on.");
                 Cell("##hide", ref options.HideChat, $"{info.Label} are kept out of the game's chat. Other plugins reading "
-                    + "chat may still see them.");
+                    + "chat may still see them, and the plugin's chat windows still show them where Combat or Magic is ticked.");
 
                 ImGui.TableNextColumn();
                 var color = PackedColor.Unpack(options.Color);

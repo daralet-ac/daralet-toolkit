@@ -20,6 +20,15 @@ the game with:
   Disband buttons, Create Fellowship when you aren't in one, and a small window that stays on screen while you play,
   with each member's level, Combat Focus, distance and buffs if you like), Find a group, your friends (who's online,
   Appear Offline, and invites and tells from a right-click) and your squelches. Click a name to select that player.
+- **Chat**: chat windows of the plugin's own, like the game's: a main window with tabs (Tells, Group, Channels and Combat
+  to start), any of which pops out into a window of its own. Each shows what you pick of the game's chat (its own chat
+  options: area chat, tells, fellowship, allegiance, General, Trade, LFG...) and has a box to type in that talks to
+  whoever you pick: say, a tell to your selection, a reply, your fellowship, allegiance or any channel. Text is drawn
+  sharp at any size, in any font you have, with times, colours of your choice, and highlights for your name. Tabs flash
+  while they have lines you haven't read. Hover a line to copy it; click a name for a tell. **Link in chat**, in an
+  item's right-click menu, puts a link to it in your chat box: anyone with the plugin sees the item, every stat, when
+  they hover it. **Chat** under Client UI Override hides the game's chat windows to use these instead; Enter types in
+  them. `/dap chat` shows and hides the main chat window.
 - **Combat**: what you're fighting: its health, stamina and mana, every buff and debuff on it, and its threat table (who
   it wants to attack), with a window that stays on screen too. And hotbars: drag potions, kits, weapons or spells onto them
   and use or cast them with a click or a hotkey. Each bar can have as many slots, rows and pages as you like, its own colours, and
@@ -113,8 +122,8 @@ Everything the plugin keeps is in
 on your computer: window positions, display options and loot profiles in `settings.json` (the Default settings
 profile), other settings profiles in `Settings Profiles`, which character uses which in `profiles.json`, profiles saved
 with To file in `Settings Exports`, loot profile files in `Loot Profiles`, the downloaded map and places in
-`world-data`, and `log.txt`. To start fresh, close the game and delete `settings.json`, or make a New profile on the
-Config tab.
+`world-data`, saved chat in `Chat Logs` (with Save to files on, in the Chat tab), and `log.txt`. To start fresh, close
+the game and delete `settings.json`, or make a New profile on the Config tab.
 
 To move your loot profiles to another computer, or share them with a friend, use **Export** on the Loot tab and **Import**
 on the other end.
@@ -136,6 +145,11 @@ on the other end.
   connection the plugin uses the ones it came with. To use your own copy of the map image instead, put a square
   `dereth-map.png` next to `DaraletToolkit.dll`. It has to keep the original's layout. To use your own places, do the same
   with a GoArrow-style `locations.xml`. Files next to the dll always win over downloaded ones.
+
+- **Chat:** the chat windows start off: turn them on in the Chat tab. With **Chat** ticked under Client UI Override,
+  the game's own chat windows are hidden and Enter types in the plugin's; untick it, or turn the plugin off, and the
+  game's come back. Each window's options are behind the **...** by its box, or a right-click on its tab. Item links
+  show the item only to players with the plugin, for a day after they're linked; everyone else sees the item's name.
 
 ## Problems
 

@@ -45,6 +45,13 @@ namespace DaraletPlayer.Ui {
         public const uint VendorSellingTab = 0x100000BB;
         public const uint VendorSellingList = 0x100000CE;
 
+        /// <summary>
+        /// The game's chat windows, as Decal's UIElementType names them: the main one (with the chat bar) and the four
+        /// floating ones.
+        /// </summary>
+        public const uint MainChat = 0x10000601;
+        public static readonly uint[] FloatingChats = { 0x10000505, 0x1000050E, 0x1000050F, 0x10000510 };
+
         /// <summary>The number box beside the toolbar's stack slider (gmToolbarUI's m_pStackSizeEntryBox).</summary>
         public const uint StackSizeEntry = 0x100001A3;
 
@@ -164,6 +171,32 @@ namespace DaraletPlayer.Ui {
                 var focus = *(void**)(manager + FocusOffset);
 
                 if (focus == null || focus != GetElement(manager, id)) {
+                    return false;
+                }
+
+                ((delegate* unmanaged[Thiscall]<void*, void*, void>)0x45B970)(manager, null);
+                return true;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be reached, so the plugin's lookups are off until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Takes the keyboard from whatever of the game's has it (its chat bar, say), as a click in the world does:
+        /// UIElementManager::SetFocusElement(null). True when something had it.
+        /// </summary>
+        public static unsafe bool ClearFocus() {
+            if (broken) {
+                return false;
+            }
+
+            try {
+                var manager = *(byte**)ManagerAddress;
+
+                if (manager == null || *(void**)(manager + FocusOffset) == null) {
                     return false;
                 }
 

@@ -534,6 +534,7 @@ namespace DaraletPlayer.Ui {
             }
 
             Appraisal.MenuItems(item.Guid);
+            ChatWindows.ShareMenuItem(item.Guid);
             ImGui.Separator();
 
             SplitMenuItem(item);

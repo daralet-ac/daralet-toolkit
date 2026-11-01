@@ -61,8 +61,10 @@ namespace DaraletPlayer {
                 feed = new PlayerFeed();
                 updates = new UpdateCheck(typeof(PluginCore).Assembly.GetName().Version);
                 updates.Start();
-                hud = new PlayerHud(feed, settings, updates);
+                // before the hud: its chat windows read chat after the LFG links have put theirs on (ChatBoxMessage's
+                // handlers run in the order they were added)
                 lfgLinks = new LfgChatLinks(feed, settings, ChatLinkId);
+                hud = new PlayerHud(feed, settings, updates);
 
                 CoreManager.Current.CommandLineText += Core_CommandLineText;
                 CoreManager.Current.RenderFrame += Core_RenderFrame;
@@ -185,7 +187,7 @@ namespace DaraletPlayer {
 
         /// <summary>
         /// /dap (or @dap) shows and hides the window; /dap hideui hides the game's UI and the plugin's windows, or shows them
-        /// again, and /dap showui only shows them (HideGameUi).
+        /// again, and /dap showui only shows them (HideGameUi); /dap chat shows and hides the main chat window.
         /// </summary>
         private void Core_CommandLineText(object sender, ChatParserInterceptEventArgs e) {
             try {
@@ -210,6 +212,10 @@ namespace DaraletPlayer {
                     case "showui":
                         e.Eat = true;
                         HideGameUi.Show();
+                        break;
+                    case "chat":
+                        e.Eat = true;
+                        hud.ToggleChat();
                         break;
                 }
             }

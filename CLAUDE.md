@@ -182,7 +182,8 @@ A change to what an existing command takes goes in `features` instead (`PlayerUi
 `PlayerFeed.HasFeature`), so the plugin only sends a form the server reads: `packid` is `/bank inscribe` and `/bank icon`
 naming a pack by its id.
 
-`/dap` (or `@dap`) shows and hides the window; `/dap hideui` and `/dap showui` are Hide game UI's (below).
+`/dap` (or `@dap`) shows and hides the window; `/dap hideui` and `/dap showui` are Hide game UI's (below); `/dap chat`
+shows and hides the main chat window.
 
 Requests so far: `hello`; `fellowship` (your fellowship with vitals and map places, or `null`); `position` (where you
 are on the map, which the plugin only asks indoors); `targets <guid> [guid]` (up to four
@@ -198,7 +199,8 @@ comes (`PlayerFeed.RequestTimeout`). Polling goes through `PlayerFeed.Refresh`. 
 the loot rules' tooltips. `character` sends your character stats (`{"sections":[{"title",
 "lines"}]}`), for the Character tab. `lfg` sends looking for group, for Find a group (see the Social tab). `social`
 sends your friends, squelches, allegiance and the Appear Offline and fellowship options (`PlayerUiSocialData`), and
-`friend`, `squelch`, `allegiance` and `fellowcreate` are the Social tab's buttons (see it). `fellowship spells` adds
+`friend`, `squelch`, `allegiance` and `fellowcreate` are the Social tab's buttons (see it). `shareitem <guid>`, `shareagain <key>` and `shared
+<key>...` are item links in chat (see Chat windows). `fellowship spells` adds
 each fellow's buffs and debuffs as spell ids; every `fellowship` reply has each fellow's Combat Focus (name and icon
 layers), and leaves nulls out. The server can also send a reply unasked (`PlayerUiProtocol.Send`),
 which the plugin reads the same as one it asked for.
@@ -581,7 +583,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   backpack, Contracts (quill), Social (two heads) and Map (compass) buttons, and the Character Information button in the
   indicators beside it (the burden pack), drawn again over the game's own, opening the Inventory, Quests, Social, Map and
   Character windows instead of the game's panels; each on or off by itself, together in the Config tab's **Client UI
-  Override** section (`ClientUiOverride`, with Bank window and Loot window; `ToolbarButtons.RenderToggles`;
+  Override** section (`ClientUiOverride`, with Bank window, Loot window and Chat; `ToolbarButtons.RenderToggles`;
   `SettingsData.ToolbarInventory`, `ToolbarQuests`, `ToolbarSocial`, `ToolbarMap`, `ToolbarCharacter`, off to start),
   all seven in one row under **Enable all** and
   **Disable all**. Enable all asks first when it would turn Bank window or Loot window on (`Windows.ConfirmAllOn`), as
@@ -682,6 +684,67 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   at shutdown. A true fullscreen game has no caption, so nothing happens. Centre and Top left move it, having no title bar
   to drag. `[borderless]` lines in log.txt. Untested in the game when written.
 
+- **Chat windows** (`Ui/ChatWindows*.cs`, `Ui/ChatView*.cs`, `Ui/ChatTab.cs`, `Ui/ChatFonts.cs`, `Feed/Chat*.cs`,
+  `SettingsData.Chat`, off to start): the main window (`chat`, titled Chat) and four others (`chat-1` to `chat-4`,
+  Tells, Group, Channels and Combat to start), which are tabs of the main one until popped out (`ChatWindowSettings.
+  PoppedOut`; closing a popped-out one puts it back). Their hud names are "Daralet Chat..." and their titles set apart
+  (`FloatingWindow.Title`: UtilityBelt begins a window as `Title###Name`), so a renamed window keeps its place.
+  Every line comes from Decal's `ChatBoxMessage`, and is added on the next RenderFrame (`ChatWindows.AddHeard`), when
+  every handler has had it: Decal makes one event for all of them (`SafeFireEvent`), so its `Eat` by then says whether
+  anyone ate it, other plugins whose handlers run after this one included (Daralet Admin's `DAA2` replies filled the
+  chat windows until this). So a line eaten by anyone (the feed's replies) isn't shown, and one LfgChatLinks adds again
+  is, link and all (`ChatWindows` is made after the Combat tab, and `LfgChatLinks` before the hud). The exception is
+  combat the Combat log's Hide in chat eats (`CombatWatch.LastHidden`): that's kept out of the game's chat, but shows in a
+  chat window that shows Combat or Magic, always counted as one of those. One history (`ChatSettings.History` lines) holds them;
+  each window shows those of its categories (`ChatCategory`), which are the game's own chat options: `ChatDisplayMask`
+  in daralet-ACE's `libs/entity/Enum`, whose bit n is chat type n (Decal's `e.Color`), as `ChatTypeInfo` has them, with
+  Society and Olthoi of the plugin's own, and a channel told by the line's start ("[Trade]") too (`ChatCategoryInfo.Of`).
+  The main window always shows Help and admin (the game's Mandatory). Colours are per chat type, and per channel for a
+  channel's lines, near the game's to start (`ChatTypeInfo`, `ChatSettings.Colors`). **Drawing:** each line is parsed
+  once (`ChatMarkup`: the game's and plugins' links, `<Tell:IIDString:id:text>shown<\Tell>` or `</Tell>`, and linked
+  items), wrapped once per width and font (`ChatLayout`, measured with the font's own advances read from ImGui's
+  `IndexAdvanceX` into a table, `ChatFonts.Advance`, so no ImGui call per letter), and only the lines in sight drawn,
+  onto the draw list (`ChatView.Lines.cs`), the content's height a `Dummy`; the lines' child is `NoMove`, or a drag
+  over them moved the window. Hovering a line lights it and shows a Copy button drawn by hand (an ImGui button can't sit
+  over text drawn straight onto the window). **Fonts** (`ChatFonts`): ImGui stretches one font picture for any other
+  size, which blurs, so each window's text is a font made at exactly its pixel size (`ChatWindowSettings.FontSize` times
+  its window's Size; the Config tab's Text size isn't in it), any family Windows or UtilityBelt has, through
+  UtilityBelt.Service's `UBService.Huds.FontManager.Create`, which adds it to the font picture and has UtilityBelt
+  rebuild it (and every texture) before its next frame: only allowed between ImGui's frames, so a font asked for while
+  drawing is made on Decal's next RenderFrame (`MakeWanted`), and pushed only once it's built (`ContainerAtlas` set);
+  until then UtilityBelt's font is stretched. `ChatView.BeginFont` pushes it and sets the window's scale so the text is
+  exactly that size. **Typing** (`ChatView.Input.cs`): the talk focus (`ChatTalk`: say, a tell to your selection, reply
+  to your last tell, fellowship `/f`, allegiance `/a`, patron `/p`, vassals `/v`, covassals `/c`, monarch `/m`, the
+  channels `/general`, `/trade`, `/lfg`, `/roleplay`, `/society`, `/olthoi`, or your own) puts its command in front,
+  and a line starting with / or @ goes as typed, through `Actions.InvokeChatParser` (so other plugins' commands work).
+  Up and Down go through what you've sent. Text put in while the box is typed in goes through ImGui's callback
+  (`CallbackAlways`), since ImGui keeps its own copy of an active box's text. A tell that can't go says why in that
+  window alone (`ChatView.Note`). **Hide game chat** (`ChatSettings.HideGameChat`, also Client UI Override's Chat;
+  `ChatWindows.GameChat.cs`): the game's chat windows, Decal's `UIElementType` Chat `0x10000601` (which has the chat
+  bar) and FloatChat1-4 (`0x10000505`, `0x1000050E`-`10`), hidden with `ClientElements.SetVisible`, looked at again once a
+  second, and those that were showing shown again when it's off or the plugin stops; nothing saved. Enter still opens
+  the hidden chat bar, so the moment Decal's `ChatState` goes true it's cleared (`ClientElements.ClearFocus`,
+  `UIElementManager::SetFocusElement(null)`) and the plugin's box focused instead (with Enter types here too).
+  **Links:** a click on one is handed to Decal's `ChatNameClicked` as the game's chat would (CoreManager's private
+  `myHooks_ChatClickIntercept`, by reflection), so every plugin's links work here, the plugin's own included; a name no
+  plugin takes starts a tell. **Item links** (`ChatWindows.Links.cs`, `Feed/ChatItemLink.cs`,
+  `Feed/SharedItemRequests.cs`): Link in chat, in an item's right-click menu (inventory lists, hotbar slots), sends
+  `@playerui shareitem <guid>`; the server keeps the item's description (`PlayerUiCorpseData.Describe`) for a day under
+  who linked it and its name, one item to a name, the latest (`PlayerUiItemShares`, `SharedItemStore` in daralet-ACE:
+  5,000 at most), and answers with the name; `[Name]` goes in the box (or on the clipboard, with the windows off), so
+  players without the plugin read just that. The line carries nothing else: a `#code` in it, the first way, was ugly in
+  the game's chat. Readers' plugins take each `[...]` after the first quote of a line someone said
+  (`ChatMarkup.Speaker`, `MarkItems`) and ask `@playerui shared <key>...` (`ChatItemLink.Key`: speaker and name in base64,
+  10 a request or 400 letters, `SharedItemRequests`). Only the speaker's own links are found under their name, so a
+  typed `[Sword]` can't pass an item off as anything, and finds nothing unless they linked one; until the server says
+  it's an item, it's drawn as plain text. A new line asks afresh (`RefreshSharedItem`, in case they've linked another
+  of that name), and a line keeps the item it was answered with (`ChatSegment.Shared`). Link it again is `@playerui
+  shareagain <key>`, keeping the same share under your name too. Hovering shows `ItemTooltip`, clicking opens the
+  Appraisal window, which compares it with what you wear by the slots the server sent
+  (`AppraisalWindow.givenSlots`). **Unread:** a tab counts lines come while it
+  wasn't on screen and flashes (gold, red for one with your name or a highlight word, `ChatHighlights`). Saved chat
+  (`ChatSettings.Save`) goes in `Chat Logs` through `CombatLogFile`. `[chat]` lines in log.txt. Untested in the game
+  when written.
 - **Combat Text** (the Combat tab's sub tab, with the Combat log window, whose lines show a Copy button while hovered: `Ui/CombatLogTab.cs`, `Ui/CombatWatch.cs`, `Ui/CombatText.cs`,
   `Feed/CombatLines.cs`, `CombatKindInfo.cs`, `CombatFloats.cs`, `CombatLogFile.cs`): everything is read from
   `ChatBoxMessage` by `CombatLines.Read`, since chat is the one place all combat comes through: the client writes its own
@@ -1024,7 +1087,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   their Update link falls back to their own `LatestPageUrl`, since a release page under the new name isn't one of theirs. No Decal plugin known (October 2026) downloads and installs its own updates; UtilityBelt's
   is a notice like this one, and the loader updating the plugin itself was left for later.
 - **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet Toolkit` (`DataFolder`): `settings.json`,
-  `profiles.json`, `Settings Profiles`, `Settings Exports`, `log.txt`, `Loot Profiles`, `Hotbar Layouts`, `Combat Logs`, `world-data`. It was `Decal Plugins\Daralet` before the rename: `PluginCore.Startup` moves
+  `profiles.json`, `Settings Profiles`, `Settings Exports`, `log.txt`, `Loot Profiles`, `Hotbar Layouts`, `Combat Logs`, `Chat Logs`, `world-data`. It was `Decal Plugins\Daralet` before the rename: `PluginCore.Startup` moves
   that folder over first thing (`DataFolder.MoveOldFolder`, `FolderMove.Once`, copying instead if a file's held open),
   unless the new one is already there. Only startup does it, so a test that asks `DataFolder` for a path doesn't move
   the developer's real folder. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
@@ -1068,7 +1131,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
 `@playerui` only ever sends a player data about themselves, their fellowship and what they're fighting (for a monster
 they've selected: its vitals, every buff and debuff on it, and its threat table). The one exception is `lfg`, whose lists
 name the players and fellowships looking for group, with only what their own lines already told the LFG channel (the
-user's call, October 2026). The server is the
+user's call, October 2026). And `shared`: an item someone linked in chat, by their name and the item's, with their name, as they
+chose to show it (the user's call, October 2026); `shareitem` only takes the player's own things (`PlayerUiCorpseData.
+FindOwnItem`: carried, worn, or in the bank they have open). The server is the
 only thing that can be trusted: never let the plugin's request decide what it's allowed to see. Anything that changes the
 game (banking, listing, queueing) goes through the existing player commands, which check everything again; the plugin's own
 checks (greying out market buttons away from a broker, say) are only there to be helpful.

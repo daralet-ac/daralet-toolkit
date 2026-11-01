@@ -41,6 +41,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>Less room round the contents than the style's (a hotbar), or null.</summary>
         private readonly Vector2? padding;
 
+        /// <summary>The smallest a window you size yourself may be; null for 300 by 200.</summary>
+        private readonly Vector2? minSize;
+
         /// <summary>The saved position is set once, when the window first draws; after that ImGui keeps it.</summary>
         private bool positioned;
 
@@ -72,9 +75,11 @@ namespace DaraletPlayer.Ui {
         /// <param name="onClose">What closing it does instead of hiding it; it comes back for the next thing.</param>
         /// <param name="padding">The room round what's in it, instead of the style's.</param>
         /// <param name="textScale">A text size of its own, on top of the window's Size and the Text size.</param>
+        /// <param name="minSize">For a window you size yourself, the smallest it may be (300 by 200 if not given).</param>
         public FloatingWindow(string id, string title, Settings settings, Vector2 defaultPosition, Action render,
             bool visibleByDefault = true, Vector2? defaultSize = null, Func<object> inUse = null, bool alwaysOnlyInUse = false,
-            Action onClose = null, Action menuItems = null, Vector2? padding = null, Func<float> textScale = null) {
+            Action onClose = null, Action menuItems = null, Vector2? padding = null, Func<float> textScale = null,
+            Vector2? minSize = null) {
             this.id = id;
             this.settings = settings;
             this.defaultPosition = defaultPosition;
@@ -86,7 +91,12 @@ namespace DaraletPlayer.Ui {
             this.menuItems = menuItems;
             this.padding = padding;
             this.textScale = textScale;
+            this.minSize = minSize;
             this.visibleByDefault = visibleByDefault;
+
+            if (minSize.HasValue) {
+                minWidth = minSize.Value.X;
+            }
 
             // made here so a window that starts hidden is saved that way
             settings.Window(id, visibleByDefault);
@@ -121,6 +131,19 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>Drawn above what's in the window (the shared window's tabs), or null.</summary>
         public Action Header { get; set; }
+
+        /// <summary>
+        /// The words in its title bar (a chat window's name). UtilityBelt knows a window by the name it was made with, which
+        /// stays: this is only what's shown.
+        /// </summary>
+        public string Title {
+            get => hud.Title;
+            set {
+                if (hud.Title != value) {
+                    hud.Title = value;
+                }
+            }
+        }
 
         /// <summary>Whether the window may show at all (its tab's checkbox). Saved.</summary>
         public bool Visible {
@@ -518,12 +541,13 @@ namespace DaraletPlayer.Ui {
 
             if (pendingWidth.HasValue) {
                 // allowed under the usual smallest, so it's exactly what was asked
-                minWidth = Math.Min(DefaultMinWidth, pendingWidth.Value);
+                minWidth = Math.Min(minSize?.X ?? DefaultMinWidth, pendingWidth.Value);
                 ImGui.SetNextWindowSize(new Vector2(pendingWidth.Value, Look.Height ?? defaultSize.Value.Y), ImGuiCond.Always);
                 pendingWidth = null;
             }
 
-            ImGui.SetNextWindowSizeConstraints(new Vector2(minWidth, 200), new Vector2(float.MaxValue, float.MaxValue));
+            ImGui.SetNextWindowSizeConstraints(new Vector2(minWidth, minSize?.Y ?? 200),
+                new Vector2(float.MaxValue, float.MaxValue));
         }
 
         /// <summary>

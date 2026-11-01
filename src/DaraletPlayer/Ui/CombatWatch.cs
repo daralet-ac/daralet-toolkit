@@ -21,6 +21,9 @@ namespace DaraletPlayer.Ui {
 
         private static readonly TimeSpan FlushEvery = TimeSpan.FromSeconds(1);
 
+        /// <summary>The last line kept out of the game's chat by Hide in chat, which the chat windows still show.</summary>
+        public static ChatTextInterceptEventArgs LastHidden { get; private set; }
+
         private readonly Settings settings;
         private readonly List<CombatLine> lines = new List<CombatLine>();
 
@@ -81,6 +84,11 @@ namespace DaraletPlayer.Ui {
 
                 var options = settings.Data.CombatOptions(line.Kind);
                 e.Eat = options.HideChat;
+
+                if (options.HideChat) {
+                    LastHidden = e;
+                }
+
                 lines.Add(line);
 
                 if (lines.Count > Kept) {

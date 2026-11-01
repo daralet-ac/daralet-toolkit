@@ -99,6 +99,7 @@ namespace DaraletPlayer.Ui {
             }
 
             Appraisal.MenuItems(unchecked((uint)item.Id));
+            ChatWindows.ShareMenuItem(unchecked((uint)item.Id));
         }
 
         /// <summary>Text typed into the spell picker, to find a spell by part of its name.</summary>

@@ -19,6 +19,8 @@ namespace DaraletPlayer.Ui {
         private readonly ConfigTab configTab;
         private readonly SocialTab socialTab;
         private readonly CombatTab combatTab;
+        private readonly ChatWindows chatWindows;
+        private readonly ChatTab chatTab;
         private readonly WorldTab worldTab;
         private readonly InventoryTab inventoryTab;
         private readonly MarketTab marketTab;
@@ -52,6 +54,9 @@ namespace DaraletPlayer.Ui {
 
             socialTab = new SocialTab(feed, settings, icons);
             combatTab = new CombatTab(feed, settings, icons);
+            // after the combat tab, whose combat log keeps lines out of chat: the chat windows read chat after it has
+            chatWindows = new ChatWindows(feed, settings, icons);
+            chatTab = new ChatTab(chatWindows, settings);
             worldTab = new WorldTab(feed, settings);
             inventoryTab = new InventoryTab(feed, icons, settings);
             marketTab = new MarketTab(feed, api, icons);
@@ -90,6 +95,9 @@ namespace DaraletPlayer.Ui {
                 ("Social", "Your allegiance, your fellowship (its members' vitals, its buttons, a vitals window you can "
                     + "place anywhere), Find a group (/lfgroup and /lfmore), your friends and your squelches.",
                     socialTab.Render),
+                ("Chat", "Chat windows of the plugin's own: a main window with tabs, others popped out, each showing what you "
+                    + "pick of the game's chat, with sharp text at any size, items linked in chat, copying, and Hide game "
+                    + "chat to use them instead of the game's.", chatTab.Render),
                 ("Combat", "Your selected target's vitals, buffs, debuffs and threat table, a tracked target to watch "
                     + "alongside it, hotbars of items to use with a click or a hotkey, and floating combat text and a "
                     + "combat log.", combatTab.Render),
@@ -127,6 +135,22 @@ namespace DaraletPlayer.Ui {
 
         public void Toggle() {
             hud.Visible = !hud.Visible;
+        }
+
+        /// <summary>/dap chat: the main chat window shown or hidden (the chat windows turned on to show it).</summary>
+        public void ToggleChat() {
+            var data = settings.Data.Chat;
+            var window = chatWindows.Window(0);
+
+            if (!data.On || !window.Visible) {
+                data.On = true;
+                window.Visible = true;
+                settings.Changed();
+                chatWindows.Focus(chatWindows.TypingWindow());
+                return;
+            }
+
+            window.Visible = false;
         }
 
         private void Hud_OnPreRender(object sender, EventArgs e) {
@@ -289,7 +313,7 @@ namespace DaraletPlayer.Ui {
 
             // the game's UI back first, whatever fails after
             var pieces = new IDisposable[] {
-                hideGameUi, borderless, escapeCloses, launcher, hud, toolbarButtons, sharedWindow, gameHotbar, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
+                hideGameUi, borderless, escapeCloses, launcher, hud, toolbarButtons, sharedWindow, gameHotbar, chatWindows, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
                 lootTab, api, icons,
             };
 

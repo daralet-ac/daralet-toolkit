@@ -28,14 +28,16 @@ namespace DaraletPlayer.Ui {
             Form.Hint("Puts the plugin's windows in place of the game's own. Each toolbar button ticked is drawn again over "
                 + "the game's, and clicking it opens the plugin's window instead of the game's panel; the game's own keys "
                 + "for those panels still open the game's. Bank window and Loot window have the server leave out the "
-                + "game's bank and corpse windows, so the plugin's open instead.");
+                + "game's bank and corpse windows, so the plugin's open instead. Chat hides the game's chat windows for "
+                + "the plugin's (the Chat tab).");
 
             RenderAllButtons();
 
-            // all eight in one row, wrapping only when the tab is too narrow
+            // all nine in one row, wrapping only when the tab is too narrow
             var first = true;
             ToolbarButtons.RenderToggles(ref first, settings);
             GameHotbar.RenderCheckbox(ref first, settings);
+            ChatTab.RenderHideGameChat(ref first, settings);
             Form.Flow(ref first, Form.CheckWidth("Bank window"));
             RenderBankWindow();
             Form.Flow(ref first, Form.CheckWidth("Loot window"));

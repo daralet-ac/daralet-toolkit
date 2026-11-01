@@ -43,6 +43,9 @@ namespace DaraletPlayer.Feed {
         public const string KindSquelch = "squelch";
         public const string KindAllegiance = "allegiance";
         public const string KindFellowCreate = "fellowcreate";
+        public const string KindShareItem = "shareitem";
+        public const string KindShareAgain = "shareagain";
+        public const string KindShared = "shared";
 
         // chat types, which Decal passes as the colour
         private const int TellChat = 3;
@@ -75,6 +78,7 @@ namespace DaraletPlayer.Feed {
         private readonly Dictionary<string, bool> windowSettings = new Dictionary<string, bool>();
 
         private readonly DescribeRequests describes = new DescribeRequests(RequestTimeout);
+        private readonly SharedItemRequests shared = new SharedItemRequests(RequestTimeout);
 
         private DateTime lastCommandSentAt = DateTime.MinValue;
         private bool disposed;
@@ -145,6 +149,12 @@ namespace DaraletPlayer.Feed {
         /// <summary>Carried items the server has described (@playerui describe), by guid, for the tooltips.</summary>
         public Dictionary<uint, CorpseItemInfo> Described { get; } = new Dictionary<uint, CorpseItemInfo>();
         public DateTime DescribedUpdatedAt { get; private set; } = DateTime.MinValue;
+
+        /// <summary>
+        /// An answer to ShareItem: the item linked (its code for the chat line), or why it couldn't be. Raised on the game's
+        /// thread, as every reply is read.
+        /// </summary>
+        public event Action<ShareReplyInfo> ItemShared;
 
         /// <summary>
         /// When the latest bank request had been sent by the time a bank reply came: a reply to one sent after a command
@@ -294,6 +304,66 @@ namespace DaraletPlayer.Feed {
             }
         }
 
+        /// <summary>
+        /// Asks the server to keep one of your items for a link in chat (@playerui shareitem); the answer comes as ItemShared.
+        /// False when the server can't, or one is still on its way.
+        /// </summary>
+        public bool ShareItem(uint guid) {
+            if (disposed || guid == 0 || Status != FeedStatus.Ready || !Supports(KindShareItem) || IsWaitingFor(KindShareItem)) {
+                return false;
+            }
+
+            if (lastSentAt.TryGetValue(KindShareItem, out var at) && DateTime.UtcNow - at < MinInterval) {
+                return false;
+            }
+
+            Request(KindShareItem, Display.TargetArguments(new[] { guid }));
+            return true;
+        }
+
+        /// <summary>
+        /// Asks the server to keep someone else's chat link under your name too, to pass on (@playerui shareagain); the answer
+        /// comes as ItemShared. False when the server can't, or one is still on its way.
+        /// </summary>
+        public bool ShareAgain(string key) {
+            if (disposed || string.IsNullOrEmpty(key) || Status != FeedStatus.Ready || !Supports(KindShareAgain)
+                || IsWaitingFor(KindShareAgain)) {
+                return false;
+            }
+
+            if (lastSentAt.TryGetValue(KindShareAgain, out var at) && DateTime.UtcNow - at < MinInterval) {
+                return false;
+            }
+
+            Request(KindShareAgain, key);
+            return true;
+        }
+
+        /// <summary>
+        /// The item a chat link names, asking the server for it the first time (@playerui shared, up to 10 keys a request);
+        /// null until it's come, and for text in brackets that isn't a link. Safe to call every frame.
+        /// </summary>
+        public SharedItemInfo SharedItem(string key) {
+            var item = shared.Find(key);
+
+            if (item == null && Supports(KindShared)) {
+                shared.Ask(key, DateTime.UtcNow);
+            }
+
+            return item;
+        }
+
+        /// <summary>
+        /// A new line names this link: asks again, as the speaker may have linked another item by that name since.
+        /// </summary>
+        public void RefreshSharedItem(string key) {
+            shared.Forget(key);
+
+            if (Supports(KindShared)) {
+                shared.Ask(key, DateTime.UtcNow);
+            }
+        }
+
         /// <summary>Where the description of an item not yet described stands.</summary>
         public DescribeState DescribeStateOf(uint guid) {
             return Described.ContainsKey(guid) ? DescribeState.None : describes.State(guid);
@@ -357,6 +427,29 @@ namespace DaraletPlayer.Feed {
             Request(KindDescribe, Display.TargetArguments(batch));
         }
 
+        private void SendSharedBatch() {
+            if (disposed || Status != FeedStatus.Ready || !Supports(KindShared)) {
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+
+            if (now - shared.SentAt < MinInterval) {
+                return;
+            }
+
+            var batch = shared.Next(now);
+
+            if (batch == null) {
+                return;
+            }
+
+            // SharedItemRequests decides when one has waited long enough
+            waitingSince.Remove(KindShared);
+            PluginCore.LogFile($"[item-link] asked: {string.Join(" ", batch)}");
+            Request(KindShared, string.Join(" ", batch));
+        }
+
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
                 // LoginStatus 3 is fully logged in
@@ -365,6 +458,7 @@ namespace DaraletPlayer.Feed {
                 }
 
                 SendDescribeBatch();
+                SendSharedBatch();
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
@@ -470,6 +564,18 @@ namespace DaraletPlayer.Feed {
 
                     describes.Answered(items.Select(i => i.Guid), DateTime.UtcNow);
                     DescribedUpdatedAt = DateTime.UtcNow;
+                    break;
+                }
+                case KindShareItem:
+                case KindShareAgain:
+                    ItemShared?.Invoke(Json.Read<ShareReplyInfo>(json));
+                    break;
+                case KindShared: {
+                    var lookup = Json.Read<SharedLookupInfo>(json);
+                    var found = lookup?.Items?.Select(i => i.Key) ?? Enumerable.Empty<string>();
+                    var none = lookup?.Missing ?? new List<string>();
+                    PluginCore.LogFile($"[item-link] answer: found [{string.Join(" ", found)}], none [{string.Join(" ", none)}]");
+                    shared.Answered(lookup, DateTime.UtcNow);
                     break;
                 }
                 case KindArena:

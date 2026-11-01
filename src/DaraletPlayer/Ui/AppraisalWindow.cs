@@ -47,6 +47,12 @@ namespace DaraletPlayer.Ui {
         /// <summary>The equipped item it's compared with, of the ones it would replace; 0 for the first.</summary>
         private uint compareWith;
 
+        /// <summary>Where it's worn, for an item the client doesn't have (one linked in chat); 0 to ask Decal.</summary>
+        private int givenSlots;
+
+        /// <summary>Who linked it in chat, or null.</summary>
+        private string linkedBy;
+
         /// <param name="id">The window's settings key (where it is, its size): "appraisal" for the first, numbered after.</param>
         /// <param name="title">Its title; a window's title is its name to UtilityBelt, so each needs its own.</param>
         public AppraisalWindow(PlayerFeed feed, Settings settings, ItemIcons icons, string id, string title, Vector2 position) {
@@ -71,10 +77,12 @@ namespace DaraletPlayer.Ui {
         /// Shows an item: one from a corpse with the corpse's description of it, or one you carry or have banked, which the
         /// server is asked to describe if it hasn't been. The equipped items it would replace are asked about too.
         /// </summary>
-        public void Show(uint item, CorpseItemInfo described = null) {
+        public void Show(uint item, CorpseItemInfo described = null, int slots = 0, string from = null) {
             guid = item;
             fromCorpse = described;
             compareWith = 0;
+            givenSlots = slots;
+            linkedBy = from;
 
             // in front of the main window, which it's often opened over
             window.BringToFront();
@@ -153,6 +161,11 @@ namespace DaraletPlayer.Ui {
 
             if (kind.Length > 0) {
                 Widgets.TextDisabled(kind);
+            }
+
+            if (linkedBy != null) {
+                Widgets.TextDisabled($"Linked in chat by {linkedBy}");
+                Widgets.Tip("As it was when they linked it: they may have changed it since.");
             }
 
             if (rule != null) {
@@ -416,9 +429,13 @@ namespace DaraletPlayer.Ui {
                 .ToList();
         }
 
-        /// <summary>Where an item can be worn or wielded; 0 for something that can't.</summary>
-        private static int EquipableSlots(uint item) {
-            return CoreManager.Current.WorldFilter[unchecked((int)item)]?.Values(LongValueKey.EquipableSlots, 0) ?? 0;
+        /// <summary>
+        /// Where an item can be worn or wielded; 0 for something that can't. An item linked in chat isn't in Decal, so the
+        /// server's word for it is used.
+        /// </summary>
+        private int EquipableSlots(uint item) {
+            var slots = CoreManager.Current.WorldFilter[unchecked((int)item)]?.Values(LongValueKey.EquipableSlots, 0) ?? 0;
+            return slots != 0 ? slots : item == guid ? givenSlots : 0;
         }
 
         private static string WornName(uint worn) {

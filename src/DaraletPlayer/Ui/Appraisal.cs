@@ -58,13 +58,23 @@ namespace DaraletPlayer.Ui {
         /// <param name="described">The item as a corpse described it, for one in a corpse; null for one you carry or have
         /// banked, which the Appraisal window has the server describe.</param>
         /// <param name="newWindow">In a window of its own, leaving the others as they are.</param>
-        public static void Show(uint guid, CorpseItemInfo described = null, bool newWindow = false) {
+        /// <param name="slots">Where it's worn (EquipMask), for an item the client doesn't have: one linked in chat.</param>
+        /// <param name="linkedBy">Who linked it in chat, for one that was.</param>
+        public static void Show(uint guid, CorpseItemInfo described = null, bool newWindow = false, int slots = 0,
+            string linkedBy = null) {
             if (guid == 0) {
                 return;
             }
 
             if (InPlugin) {
-                (newWindow ? FreeWindow() : windows[0]).Show(guid, described);
+                (newWindow ? FreeWindow() : windows[0]).Show(guid, described, slots, linkedBy);
+                return;
+            }
+
+            // someone else's item, linked in chat: there's nothing in the world to select for the game's appraisal
+            if (linkedBy != null) {
+                PluginCore.Chat("Plugin appraisal is off, so a linked item shows only when hovered. (Plugin appraisal is on "
+                    + "the Daralet Toolkit window's top line.)");
                 return;
             }
 
