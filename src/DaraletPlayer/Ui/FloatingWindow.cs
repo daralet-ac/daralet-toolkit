@@ -115,7 +115,7 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>
         /// A box on screen the window is held to (the shared window attached to the toolbar), else null: no title bar, no
-        /// dragging or sizing, and nothing saved.
+        /// dragging or ImGui sizing (SharedWindow sizes the box itself), and nothing saved here.
         /// </summary>
         public Func<(Vector2 Position, Vector2 Size)?> Anchor { get; set; }
 

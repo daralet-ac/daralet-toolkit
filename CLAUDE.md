@@ -596,9 +596,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   with **Tabs** (`SharedWindowTabs`, on to start) a row of buttons at the top of each to switch
   (`FloatingWindow.Header`). **Attach to toolbar** (`SharedWindowAttach`) holds it right above the toolbar's frame and
   as wide (`ClientElements.TryGetFrameBox(Toolbar)`: TBAR's parent, `UIRegion.m_parent` at `+0xAC`, when it fits snugly
-  round it), as tall as the game's panel frame (`ClientElements.PanelFrame`, `0x100005FF`, 310x372 at 800x600), below
-  the toolbar when there's no room above, with no title bar, dragging or sizing and nothing saved
-  (`FloatingWindow.Anchor`). Not on the panel frame itself, as the first build had it: that's a `gmFloatyPanelUI`
+  round it), as tall as the game's panel frame (`ClientElements.PanelFrame`, `0x100005FF`, 310x372 at 800x600, and much
+  smaller on a new character) until its free edge is dragged (`SharedWindow.RenderAttachedGrip`,
+  `SharedWindowAttachHeight`; a double-click goes back to the game's height, and the game's panels aren't touched), below
+  the toolbar when there's no room above, with no title bar or dragging (`FloatingWindow.Anchor`). The edge is sized by
+  hand, not ImGui's resizing: the window is put back on the toolbar every frame, so an edge against the toolbar would
+  grow without end. Not on the panel frame itself, as the first build had it: that's a `gmFloatyPanelUI`
   (element type `0x1000004F`, a gmPanelUI), a window of its own whose place the game saves (`gmFloatyPanelUI`'s
   attributes `0x10000086`-`89`), so it stayed put when the toolbar was moved. The frame is shown while a game panel is
   open, so it turning on (a toolbar button not drawn over, the skills or options, a game key) closes the shared window;

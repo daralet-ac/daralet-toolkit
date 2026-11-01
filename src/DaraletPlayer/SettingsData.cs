@@ -223,6 +223,9 @@ namespace DaraletPlayer {
         /// <summary>The shared window sits where the game shows its panels, right above the toolbar, and moves with it.</summary>
         [DataMember(Name = "sharedWindowAttach")] public bool SharedWindowAttach;
 
+        /// <summary>How tall the attached shared window was dragged, or null to match the game's panels.</summary>
+        [DataMember(Name = "sharedWindowAttachHeight")] public float? SharedWindowAttachHeight;
+
         /// <summary>
         /// The game's shortcut bar (its two rows of slots on the toolbar) is hidden while nothing is on it (GameHotbar).
         /// </summary>

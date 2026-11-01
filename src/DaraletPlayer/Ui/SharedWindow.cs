@@ -13,7 +13,7 @@ namespace DaraletPlayer.Ui {
     /// carry a row of tabs for each other (FloatingWindow.Header). Which ones share is the player's (SharedWindowMembers),
     /// from the Config tab's Client UI Override section.
     /// Attach to toolbar holds it right above the toolbar, as wide, wherever the toolbar is moved (FloatingWindow.Anchor),
-    /// and it takes turns with the game's panels: a game panel opening (one of the toolbar's buttons that isn't
+    /// with its free edge dragged to any height (SharedWindowAttachHeight), and it takes turns with the game's panels: a game panel opening (one of the toolbar's buttons that isn't
     /// overridden, or the game's own key) closes it, and one of its windows opening closes the game's panel.
     /// </summary>
     internal class SharedWindow : IDisposable {
@@ -38,6 +38,18 @@ namespace DaraletPlayer.Ui {
         /// <summary>The game's panels' height at 800x600, for when the panel frame can't be measured.</summary>
         private const float DefaultPanelHeight = 372;
 
+        /// <summary>The least an attached window can be dragged to.</summary>
+        private const float MinAttachedHeight = 150;
+
+        /// <summary>The least height of the strip along the edge that sizes an attached window.</summary>
+        private const float MinGripHeight = 6;
+
+        /// <summary>Whether it's attached above the toolbar, so it grows upward, rather than below it.</summary>
+        private bool attachedAbove = true;
+
+        /// <summary>The attached window's edge being dragged: where the mouse and the height were when it began.</summary>
+        private (float MouseY, float Height)? sizing;
+
         private bool disposed;
 
         public SharedWindow(Settings settings, FloatingWindow inventory, FloatingWindow map, FloatingWindow social,
@@ -54,7 +66,10 @@ namespace DaraletPlayer.Ui {
             foreach (var (id, _, window) in windows) {
                 window.SharedLook = () => Shares(id) ? Placement() : null;
                 window.Anchor = () => Shares(id) && settings.Data.SharedWindowAttach ? PanelBox() : null;
-                window.Header = () => RenderTabs(id);
+                window.Header = () => {
+                    RenderAttachedGrip(id);
+                    RenderTabs(id);
+                };
             }
 
             settings.Swapped += Settings_Swapped;
@@ -168,19 +183,25 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// Right above the toolbar's frame and as wide, as tall as the game's panels, or below it when there's no room
-        /// above (the toolbar moved to the top), or null when the toolbar can't be found. Not the panel frame's own place:
-        /// it's a floaty window the game keeps where it was last put (gmFloatyPanelUI saves its position), so it never
-        /// follows the toolbar.
+        /// Right above the toolbar's frame and as wide, or below it when there's no room above (the toolbar moved to the
+        /// top), or null when the toolbar can't be found. As tall as the player dragged it, or until then as the game's
+        /// panels, which a new character's can be too short to use. Not the panel frame's own place: it's a floaty window
+        /// the game keeps where it was last put (gmFloatyPanelUI saves its position), so it never follows the toolbar.
         /// </summary>
-        private static (Vector2 Position, Vector2 Size)? PanelBox() {
+        private (Vector2 Position, Vector2 Size)? PanelBox() {
             if (!ClientElements.TryGetFrameBox(ClientElements.Toolbar, out var barMin, out var barMax)) {
                 return null;
             }
 
-            var height = ClientElements.TryGetBox(ClientElements.PanelFrame, out var min, out var max)
-                ? max.Y - min.Y : DefaultPanelHeight;
-            var y = barMin.Y - height >= 0 ? barMin.Y - height : barMax.Y;
+            var height = settings.Data.SharedWindowAttachHeight
+                ?? (ClientElements.TryGetBox(ClientElements.PanelFrame, out var min, out var max)
+                    ? max.Y - min.Y : DefaultPanelHeight);
+            var roomAbove = barMin.Y;
+            var roomBelow = ImGui.GetIO().DisplaySize.Y - barMax.Y;
+            attachedAbove = height <= roomAbove || roomAbove >= roomBelow;
+            height = Math.Max(1, Math.Min(height, attachedAbove ? roomAbove : roomBelow));
+
+            var y = attachedAbove ? barMin.Y - height : barMax.Y;
             (Vector2 Position, Vector2 Size) box = (new Vector2(barMin.X, y), new Vector2(barMax.X - barMin.X, height));
 
             // logged once it settles, not every frame of a drag
@@ -191,6 +212,58 @@ namespace DaraletPlayer.Ui {
             }
 
             return box;
+        }
+
+        /// <summary>
+        /// Drags the attached window's free edge (the top, or the bottom when it's below the toolbar). By hand, not ImGui's
+        /// own resizing, which would also offer the other edges and corners: the window is put back on the toolbar every
+        /// frame, so dragging the edge against the toolbar would grow it without end. A double-click goes back to the game's
+        /// panels' height.
+        /// </summary>
+        private void RenderAttachedGrip(string showing) {
+            if (!Shares(showing) || !settings.Data.SharedWindowAttach || PanelBox() == null) {
+                sizing = null;
+                return;
+            }
+
+            var position = ImGui.GetWindowPos();
+            var size = ImGui.GetWindowSize();
+            var mouse = ImGui.GetMousePos();
+            var grip = Math.Max(ImGui.GetStyle().WindowPadding.Y, MinGripHeight);
+            var edge = attachedAbove ? position.Y : position.Y + size.Y - 1;
+            var inGrip = attachedAbove ? mouse.Y >= edge && mouse.Y < edge + grip : mouse.Y <= edge && mouse.Y > edge - grip;
+            var over = inGrip && mouse.X >= position.X && mouse.X < position.X + size.X
+                && ImGui.IsWindowHovered() && !ImGui.IsAnyItemHovered();
+
+            if (over && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
+                settings.Data.SharedWindowAttachHeight = null;
+                settings.Changed();
+                sizing = null;
+            }
+            else if (over && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) {
+                sizing = (mouse.Y, size.Y);
+            }
+
+            if (sizing.HasValue && !ImGui.IsMouseDown(ImGuiMouseButton.Left)) {
+                sizing = null;
+            }
+
+            if (sizing.HasValue) {
+                var moved = attachedAbove ? sizing.Value.MouseY - mouse.Y : mouse.Y - sizing.Value.MouseY;
+                var height = Math.Max(MinAttachedHeight, sizing.Value.Height + moved);
+
+                if (settings.Data.SharedWindowAttachHeight != height) {
+                    settings.Data.SharedWindowAttachHeight = height;
+                    settings.Changed();
+                }
+            }
+
+            if (over || sizing.HasValue) {
+                ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeNS);
+                var color = ImGui.GetColorU32(sizing.HasValue ? ImGuiCol.ResizeGripActive : ImGuiCol.ResizeGripHovered);
+                ImGui.GetWindowDrawList().AddLine(new Vector2(position.X, edge), new Vector2(position.X + size.X, edge),
+                    color, 2);
+            }
         }
 
         /// <summary>
@@ -281,9 +354,10 @@ namespace DaraletPlayer.Ui {
 
             if (Form.FlowCheck(ref first, "Attach to toolbar##shared-window", ref data.SharedWindowAttach,
                 "Puts the shared window right above the toolbar and as wide, as tall as the game's panels, and keeps it "
-                + "there, following the toolbar when it's moved: it can't be dragged or sized. It takes turns with the "
-                + "game's panels: one opening (the skills, the options, or any toolbar button not drawn over) closes it, "
-                + "and opening one of its windows closes the game's panel.")) {
+                + "there, following the toolbar when it's moved: it can't be dragged. Drag its top edge to make it taller "
+                + "or shorter (the game's own panels stay as they are); double-click that edge to match them again. It "
+                + "takes turns with the game's panels: one opening (the skills, the options, or any toolbar button not "
+                + "drawn over) closes it, and opening one of its windows closes the game's panel.")) {
                 settings.Changed();
             }
 
