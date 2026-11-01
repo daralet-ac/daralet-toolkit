@@ -83,6 +83,11 @@ namespace DaraletPlayer.Ui {
             var actions = CoreManager.Current.Actions;
             var items = Carried.In(pack);
 
+            if (items.Count == 0 && pack == CoreManager.Current.CharacterFilter.Id) {
+                PluginCore.Chat("Your main pack has nothing in it to sell.");
+                return;
+            }
+
             if (items.Count == 0) {
                 PluginCore.LogFile($"[drop] empty pack 0x{pack:X8} put on the vendor's sell list");
                 actions.VendorAddSellList(pack);
@@ -91,9 +96,17 @@ namespace DaraletPlayer.Ui {
 
             var added = 0;
 
-            foreach (var item in items.Where(Buys)) {
-                actions.VendorAddSellList(item.Id);
-                added++;
+            foreach (var item in items) {
+                if (Buys(item)) {
+                    actions.VendorAddSellList(item.Id);
+                    added++;
+                    continue;
+                }
+
+                // what the check saw, for working out why a player's item stayed off the list
+                var facts = Carried.Facts(item);
+                PluginCore.LogFile($"[drop] left out 0x{item.Id:X8} {item.Name}: type 0x{facts.ItemType:X}, value {facts.Value}, "
+                    + $"retained {facts.Retained}, attuned {facts.Attuned}, vendor buys 0x{VendorItemTypes():X}");
             }
 
             var left = items.Count - added;

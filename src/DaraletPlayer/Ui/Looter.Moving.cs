@@ -51,6 +51,9 @@ namespace DaraletPlayer.Ui {
         private bool moveFailed;
         private DateTime retryAt = DateTime.MinValue;
 
+        /// <summary>The refusal was the item's quest: sending it again can't work (LootRefusal).</summary>
+        private bool questRefused;
+
         /// <summary>How many times the moving item has been sent, for the log.</summary>
         private int tries;
         private uint lastSent;
@@ -174,6 +177,11 @@ namespace DaraletPlayer.Ui {
                 return true;
             }
 
+            if (questRefused) {
+                LeaveQuestItems(now);
+                return true;
+            }
+
             var stalled = moveFailed || now - movedAt > MoveTimeoutNow;
 
             if (!stalled) {
@@ -193,6 +201,27 @@ namespace DaraletPlayer.Ui {
             LogCorpse($"0x{moving:X8} given up after {tries} tries: {why}");
             StopMoving();
             return true;
+        }
+
+        /// <summary>
+        /// The server won't hand this over because of its quest, and the same goes for others of its name in the queue, so
+        /// they're left in the corpse rather than each being sent for the full GiveUpAfter. The server's already said why.
+        /// </summary>
+        private void LeaveQuestItems(DateTime now) {
+            var world = CoreManager.Current.WorldFilter;
+            var name = world[unchecked((int)moving)]?.Name;
+            var left = toLoot.Where(guid => world[unchecked((int)guid)]?.Name == name).ToList();
+            left.Add(moving);
+
+            foreach (var guid in left) {
+                toLoot.Remove(guid);
+                toSalvageAfterLooting.Remove(guid);
+            }
+
+            Chat($"Left {name ?? "an item"} in the corpse ({Words.Count(left.Count, "item")}): its quest won't let you take it now.", NotifyColor);
+            LogCorpse($"0x{moving:X8} refused for its quest, leaving {left.Count} item(s) named {name}");
+            StopMoving();
+            nextSendAt = now + AfterLanding;
         }
 
         /// <summary>The same item again after a moment: most likely refused for coming while the last was still starting.</summary>
@@ -215,6 +244,7 @@ namespace DaraletPlayer.Ui {
         private void StopMoving() {
             moving = 0;
             moveFailed = false;
+            questRefused = false;
             retryAt = DateTime.MinValue;
         }
 
@@ -242,6 +272,7 @@ namespace DaraletPlayer.Ui {
             try {
                 if (moving != 0 && e.Message.Type == GameEventMessageType && e.Message.Value<int>("event") == MoveFailedEvent) {
                     moveFailed = true;
+                    questRefused |= LootRefusal.IsQuestLimit(e.Message.RawData);
                 }
             }
             catch (Exception ex) {

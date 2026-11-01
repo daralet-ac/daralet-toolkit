@@ -21,6 +21,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>An item dragged from a list: the payload is empty, the item is DraggedItem.</summary>
         internal const string DragType = "DAP_ITEM";
 
+        /// <summary>The main pack, dragged: no drop spot takes it, only a vendor's window (MainPackDragSource).</summary>
+        private const string MainPackDragType = "DAP_MAIN_PACK";
+
         /// <summary>The item held in the last drag from any list, for drop spots outside the lists (the hotbars).</summary>
         internal static int DraggedItem { get; private set; }
 
@@ -225,8 +228,7 @@ namespace DaraletPlayer.Ui {
                     Select(holder);
                 }
 
-                var moveHint = holder.Movable ? "Drag it onto another pack to put it in that one's place." : "";
-                Widgets.Tip(string.IsNullOrEmpty(holder.Detail) ? moveHint : holder.Detail);
+                Widgets.Tip(string.IsNullOrEmpty(holder.Detail) ? PackDragHint(holder) : holder.Detail);
                 DragSource(holder);
                 DropTarget(holder.Id);
             }

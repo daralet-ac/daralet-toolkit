@@ -178,7 +178,8 @@ namespace DaraletPlayer.Ui {
                 }
                 ImGui.EndDisabled();
                 Widgets.Tip("Loots every item in it into your main pack, one at a time, whatever your loot rules say about "
-                    + "it, ticked or not. Salvages nothing. Click an item to loot just that one.");
+                    + "it, ticked or not. Salvages nothing. Quest drops the server won't let you take now, such as a second "
+                    + "head for a kill task, stay in it. Click an item to loot just that one.");
 
                 if (confirm) {
                     ImGui.SameLine();

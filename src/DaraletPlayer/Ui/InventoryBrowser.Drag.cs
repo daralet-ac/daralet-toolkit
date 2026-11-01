@@ -15,17 +15,68 @@ namespace DaraletPlayer.Ui {
         /// <summary>The last frame the drag source was held: ImGui stops asking for it the frame it's let go.</summary>
         private int draggingFrame = -1;
 
+        /// <summary>The last frame the main pack's drag was held, as draggingFrame is for an item.</summary>
+        private int mainPackDraggingFrame = -1;
+
         private string lastDropMark;
 
         private void DragSource(Item item) {
             DragSource(item.Id, Icon(item), item.Name);
         }
 
-        /// <summary>A pack, dragged onto another to take its place (not the main pack).</summary>
+        /// <summary>A pack, dragged onto another to take its place; the main pack, only onto a vendor.</summary>
         private void DragSource(Holder holder) {
             if (holder.Movable) {
                 DragSource(holder.Id, holder.Icon, holder.Label);
             }
+            else if (holder.Id == CoreManager.Current.CharacterFilter.Id) {
+                MainPackDragSource();
+            }
+        }
+
+        /// <summary>What a pack's tooltip says about dragging it.</summary>
+        private static string PackDragHint(Holder holder) {
+            if (holder.Movable) {
+                return "Drag it onto another pack to put it in that one's place.";
+            }
+
+            return holder.Id == CoreManager.Current.CharacterFilter.Id
+                ? "Drag it onto a vendor's window to put what's in it on the sell list."
+                : "";
+        }
+
+        /// <summary>
+        /// The main pack is you, not an item, so it has a drag type of its own that no drop spot takes: moved, dropped or
+        /// given as an item, the game would be asked to do that to your character. Only a vendor's window does anything.
+        /// </summary>
+        private void MainPackDragSource() {
+            if (!ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoPreviewTooltip)) {
+                return;
+            }
+
+            mainPackDraggingFrame = ImGui.GetFrameCount();
+            ImGui.SetDragDropPayload(MainPackDragType, IntPtr.Zero, 0);
+
+            var size = new Vector2(GridIconSize, GridIconSize);
+            var mouse = ImGui.GetMousePos();
+            var at = mouse - size / 2;
+            var drawList = ImGui.GetForegroundDrawList();
+            icons.DrawArt(drawList, ItemIcons.ArtMainPack, at, GridIconSize);
+
+            if (WillDropMainPack(mouse)) {
+                VendorDrop.Hover(icons);
+            }
+            else {
+                icons.DrawDropArt(drawList, at, at + size, false);
+            }
+
+            ImGui.EndDragDropSource();
+        }
+
+        /// <summary>Let go now, the main pack's items would go on the vendor's sell list.</summary>
+        private static bool WillDropMainPack(Vector2 mouse) {
+            return !ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem)
+                && WorldDrop.OverVendor(mouse);
         }
 
         private void DragSource(int id, IconLayers icon, string name) {
@@ -76,6 +127,16 @@ namespace DaraletPlayer.Ui {
         /// nothing out of a bank that way.
         /// </summary>
         private void CheckWorldDrop() {
+            var mouseUp = ImGui.IsMouseReleased(ImGuiMouseButton.Left);
+
+            if (mouseUp && mainPackDraggingFrame >= ImGui.GetFrameCount() - 1) {
+                mainPackDraggingFrame = -1;
+
+                if (WillDropMainPack(ImGui.GetMousePos())) {
+                    VendorSale.AddPack(CoreManager.Current.CharacterFilter.Id);
+                }
+            }
+
             if (dragged == 0 || draggingFrame < ImGui.GetFrameCount() - 1 || !ImGui.IsMouseReleased(ImGuiMouseButton.Left)) {
                 return;
             }

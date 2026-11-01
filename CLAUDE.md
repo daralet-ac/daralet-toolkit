@@ -358,7 +358,11 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   the looter sends the same item again 150ms after a refusal, or after silence for 1.5 times the last clean pickup (at
   least 900ms; a fixed 3 seconds made Loot all take 4 an item), and waits 250ms after each landing before the next, since
   a move sent the moment the last landed was always dropped unanswered,
-  giving up after 8 seconds (a full pack). The Corpse window shows "Looting..." with Cancel while it works, in every mode
+  giving up after 8 seconds (a full pack). A refusal because of the item's quest (its error says so, `LootRefusal`: a
+  stamped item on a corpse can only be taken as often as the quest can be solved, `Player.VerifyQuest`, so of three kill
+  task heads one lands) can't work however often it's sent: that item and the others of its name in the queue are left in
+  the corpse (`Looter.LeaveQuestItems`). Decal isn't told an item's `Quest`, so this is learned from the refusal; a quest
+  with no limit is looted as usual. The Corpse window shows "Looting..." with Cancel while it works, in every mode
   but chat. It starts off; there's no way to tell from a plugin whether VirindiTank's looter is on, so the tab just warns.
   **Loot window** (`SettingsData.LootWindow`, switched under the Config tab's Client UI Override) hides the game's corpse
   and chest window (see above): the Corpse window then
@@ -565,7 +569,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   open. The client is only sent each contract's id, stage and timers (`GameEventSendClientContractTracker`); the server
   sends the rest of its portal.dat ContractTable entry too (`Entity/PlayerUi/PlayerUiQuestData.cs`): descriptions, the
   start and end NPCs, and their places and the quest area's, placed like buildings (`PlayerUiData.BuildingMapCoords`,
-  `Town.IsOnMap` leaving out dungeons). Each place's Go makes it the World tab's destination (`WorldTab.GoTo`). Abandon
+  `Town.IsOnMap` leaving out dungeons). The table's NPC places are only rough (Renald the Eldest's is 38 meters off), so
+  the server uses the NPC's own spawn in that landblock, by name, when it finds one (`PlayerUiQuestData.NpcSpot`). Each place's Go makes it the World tab's destination (`WorldTab.GoTo`). Abandon
   (asked twice) is `@playerui abandon <contract id>`, the Contracts panel's own `HandleActionAbandonContract`, which
   keeps the starter contracts until they're done (`Player.CanAbandonContract`). Stages are available, started (a
   progress counter too) and done. The **Quests window** (`quests`, hidden to start) is the same list in a
@@ -908,7 +913,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   a vendor opens (its window's tabs, `ClientElements.VendorTabs`, coming into sight, half a second later, `VendorSale.Step`:
   Decal's `VendorId` needn't go back to 0 on closing, and the server resends the vendor's list after every purchase) every marked item you carry that
   it buys goes on its sell list (`VendorAddSellList`): nothing's sold until you press Sell. Marks of items gone from Decal
-  (sold, given) are dropped then. A **pack let go over the vendor** puts on its items the vendor buys (an empty pack, the
+  (sold, given) are dropped then. A **pack let go over the vendor**, the main pack too (a drag type of its own, `MainPackDragType`, which no drop spot takes, since it's your character and not an item; its side packs' items don't go with it), puts on its items the vendor buys (an empty pack, the
   pack itself: a vendor only buys one empty). What a vendor buys is `ItemChecks.VendorBuys` (`Feed/ItemChecks.cs`, from
   daralet-ACE's `Player.VerifySellItems`: the vendor's ItemType mask, Decal's `Vendor.Categories`; a value; not retained;
   not attuned, since the server's IsSellable, which the client isn't sent, is off for those). **Trade and the Ust**

@@ -166,8 +166,8 @@ namespace DaraletPlayer.Ui {
 
             var full = holder.Capacity > 0 ? $"  {holder.Count}/{holder.Capacity}" : "";
             var detail = string.IsNullOrEmpty(holder.Detail) ? "" : "\n" + holder.Detail;
-            var move = holder.Movable ? "\nDrag it onto another pack to put it in that one's place." : "";
-            Widgets.Tip(holder.Label + full + detail + move);
+            var move = PackDragHint(holder);
+            Widgets.Tip(holder.Label + full + detail + (move.Length > 0 ? "\n" + move : ""));
 
             DragSource(holder);
             DropTarget(holder.Id);
