@@ -10,7 +10,7 @@ namespace DaraletPlayer.Ui {
     /// ("Pointers cannot reference marshaled structures", from UIElement.GetChildRecursive), and their fields' places in
     /// memory aren't promised either. Every pointer here is a plain void*.
     /// </summary>
-    internal static class ClientElements {
+    internal static partial class ClientElements {
         /// <summary>UIElementManager::s_pInstance, read each time: it's made after the plugin may start.</summary>
         private const int ManagerAddress = 0x83E03C;
 

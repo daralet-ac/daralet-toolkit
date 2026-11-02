@@ -112,6 +112,15 @@ namespace DaraletPlayer.Ui {
                 VendorDrop.Hover(icons);
             }
 
+            // held over the game's bank or chest window, the pack or items slot it'd go in has the green ring
+            if (WillWorldDrop(id) && WorldDrop.OverOpenContainer(ImGui.GetMousePos())) {
+                WorldDrop.OpenContainerTarget(id, ImGui.GetMousePos(), out _, out var packMin, out var packMax);
+
+                if (packMax != packMin) {
+                    icons.DrawDropArt(drawList, packMin, packMax, true);
+                }
+            }
+
             // held over the game's shortcut bar, the slot it'd go in has the green ring
             var shortcut = WillWorldDrop(id) ? GameShortcuts.SlotAt(ImGui.GetMousePos()) : -1;
 
@@ -337,7 +346,7 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            var thing = GameDraggedGroundItem();
+            var thing = GameDraggedItem();
             var to = thing == null ? null : thing.ObjectClass == ObjectClass.Container ? packTo : itemTo;
 
             if (over) {
@@ -356,16 +365,27 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            PluginCore.LogFile($"[drag-in] picking it up into 0x{to.Value.Container:X8}, slot {to.Value.Slot}");
-            CoreManager.Current.Actions.MoveItem(id, to.Value.Container, to.Value.Slot, false);
+            // part of a stack when the game's stack bar says so, as a drag out of its own window carries
+            var amount = StackSplit.Amount(id);
+            PluginCore.LogFile($"[drag-in] picking it up into 0x{to.Value.Container:X8}, slot {to.Value.Slot}"
+                + (amount > 0 ? $", {amount} of it" : ""));
+
+            if (amount > 0) {
+                StackSplit.ToContainer(id, to.Value.Container, to.Value.Slot, amount);
+            }
+            else {
+                CoreManager.Current.Actions.MoveItem(id, to.Value.Container, to.Value.Slot, false);
+            }
+
             SnapshotSoon();
         }
 
         /// <summary>
-        /// What the game is dragging (its selection) if it's an item lying on the ground: not in anything, not worn, and not
-        /// a creature or fixture. Null otherwise.
+        /// What the game is dragging (its selection) if it's an item to pick up: one in the bank, chest or corpse the game
+        /// has open (GameDrag.InOpenContainer), or one lying on the ground (not in anything, not worn, and not a creature
+        /// or fixture). Null otherwise.
         /// </summary>
-        private static WorldObject GameDraggedGroundItem() {
+        private static WorldObject GameDraggedItem() {
             // the game's dragging a spell, not its selection
             if (SpellDrag.Spell != 0) {
                 return null;
@@ -378,6 +398,10 @@ namespace DaraletPlayer.Ui {
             }
 
             var item = CoreManager.Current.WorldFilter[id];
+
+            if (GameDrag.InOpenContainer(item)) {
+                return item;
+            }
 
             if (item == null || item.Values(LongValueKey.Container, 0) != 0 || item.Values(LongValueKey.Wielder, 0) != 0) {
                 return null;

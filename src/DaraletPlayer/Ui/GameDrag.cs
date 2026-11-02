@@ -202,10 +202,10 @@ namespace DaraletPlayer.Ui {
                 var item = CoreManager.Current.WorldFilter[id];
                 var spell = SpellDrag.Spell;
 
-                // only something you carry, or a spell: the game drops an item if it hears this, and takes a spell dragged off
-                // its spell bar off the bar. A thing on the ground is the inventory's to pick up, and the game does nothing
-                // with it.
-                if (spell == 0 && !HotbarItems.IsMine(item)) {
+                // only something you carry or in the open bank or chest, or a spell: the game drops an item if it hears
+                // this, and takes a spell dragged off its spell bar off the bar. A thing on the ground is the inventory's to
+                // pick up, and the game does nothing with it.
+                if (spell == 0 && !HotbarItems.IsMine(item) && !InOpenContainer(item)) {
                     return;
                 }
 
@@ -226,6 +226,27 @@ namespace DaraletPlayer.Ui {
             catch (Exception ex) {
                 PluginCore.Log(ex);
             }
+        }
+
+        /// <summary>
+        /// Whether the item is in the container the game has open (the bank, a chest or a corpse), or in one of its packs:
+        /// one dragged from the game's window of it, which the inventory takes.
+        /// </summary>
+        public static bool InOpenContainer(WorldObject item) {
+            var opened = CoreManager.Current.Actions.OpenedContainer;
+
+            if (item == null || opened == 0 || item.Id == opened) {
+                return false;
+            }
+
+            var container = item.Values(LongValueKey.Container, 0);
+
+            if (container == 0) {
+                return false;
+            }
+
+            return container == opened
+                || CoreManager.Current.WorldFilter[container]?.Values(LongValueKey.Container, 0) == opened;
         }
 
         /// <summary>Lets go where the drag began, over the item's own place, so the game leaves it there.</summary>

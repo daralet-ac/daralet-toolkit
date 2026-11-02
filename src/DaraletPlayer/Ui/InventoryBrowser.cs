@@ -123,7 +123,7 @@ namespace DaraletPlayer.Ui {
 
             // the game's own drag icon isn't drawn over our windows, so draw it here
             if (GameDrag.Dragging) {
-                var thing = GameDraggedGroundItem();
+                var thing = GameDraggedItem();
                 GameDrag.DrawIcon(icons, thing == null ? null : ItemIcons.Of(thing), GridIconSize);
             }
 

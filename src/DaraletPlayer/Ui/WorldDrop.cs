@@ -19,7 +19,7 @@ namespace DaraletPlayer.Ui {
     /// instead (Actions.VendorAddSellList), as the game's pack does; a pack, its items the vendor buys (VendorSale). One
     /// let go over the game's shortcut bar goes on it (GameShortcuts). While trading, or over an Ust's salvage panel, it
     /// goes in the trade or on the panel (PanelDrop). Over the game's window of an open bank or chest, shown in the same
-    /// panel, it goes in that container (OverOpenContainer).
+    /// panel, it goes in the pack let go on, or the pack the window has open (OpenContainerTarget).
     /// </summary>
     internal static class WorldDrop {
         private const int WM_LBUTTONDOWN = 0x0201;
@@ -76,7 +76,7 @@ namespace DaraletPlayer.Ui {
 
             // the game's bank or chest window: in it, as the game's pack does, not on the ground
             if (OverOpenContainer(at)) {
-                PutInOpenContainer(id);
+                PutInOpenContainer(id, at);
                 return;
             }
 
@@ -121,18 +121,46 @@ namespace DaraletPlayer.Ui {
             return ClientElements.IsOver(ClientElements.Environment, at);
         }
 
-        /// <summary>Puts an item (part of a stack, when the stack bar says so) in the open container; the server checks it.</summary>
-        private static void PutInOpenContainer(int id) {
+        /// <summary>
+        /// What an item let go at a spot over the open container's window goes into: the pack whose icon is under the
+        /// mouse, else the pack whose items the window shows (the one framed in green), else the container itself. A
+        /// pack always goes in the container, since packs don't go in packs. place is the items row's slot it goes at,
+        /// as the game's own drop puts it; min and max are the slot's box when the mouse is on one, for the green ring.
+        /// </summary>
+        public static int OpenContainerTarget(int id, Vector2 at, out int place, out Vector2 min, out Vector2 max) {
             var opened = CoreManager.Current.Actions.OpenedContainer;
+
+            if (!ClientElements.TryGetContainerDrop(at, opened, ContainerOf, out var into, out place, out min, out max)) {
+                return opened;
+            }
+
+            // a pack goes among the container's packs, wherever it was let go
+            if (Carried.IsPack(id)) {
+                place = 0;
+                min = max = Vector2.Zero;
+                return opened;
+            }
+
+            return into;
+        }
+
+        private static int ContainerOf(int id) {
+            return CoreManager.Current.WorldFilter[id]?.Values(LongValueKey.Container, 0) ?? 0;
+        }
+
+        /// <summary>Puts an item (part of a stack, when the stack bar says so) in the open container; the server checks it.</summary>
+        private static void PutInOpenContainer(int id, Vector2 at) {
+            var into = OpenContainerTarget(id, at, out var place, out _, out _);
             var part = StackSplit.Amount(id);
 
-            PluginCore.LogFile($"[drop] 0x{id:X8} put in the open container 0x{opened:X8}" + (part > 0 ? $", {part} of it" : ""));
+            PluginCore.LogFile($"[drop] 0x{id:X8} put in 0x{into:X8} at {place} (open container "
+                + $"0x{CoreManager.Current.Actions.OpenedContainer:X8})" + (part > 0 ? $", {part} of it" : ""));
 
             if (part > 0) {
-                StackSplit.ToContainer(id, opened, 0, part);
+                StackSplit.ToContainer(id, into, place, part);
             }
             else {
-                CoreManager.Current.Actions.MoveItem(id, opened, 0, false);
+                CoreManager.Current.Actions.MoveItem(id, into, place, false);
             }
         }
 
