@@ -187,7 +187,8 @@ shows and hides the main chat window.
 
 Requests so far: `hello`; `fellowship` (your fellowship with vitals and map places, or `null`); `position` (where you
 are on the map, which the plugin only asks indoors); `targets <guid> [guid]` (up to four
-creatures in your landblock or the ones around it: vitals, the spell in effect in each category, attack target and
+creatures your client has been told about (`PlayerUiData.ClientCanSee`: nothing through walls, hidden until a Perception
+roll or cloaked): vitals, the spell in effect in each category, attack target and
 threat table, or `"status":"gone"`). Another player as a target gets only `"status":"player"` and their name: the plugin
 shows the health percentage the client already has (game event `0x01C0`), never their spells or exact vitals. The server
 ignores a request of the same kind sooner than 400ms after the last (hello: 2 seconds), and more than 10 a second of every
@@ -224,7 +225,8 @@ starts, `PlayerFeed.WantWindow`, every frame until the server agrees). With one 
 CreateObject, so Decal has them, but no ViewContents, and pushes the `bank` or `corpse` reply unasked instead; closing
 pushes it again (the bank closed, or a corpse with status `closed`). Without ViewContents Decal's `ContainerOpened` doesn't
 fire, which is why the server says. Two things the client normally does go missing with the window: it never sends
-NoLongerViewingContents when you walk away, so the server closes such a container from the player's heartbeat
+NoLongerViewingContents when you walk away, so the server closes such a container from the player's heartbeat, even if the
+setting has been turned off since it opened (`Player.PlayerUiOpenedContainer`)
 (`Player.ClosePlayerUiContainerOutOfReach`); and closing is a Use of the open container (`Actions.UseItem`), which the
 plugin's windows send when they're closed. If the plugin is removed mid-session with these on, the game's windows stay away
 until the next login.
@@ -736,7 +738,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `Feed/SharedItemRequests.cs`): Link in chat, in an item's right-click menu (inventory lists, hotbar slots), sends
   `@playerui shareitem <guid>`; the server keeps the item's description (`PlayerUiCorpseData.Describe`) for a day under
   who linked it and its name, one item to a name, the latest (`PlayerUiItemShares`, `SharedItemStore` in daralet-ACE:
-  5,000 at most), and answers with the name; `[Name]` goes in the box (or on the clipboard, with the windows off), so
+  5,000 at most, a player's newest 50), and answers with the name; `[Name]` goes in the box (or on the clipboard, with the windows off), so
   players without the plugin read just that. The line carries nothing else: a `#code` in it, the first way, was ugly in
   the game's chat. Readers' plugins take each `[...]` after the first quote of a line someone said
   (`ChatMarkup.Speaker`, `MarkItems`) and ask `@playerui shared <key>...` (`ChatItemLink.Key`: speaker and name in base64,
@@ -1144,7 +1146,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   file (`Settings.Import`) adds any settings file as a new profile named after the file.
 
 `@playerui` only ever sends a player data about themselves, their fellowship and what they're fighting (for a monster
-they've selected: its vitals, every buff and debuff on it, and its threat table). The one exception is `lfg`, whose lists
+their client can see: its vitals, every buff and debuff on it, and its threat table). The one exception is `lfg`, whose lists
 name the players and fellowships looking for group, with only what their own lines already told the LFG channel (the
 user's call, October 2026). And `shared`: an item someone linked in chat, by their name and the item's, with their name, as they
 chose to show it (the user's call, October 2026); `shareitem` only takes the player's own things (`PlayerUiCorpseData.
