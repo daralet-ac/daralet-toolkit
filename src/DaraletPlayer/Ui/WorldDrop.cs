@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Decal.Adapter;
+using Decal.Adapter.Wrappers;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
@@ -17,7 +18,8 @@ namespace DaraletPlayer.Ui {
     /// ground. So while a vendor is open (Actions.VendorId), a drop on the panel it's shown in is put on its sell list
     /// instead (Actions.VendorAddSellList), as the game's pack does; a pack, its items the vendor buys (VendorSale). One
     /// let go over the game's shortcut bar goes on it (GameShortcuts). While trading, or over an Ust's salvage panel, it
-    /// goes in the trade or on the panel (PanelDrop).
+    /// goes in the trade or on the panel (PanelDrop). Over the game's window of an open bank or chest, shown in the same
+    /// panel, it goes in that container (OverOpenContainer).
     /// </summary>
     internal static class WorldDrop {
         private const int WM_LBUTTONDOWN = 0x0201;
@@ -72,6 +74,12 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            // the game's bank or chest window: in it, as the game's pack does, not on the ground
+            if (OverOpenContainer(at)) {
+                PutInOpenContainer(id);
+                return;
+            }
+
             item = id;
             amount = StackSplit.Amount(id);
             clickedAt = DateTime.UtcNow;
@@ -91,6 +99,41 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         public static bool OverVendor(Vector2 at) {
             return CoreManager.Current.Actions.VendorId != 0 && ClientElements.IsOver(ClientElements.Environment, at);
+        }
+
+        /// <summary>
+        /// A spot on the panel along the bottom while the game shows an open container there: the bank (with the plugin's
+        /// Bank window off) or a chest. Not a corpse, which takes nothing.
+        /// </summary>
+        public static bool OverOpenContainer(Vector2 at) {
+            var actions = CoreManager.Current.Actions;
+
+            if (actions.OpenedContainer == 0 || actions.VendorId != 0) {
+                return false;
+            }
+
+            var container = CoreManager.Current.WorldFilter[actions.OpenedContainer];
+
+            if (container == null || container.ObjectClass == ObjectClass.Corpse) {
+                return false;
+            }
+
+            return ClientElements.IsOver(ClientElements.Environment, at);
+        }
+
+        /// <summary>Puts an item (part of a stack, when the stack bar says so) in the open container; the server checks it.</summary>
+        private static void PutInOpenContainer(int id) {
+            var opened = CoreManager.Current.Actions.OpenedContainer;
+            var part = StackSplit.Amount(id);
+
+            PluginCore.LogFile($"[drop] 0x{id:X8} put in the open container 0x{opened:X8}" + (part > 0 ? $", {part} of it" : ""));
+
+            if (part > 0) {
+                StackSplit.ToContainer(id, opened, 0, part);
+            }
+            else {
+                CoreManager.Current.Actions.MoveItem(id, opened, 0, false);
+            }
         }
 
         /// <summary>Every frame: once the click has had time to select something, gives the item to it or drops it.</summary>

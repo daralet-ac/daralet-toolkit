@@ -22,6 +22,7 @@ namespace DaraletPlayer.Ui {
         private DateTime gameChatCheckAt;
         private bool chatBarWasActive;
         private bool enterLogged;
+        private bool otherBoxLogged;
 
         private static IEnumerable<uint> GameChatElements() {
             yield return ClientElements.MainChat;
@@ -108,6 +109,17 @@ namespace DaraletPlayer.Ui {
             var active = CoreManager.Current.Actions.ChatState;
             // not while the game's UI is hidden for a screenshot, the chat windows with it
             var take = Data.On && (Data.HideGameChat || Data.EnterTypes) && !HideGameUi.On;
+
+            // ChatState is true for any of the game's text boxes: the stack bar's number box lost every key typed in it.
+            // Only a box in one of the chat windows is taken (when that can't be told, any is, as before).
+            if (take && active && !chatBarWasActive && ClientElements.FocusIsIn(GameChatElements()) == false) {
+                take = false;
+
+                if (!otherBoxLogged) {
+                    otherBoxLogged = true;
+                    PluginCore.LogFile("[chat] a game text box outside the chat windows has the keyboard: left to it");
+                }
+            }
 
             if (take && active && !chatBarWasActive) {
                 var cleared = ClientElements.ClearFocus();

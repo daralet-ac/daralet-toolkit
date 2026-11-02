@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace DaraletPlayer.Ui {
@@ -44,6 +45,25 @@ namespace DaraletPlayer.Ui {
         public const uint VendorTabs = 0x100000B8;
         public const uint VendorSellingTab = 0x100000BB;
         public const uint VendorSellingList = 0x100000CE;
+
+        /// <summary>
+        /// Every piece of the in-world UI Decal's UIElementType names but the 3D view (Smartbox, 0x1000049A): Hide game UI
+        /// hides these one by one. Hiding their root hid the 3D view too, and a hidden element gets no mouse, so the right
+        /// button stopped turning the camera.
+        /// </summary>
+        public static readonly uint[] GameUiPieces = {
+            0x10000505, 0x1000050E, 0x1000050F, 0x10000510, // floating chat windows
+            0x100005F7, // examination (the selected object's bar)
+            0x100005FA, // vitals
+            Environment,
+            PanelFrame,
+            0x10000601, // main chat
+            Toolbar,
+            Indicators,
+            0x10000613, // progress bar
+            0x100006B5, // combat
+            0x100006D2, // radar
+        };
 
         /// <summary>
         /// The game's chat windows, as Decal's UIElementType names them: the main one (with the chat bar) and the four
@@ -207,6 +227,55 @@ namespace DaraletPlayer.Ui {
                 broken = true;
                 PluginCore.Log("The game's UI can't be reached, so the plugin's lookups are off until it next starts: " + ex);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Whether what has the keyboard is one of these elements or inside one (climbing UIRegion.m_parent): true, false,
+        /// or null when nothing has it, none of them can be found, or the UI can't be reached.
+        /// </summary>
+        public static unsafe bool? FocusIsIn(IEnumerable<uint> ids) {
+            if (broken) {
+                return null;
+            }
+
+            try {
+                var manager = *(byte**)ManagerAddress;
+                var focus = manager == null ? null : *(byte**)(manager + FocusOffset);
+
+                if (focus == null) {
+                    return null;
+                }
+
+                var elements = new HashSet<IntPtr>();
+
+                foreach (var id in ids) {
+                    var element = GetElement(manager, id);
+
+                    if (element != null) {
+                        elements.Add(new IntPtr(element));
+                    }
+                }
+
+                if (elements.Count == 0) {
+                    return null;
+                }
+
+                // the UI is only a few levels deep; the limit only guards against a loop
+                for (var depth = 0; focus != null && depth < 16; depth++) {
+                    if (elements.Contains(new IntPtr(focus))) {
+                        return true;
+                    }
+
+                    focus = *(byte**)(focus + ParentOffset);
+                }
+
+                return false;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be reached, so the plugin's lookups are off until it next starts: " + ex);
+                return null;
             }
         }
 

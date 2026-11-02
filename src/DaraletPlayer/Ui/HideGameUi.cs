@@ -1,11 +1,13 @@
 using System;
+using System.Collections.Generic;
 using Decal.Adapter;
 using DaraletPlayer.Feed;
 using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// Hides all of the game's UI (ClientElements.SetUiVisible) and, unless Keep plugin windows is ticked
+    /// Hides all of the game's UI (each of ClientElements.GameUiPieces, leaving the 3D view, so the right button still
+    /// turns the camera) and, unless Keep plugin windows is ticked
     /// (SettingsData.HideUiKeepPluginWindows), every one of the plugin's windows, for screenshots, and puts them back: by a
     /// key (SettingsData.HideUiKey), /dap hideui and /dap showui, or the Config tab. Never saved: a login always starts
     /// with the UI showing.
@@ -30,6 +32,9 @@ namespace DaraletPlayer.Ui {
         private readonly Settings settings;
         private readonly Func<bool> mainVisible;
         private readonly Action<bool> setMainVisible;
+
+        /// <summary>The pieces of the game's UI that were showing and are hidden, to show again.</summary>
+        private readonly HashSet<uint> hiddenPieces = new HashSet<uint>();
 
         private bool mainHidden;
         private bool mainWasVisible;
@@ -76,7 +81,7 @@ namespace DaraletPlayer.Ui {
                 var back = KeyLabel != null ? $"{KeyLabel} or /dap showui" : "/dap showui";
                 PluginCore.Chat($"Game UI hidden: {back} brings it back.");
 
-                if (!ClientElements.SetUiVisible(false)) {
+                if (!HidePieces()) {
                     PluginCore.Chat("The game's UI couldn't be hidden.");
                     return;
                 }
@@ -89,9 +94,48 @@ namespace DaraletPlayer.Ui {
             }
 
             On = false;
-            var shown = ClientElements.SetUiVisible(true);
+            ShowPieces();
             HideMain(false);
-            PluginCore.LogFile(shown ? "[hide-ui] shown" : "[hide-ui] shown, but the game's UI didn't say it's visible");
+            PluginCore.LogFile("[hide-ui] shown");
+        }
+
+        /// <summary>
+        /// Hides each piece of the game's UI that's showing (ClientElements.GameUiPieces), noting it to show again. The 3D
+        /// view and the root they're in stay, so the mouse still reaches the world. False when none could be found.
+        /// </summary>
+        private bool HidePieces() {
+            var found = false;
+
+            foreach (var id in ClientElements.GameUiPieces) {
+                var shown = ClientElements.IsShown(id);
+
+                if (shown == null) {
+                    continue;
+                }
+
+                found = true;
+
+                if (shown == true) {
+                    hiddenPieces.Add(id);
+                    ClientElements.SetVisible(id, false);
+                }
+            }
+
+            return found;
+        }
+
+        /// <summary>Shows again what HidePieces hid (and a panel the game opened meanwhile).</summary>
+        private void ShowPieces() {
+            if (CoreManager.Current.CharacterFilter.LoginStatus == 3) {
+                foreach (var id in hiddenPieces) {
+                    ClientElements.SetVisible(id, true);
+                }
+
+                // a build from before this hid the root itself: a hot reload mid-hide leaves it to show
+                ClientElements.SetUiVisible(true);
+            }
+
+            hiddenPieces.Clear();
         }
 
         /// <summary>Hides the /dap window, or shows it again if it was showing before.</summary>
@@ -120,6 +164,7 @@ namespace DaraletPlayer.Ui {
                     // leaving the world: the game sets its own UI up again for the next login
                     if (On) {
                         On = false;
+                        hiddenPieces.Clear();
                         HideMain(false);
                         PluginCore.LogFile("[hide-ui] off at logout");
                     }
@@ -132,7 +177,7 @@ namespace DaraletPlayer.Ui {
 
                 if (On && DateTime.UtcNow >= reapplyAt) {
                     reapplyAt = DateTime.UtcNow + ReapplyEvery;
-                    ClientElements.SetUiVisible(false);
+                    HidePieces();
                 }
             }
             catch (Exception ex) {
@@ -248,10 +293,7 @@ namespace DaraletPlayer.Ui {
             // a hot reload or the plugin being turned off mustn't leave the game without its UI
             if (On) {
                 On = false;
-
-                if (CoreManager.Current.CharacterFilter.LoginStatus == 3) {
-                    ClientElements.SetUiVisible(true);
-                }
+                ShowPieces();
             }
 
             if (current == this) {
