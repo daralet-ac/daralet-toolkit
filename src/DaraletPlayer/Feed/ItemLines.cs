@@ -108,6 +108,7 @@ namespace DaraletPlayer.Feed {
 
             Properties(lines, l);
             List(lines, "Imbued", l.ImbuedEffects);
+            Sockets(lines, l);
             Magic(lines, l);
             Spells(lines, l.Spells);
 
@@ -462,7 +463,8 @@ namespace DaraletPlayer.Feed {
             if (l.NumTimesTinkered > 0) {
                 parts.Add($"tinkered: {l.NumTimesTinkered}");
             }
-            if (l.Sockets > 0) {
+            // a server that says what's in them gets a Sockets section instead
+            if (l.Sockets > 0 && l.SocketJewels == null) {
                 parts.Add($"sockets: {l.Sockets}");
             }
 
@@ -548,6 +550,24 @@ namespace DaraletPlayer.Feed {
                 default:
                     return ItemLineStyle.Text;
             }
+        }
+
+        /// <summary>
+        /// Each jewel socket, as appraisal lists them: "Socket: Black Garnet (5)", or "Empty Jewel Socket". The server
+        /// sends them as socketJewels, "" for an empty one; an older one only sends the count, on the workmanship line.
+        /// </summary>
+        private static void Sockets(List<ItemLine> lines, MarketListing l) {
+            if (l.SocketJewels == null) {
+                return;
+            }
+
+            var section = l.SocketJewels
+                .Select(j => string.IsNullOrEmpty(j)
+                    ? new ItemLine("Empty Jewel Socket", ItemLineStyle.Detail)
+                    : new ItemLine($"Socket: {j}", ItemLineStyle.Text))
+                .ToList();
+
+            Section(lines, "Sockets", section);
         }
 
         private static void Section(List<ItemLine> lines, string heading, List<ItemLine> section) {

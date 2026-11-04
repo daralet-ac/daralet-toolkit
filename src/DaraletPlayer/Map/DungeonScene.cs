@@ -17,6 +17,8 @@ namespace DaraletPlayer.Map {
         public HashSet<uint> Visited;
         /// <summary>What they're drawn in on your floor: ramps lean towards the ramp colour, lower floors darker.</summary>
         public uint VisitedColor;
+        /// <summary>How solid the map's ground, floors and walls are, 0 to 1; markers, you and the route stay solid.</summary>
+        public float Opacity = 1;
         public List<DungeonMarker> Markers;
         public Func<DungeonMarkerKind, bool> ShowMarker;
         /// <summary>The way to the route's target, as points to walk through; null for none.</summary>

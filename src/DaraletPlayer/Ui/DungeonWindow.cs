@@ -140,6 +140,7 @@ namespace DaraletPlayer.Ui {
                     ? settings.Data.DungeonVisits.For(Character, layout.Landblock)
                     : null,
                 VisitedColor = settings.Data.DungeonVisitedColor,
+                Opacity = Math.Max(0, Math.Min(1, settings.Data.DungeonMapOpacity)),
                 Markers = markers,
                 ShowMarker = IsShown,
                 Route = route,
@@ -295,6 +296,22 @@ namespace DaraletPlayer.Ui {
                 + "the others dimmed, the rooms you've been in grey, with you on it, the portals, corpses, chests, NPCs and "
                 + "monsters on your floor in the rooms you've been in, and the way out. Scroll to zoom, drag to look around, "
                 + "right-click for the way anywhere. Only when needed shows it only while you're indoors.");
+
+            if (!Form.BeginForm("dungeon-map-form")) {
+                return;
+            }
+
+            Form.Label("Map opacity", "How solid the map itself is drawn: its dark ground, floors and walls. Lower lets "
+                + "the game show through; the markers, you and the way stay solid. Background above only fades the "
+                + "window's box: with both at 0%, only the map's lines and markers are left over the game.");
+            var percent = (int)Math.Round(Math.Max(0, Math.Min(1, settings.Data.DungeonMapOpacity)) * 100);
+
+            if (Form.Slider("##dungeon-map-opacity", ref percent, 0, 100, "%d%%")) {
+                settings.Data.DungeonMapOpacity = percent / 100f;
+                settings.Changed();
+            }
+
+            ImGui.EndTable();
         }
 
         public void Dispose() {

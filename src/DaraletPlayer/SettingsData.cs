@@ -115,6 +115,8 @@ namespace DaraletPlayer {
         [DataMember(Name = "dungeonTurn")] public bool DungeonTurn;
         /// <summary>The Dungeon window draws every floor, not only those near yours.</summary>
         [DataMember(Name = "dungeonAllFloors")] public bool DungeonAllFloors;
+        /// <summary>How solid the Dungeon window draws the map itself (its floors, walls and dark ground), 0 to 1.</summary>
+        [DataMember(Name = "dungeonMapOpacity")] public float DungeonMapOpacity;
         /// <summary>The Dungeon window greys out the rooms you've been in.</summary>
         [DataMember(Name = "dungeonShowVisited")] public bool DungeonShowVisited;
         /// <summary>What the rooms you've been in are drawn in, packed as ImGui has it (PackedColor).</summary>
@@ -347,6 +349,17 @@ namespace DaraletPlayer {
 
             if (!CombatKinds.TryGetValue(info.Key, out var options) || options == null) {
                 options = new CombatKindOptions { Color = info.Color };
+
+                // stamina and mana heals were health's until they had kinds of their own: they start as it was set, in
+                // their own colour, so a player who hid healing in chat doesn't see them come back
+                if ((kind == CombatKind.StaminaHealing || kind == CombatKind.ManaHealing)
+                    && CombatKinds.TryGetValue(CombatKindInfo.For(CombatKind.Healing).Key, out var health) && health != null) {
+                    options.Floating = health.Floating;
+                    options.Log = health.Log;
+                    options.HideChat = health.HideChat;
+                    options.Save = health.Save;
+                }
+
                 CombatKinds[info.Key] = options;
             }
 
@@ -399,6 +412,7 @@ namespace DaraletPlayer {
             DungeonTurn = true;
             DungeonShowVisited = true;
             DungeonVisitedColor = DungeonVisits.DefaultColor;
+            DungeonMapOpacity = 1;
             DungeonVisits = new DungeonVisits();
             DungeonMarkers = new Dictionary<string, bool>();
             AppraiseInPlugin = true;

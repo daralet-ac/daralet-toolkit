@@ -61,6 +61,36 @@ namespace DaraletPlayer.Feed {
             (Line($@"{Who} you(?:r [^.!]+?)? for {Points} of (?:\w+ )?damage"), CombatKind.HitYou, null),
         };
 
+        /// <summary>The vital named after a heal's number: "60 Health points", "100 points of your Stamina".</summary>
+        private static readonly Regex Vital = new Regex(@"\G(?: points?)?(?: of)?(?: your)?(?: periodic)?\s*(?<vital>\w+)",
+            Options | RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// Which kind of heal a heal line is, by the vital its number is of: the server always names it straight after
+        /// ("You heal yourself for 60 Stamina points", "restores 50 points of your Mana", "periodic healing"). Anything
+        /// else, a spell's name included, is left as health.
+        /// </summary>
+        private static CombatKind HealedVital(string line, Group amount) {
+            if (!amount.Success) {
+                return CombatKind.Healing;
+            }
+
+            var vital = Vital.Match(line, amount.Index + amount.Length);
+
+            if (!vital.Success) {
+                return CombatKind.Healing;
+            }
+
+            switch (vital.Groups["vital"].Value.ToLowerInvariant()) {
+                case "stamina":
+                    return CombatKind.StaminaHealing;
+                case "mana":
+                    return CombatKind.ManaHealing;
+                default:
+                    return CombatKind.Healing;
+            }
+        }
+
         private static Regex Line(string pattern) {
             return new Regex(Start + pattern, Options);
         }
@@ -87,7 +117,7 @@ namespace DaraletPlayer.Feed {
                 var amount = match.Groups["n"];
                 var target = match.Groups["target"];
                 return new CombatLine {
-                    Kind = kind,
+                    Kind = kind == CombatKind.Healing ? HealedVital(line, amount) : kind,
                     Target = target.Success ? target.Value : null,
                     Text = line,
                     Amount = amount.Success && int.TryParse(amount.Value, out var points) ? points : (int?)null,

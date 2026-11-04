@@ -42,9 +42,15 @@ namespace DaraletPlayer.Tests {
         [DataRow("With Heal Self you restore 100 points of Health to yourself.", CombatKind.Healing, 100)]
         [DataRow("You cast Heal Self and restore 100 points of your Health.", CombatKind.Healing, 100)]
         [DataRow("Arwen casts Heal Other and restores 50 points of your Health.", CombatKind.Healing, 50)]
-        [DataRow("You gain 20 points of Mana due to casting Transfer on Arwen", CombatKind.Healing, 20)]
+        [DataRow("You gain 20 points of Mana due to casting Transfer on Arwen", CombatKind.ManaHealing, 20)]
         [DataRow("You receive 11 points of periodic healing.", CombatKind.Healing, 11)]
-        [DataRow("Masochist restores 5 points of Stamina!", CombatKind.Healing, 5)]
+        [DataRow("Masochist restores 5 points of Stamina!", CombatKind.StaminaHealing, 5)]
+        [DataRow("You heal yourself for 60 Stamina points.", CombatKind.StaminaHealing, 60)]
+        [DataRow("Arwen heals you for 40 Mana points.", CombatKind.ManaHealing, 40)]
+        [DataRow("With Revitalize Self you restore 80 points of Stamina to yourself.", CombatKind.StaminaHealing, 80)]
+        [DataRow("Arwen casts Mana Boost Other and restores 50 points of your Mana.", CombatKind.ManaHealing, 50)]
+        [DataRow("With Mana Boost Self you restore 30 points of Health to yourself.", CombatKind.Healing, 30)]
+        [DataRow("You receive 9 points of periodic mana.", CombatKind.ManaHealing, 9)]
         public void ReadsDamageAndHealing(string text, CombatKind kind, int amount) {
             var line = Read(text);
 
@@ -136,7 +142,7 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
-        public void EveryKindHasItsOwnRowInOrder() {
+        public void EveryKindHasItsOwnRow() {
             var kinds = (CombatKind[])Enum.GetValues(typeof(CombatKind));
 
             Assert.AreEqual(kinds.Length, CombatKindInfo.All.Length);

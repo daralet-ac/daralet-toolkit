@@ -169,7 +169,7 @@ namespace DaraletPlayer.Tests {
 
                 var day = File.ReadAllLines(Path.Combine(folder, "Holmez 2026-10-30.txt"));
                 CollectionAssert.AreEqual(new[] { "[23:59:59] [Your attacks] You hit Rat for 1 point of damage!" }, day);
-                CollectionAssert.AreEqual(new[] { "[00:00:01] [Healing] You receive 2 points of periodic healing." },
+                CollectionAssert.AreEqual(new[] { "[00:00:01] [Health healing] You receive 2 points of periodic healing." },
                     File.ReadAllLines(Path.Combine(folder, "Holmez 2026-10-31.txt")));
             }
             finally {

@@ -71,6 +71,21 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void SocketsShowWhatsInEach() {
+            var texts = Texts(ItemLines.Build(new MarketListing {
+                ItemName = "Sword", Workmanship = 5, Sockets = 2, SocketJewels = new List<string> { "Black Garnet (5)", "" },
+            }));
+
+            CollectionAssert.Contains(texts, "Sockets");
+            CollectionAssert.Contains(texts, "Socket: Black Garnet (5)");
+            CollectionAssert.Contains(texts, "Empty Jewel Socket");
+            CollectionAssert.Contains(texts, "Workmanship: 5", "the count isn't repeated on the workmanship line");
+
+            var older = Texts(ItemLines.Build(new MarketListing { ItemName = "Sword", Sockets = 2 }));
+            CollectionAssert.Contains(older, "Sockets: 2", "an older server only sends the count");
+        }
+
+        [TestMethod]
         public void SigilsAndSalvage() {
             var sigil = Texts(ItemLines.Build(new MarketListing {
                 ItemName = "Scarab of Growth", ItemCategory = "SigilTrinket", SigilTrinketType = "Scarab", SigilEffectName = "Growth",

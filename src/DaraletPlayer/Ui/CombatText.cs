@@ -33,6 +33,8 @@ namespace DaraletPlayer.Ui {
             ("312!", true, true, CombatKind.YouSpell),
             ("Evaded", false, false, CombatKind.YouAvoid),
             ("+40", false, false, CombatKind.Healing),
+            ("+25", false, false, CombatKind.StaminaHealing),
+            ("+30", false, false, CombatKind.ManaHealing),
             ("Blocked", true, false, CombatKind.YourMiss),
         };
 

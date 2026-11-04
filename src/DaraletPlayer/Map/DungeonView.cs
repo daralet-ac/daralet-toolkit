@@ -68,7 +68,7 @@ namespace DaraletPlayer.Map {
             HandleZoomAndPan(hovered);
 
             drawList.PushClipRect(origin, origin + size, true);
-            drawList.AddRectFilled(origin, origin + size, Background);
+            drawList.AddRectFilled(origin, origin + size, PackedColor.Fade(Background, scene.Opacity));
 
             var layout = scene.Layout;
             var selfZ = scene.Self?.Z;
@@ -183,6 +183,13 @@ namespace DaraletPlayer.Map {
                 wallColor = MapView.Col(0.45f, 0.5f, 0.6f, fade);
                 wallWidth = 1;
             }
+
+            // the window's Map opacity, so the game shows through the map as well as its background
+            floorColor = PackedColor.Fade(floorColor, scene.Opacity);
+            rampColor = PackedColor.Fade(rampColor, scene.Opacity);
+            visitedColor = PackedColor.Fade(visitedColor, scene.Opacity);
+            visitedRampColor = PackedColor.Fade(visitedRampColor, scene.Opacity);
+            wallColor = PackedColor.Fade(wallColor, scene.Opacity);
 
             // floors share edges, and anti-aliased fill shows a seam along each
             var flags = drawList.Flags;

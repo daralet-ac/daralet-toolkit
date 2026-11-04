@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+
 namespace DaraletPlayer.Feed {
     /// <summary>One kind of combat line: its name and how it starts out.</summary>
     public class CombatKindInfo {
@@ -34,9 +37,15 @@ namespace DaraletPlayer.Feed {
             new CombatKindInfo { Kind = CombatKind.YouAvoid, Key = "youAvoid", Label = "Your defenses", Sign = "",
                 Color = PackedColor.Pack((byte)255, (byte)225, (byte)120),
                 Tip = "What you evaded, blocked, parried or resisted." },
-            new CombatKindInfo { Kind = CombatKind.Healing, Key = "healing", Label = "Healing", Sign = "+",
+            new CombatKindInfo { Kind = CombatKind.Healing, Key = "healing", Label = "Health healing", Sign = "+",
                 Color = PackedColor.Pack((byte)110, (byte)235, (byte)120),
-                Tip = "Vitals healed or restored, by kits, spells and effects, on you or by you." },
+                Tip = "Health healed or restored, by kits, spells and effects, on you or by you." },
+            new CombatKindInfo { Kind = CombatKind.StaminaHealing, Key = "staminaHealing", Label = "Stamina restored",
+                Sign = "+", Color = PackedColor.Pack((byte)255, (byte)215, (byte)90),
+                Tip = "Stamina restored, by kits, spells and effects, on you or by you." },
+            new CombatKindInfo { Kind = CombatKind.ManaHealing, Key = "manaHealing", Label = "Mana restored", Sign = "+",
+                Color = PackedColor.Pack((byte)90, (byte)160, (byte)255),
+                Tip = "Mana restored, by kits, spells and effects, on you or by you." },
             new CombatKindInfo { Kind = CombatKind.Kill, Key = "kill", Label = "Your kills", Yours = true, Sign = "",
                 Color = PackedColor.Pack((byte)255, (byte)190, (byte)60),
                 Tip = "What you killed." },
@@ -45,8 +54,11 @@ namespace DaraletPlayer.Feed {
                 Tip = "What killed you." },
         };
 
+        // by kind, since All is in the Combat tab's order, the heals together, not the enum's
+        private static readonly Dictionary<CombatKind, CombatKindInfo> ByKind = All.ToDictionary(info => info.Kind);
+
         public static CombatKindInfo For(CombatKind kind) {
-            return All[(int)kind];
+            return ByKind[kind];
         }
     }
 }

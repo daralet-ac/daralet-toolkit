@@ -299,6 +299,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`TextUnformatted`): ImGui.NET's `Text*` read a "%" as a printf format. Items `@playerui` describes carry `rollQuality`: appraisal's Roll Quality section
   (`LootGenerationFactory.GetItemRollRanges`) by stat name, which `ItemLines` matches to the line showing the stat
   (`ItemLine.RollStat`) and `ItemTooltip` draws at the right. Market search has none: the Market API has no live item.
+  **Sockets** are a section of their own (`ItemLines.Sockets`), as appraisal lists them (`AppraiseInfo.
+  SetJewelcraftingUseText`): "Socket: Black Garnet (5)" or "Empty Jewel Socket", from `socketJewels`
+  (`MarketRepository.ComputeSocketJewels`: each `JewelSocket<n>Material` and `Quality`, the first two sockets' legacy
+  strings winning). An older server sends only `sockets`, the count, which then goes on the workmanship line.
 - **Loot tab** (`Ui/LootTab.cs`, `Ui/Looter.cs`, `Feed/Loot.cs`): named lists (players see them as "loot profiles"; the code
   still says `LootList`) in `SettingsData.Loot`, each character
   picking one (`LootData.ActiveFor`). A rule is a category, tiers, name words and any of `MarketSearch.Filters`, plus an
@@ -768,7 +772,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   so those are told by their game events, 0x01AD and 0x01AC, which come just before the client writes the same text.
   Tells, speech, channels and anything with a quote in it are never combat, so nobody can fake a number with a tell.
   Each kind (`CombatKind`, a row in `CombatKindInfo.All`, whose `Key` is what settings.json has) has its own `CombatKindOptions`:
-  Floating, Log, Save, Hide in chat (`e.Eat`) and a colour. **Floating text** (`CombatText`) rises from two fixed places on
+  Floating, Log, Save, Hide in chat (`e.Eat`) and a colour. Heals are three kinds, health (`healing`, the old key),
+  stamina and mana (`CombatLines.HealedVital`, by the vital the server names straight after the number); the last two
+  start as health's options were set, in their own colours (`SettingsData.CombatOptions`). `CombatKindInfo.All` is in
+  the Combat tab's order, not the enum's (`For` looks a kind up). **Floating text** (`CombatText`) rises from two fixed places on
   screen, one for what you do and one for what's done to you, in percent of the screen. It's drawn on ImGui's background list from a hud of its own with `NoInputs`, so
   it never takes a click, using `ItemIcons.DrawLabel`; so many numbers fill the label cache, which now frees a full cache's
   textures a frame later (`RetireLabels`), since this frame's draw lists still point at them. **Over their head**
@@ -1001,7 +1008,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   or sigil, also shows its Use text and long description, here and in the bank's and the Loot tab's tooltips
   (`Ui/ItemUse.cs`: `StringValueKey.UsageInstructions`, `FullDescription`). The server's description doesn't carry them:
   they reach Decal only with an appraisal, so the first look asks for one (`Actions.RequestId`, once an item, unless
-  `HasIdData`), and the game's panel stays shut. Market search tooltips have none: those items aren't in Decal. Off, right-click just selects the item, for the
+  `HasIdData`), and the game's panel stays shut. Market search tooltips have none: those items aren't in Decal. The
+  Appraisal window shows gear's too (`ItemUse.AppraisalLines`; the tooltips leave gear's out, as too long): the game's
+  appraisal explains each property in a "Property Descriptions:" block atop the long description (`~ Name: text`
+  lines, from AppraiseInfo's `_additionalPropertiesLongDescriptionsText`), which `Feed/PropertyDescriptions.cs` splits
+  off, so hovering a line that names a property ("Biting Strike: +3%", "Mighty Thews II, Fire Rending") shows its
+  description; any no line names stay in the Description. Off, right-click just selects the item, for the
   game's appraise key.
 
 - **Dungeon window** (`Ui/DungeonWindow.cs`, `Map/Dungeon*.cs`, `dungeon`, hidden to start, its switch beside the
@@ -1020,6 +1032,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   one above as a faint fill and outline, yours last and brightest, with anti-aliased fill off for the floors (seams).
   **Turn with me** turns it by your heading, with a compass needle; **Follow me**, dragging turning it off, as the maps.
   The window's Only when needed shows it only indoors. Inside a building it maps every building's rooms in the landblock.
+  **Map opacity** (`SettingsData.DungeonMapOpacity`, under the window's settings beside Background) fades the map's own
+  dark ground, floors and walls (`DungeonScene.Opacity`); markers, you and the route stay solid.
   **Rooms you've been in** are grey (`DungeonVisits`, in settings.json as `dungeonVisits`: by character name, then
   landblock as four hex digits, then cell numbers), noted from every frame's `Landcell` whether the window's open or not,
   in a colour of your own under Show... (`DungeonVisitedColor`; ramps lean 30% towards the ramp colour, lower floors

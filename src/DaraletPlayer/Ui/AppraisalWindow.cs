@@ -95,7 +95,7 @@ namespace DaraletPlayer.Ui {
                 feed.Describe(worn);
             }
 
-            ItemUse.Request(item);
+            ItemUse.Request(item, gear: true);
         }
 
         public void Dispose() {
@@ -121,8 +121,9 @@ namespace DaraletPlayer.Ui {
 
                 ImGui.Separator();
                 var lines = ItemLines.Build(item);
-                lines.AddRange(ItemUse.Lines(guid, waiting: true));
-                RenderLines(lines, wrap);
+                var named = lines.Where(l => l.Style != ItemLineStyle.Heading).Select(l => l.Text).ToList();
+                lines.AddRange(ItemUse.AppraisalLines(guid, named, out var properties));
+                RenderLines(lines, wrap, properties);
 
                 // last, and closed until opened: the item's own stats come first
                 RenderCompare(item);
@@ -229,9 +230,10 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>
         /// The item's lines, without the title and kind the header has. A heading gets a rule across under it; a stat that
-        /// rolled gets its quality at the right as a bar and a percentage, in the quality's colour.
+        /// rolled gets its quality at the right as a bar and a percentage, in the quality's colour. A line naming properties
+        /// the game's appraisal describes shows those descriptions while hovered.
         /// </summary>
-        private static void RenderLines(List<ItemLine> lines, float wrap) {
+        private static void RenderLines(List<ItemLine> lines, float wrap, PropertyDescriptions properties) {
             // the header already shows the name, and the line after it (kind and tier) when the description starts with one
             var body = lines.SkipWhile(l => l.Style == ItemLineStyle.Title).ToList();
 
@@ -255,11 +257,37 @@ namespace DaraletPlayer.Ui {
 
                 var lineStart = ImGui.GetCursorPosX();
                 ItemTooltip.DrawText(line);
+                RenderDescriptionTip(properties.For(line.Text));
 
                 if (line.Quality.HasValue) {
                     RenderQuality(line.Quality.Value, lineStart + qualityLeft, barWidth, percentWidth, spacing);
                 }
             }
+        }
+
+        /// <summary>
+        /// The game appraisal's description of each property the line just drawn names, while it's hovered: the name in
+        /// the heading colour, the description under it.
+        /// </summary>
+        private static void RenderDescriptionTip(List<KeyValuePair<string, string>> descriptions) {
+            if (descriptions.Count == 0 || !ImGui.IsItemHovered()) {
+                return;
+            }
+
+            Widgets.BeginTooltip();
+            ImGui.PushTextWrapPos(ImGui.GetFontSize() * 28);
+
+            for (var i = 0; i < descriptions.Count; i++) {
+                if (i > 0) {
+                    ImGui.Spacing();
+                }
+
+                Widgets.TextColored(ItemTooltip.Heading, descriptions[i].Key);
+                Widgets.TextWrapped(descriptions[i].Value);
+            }
+
+            ImGui.PopTextWrapPos();
+            ImGui.EndTooltip();
         }
 
         /// <summary>A section's heading, with a rule across under it.</summary>

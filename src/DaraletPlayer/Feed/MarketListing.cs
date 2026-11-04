@@ -131,6 +131,8 @@ namespace DaraletPlayer.Feed {
         /// <summary>The chance a hit casts the weapon's proc spell, 0 to 1; null when it has none.</summary>
         [DataMember(Name = "procChance")] public double? ProcChance;
         [DataMember(Name = "sockets")] public int? Sockets;
+        /// <summary>What's in each socket, in order: "Black Garnet (5)", or "" for an empty one; null from older servers.</summary>
+        [DataMember(Name = "socketJewels")] public List<string> SocketJewels;
         [DataMember(Name = "otherWieldRequirements")] public List<string> OtherWieldRequirements;
         [DataMember(Name = "armorModVsNether")] public double? ArmorModVsNether;
         [DataMember(Name = "wardPerSlot")] public double? WardPerSlot;

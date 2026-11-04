@@ -12,7 +12,9 @@ namespace DaraletPlayer.Ui {
     /// A plugin can't ask the game what's under the mouse, so the game is asked to find it: the selection is cleared and
     /// the game is sent a left click where the item was let go, which selects whatever is there. If something is selected
     /// a moment later, the item is given to it (Actions.GiveItem, the server's own give, which an NPC or player can refuse);
-    /// if nothing is, it's dropped (Actions.DropItem).
+    /// if nothing is, it's dropped (Actions.DropItem). What was selected before is never taken for the click's choice: a
+    /// chicken selected a while earlier, still the selection when the next frame came (the clear not yet seen, or not
+    /// taken), was given an item meant for the ground. It counts only once the selection has been seen cleared since.
     ///
     /// The game's own windows aren't in the world, but the click can't tell: one let go over the vendor window went on the
     /// ground. So while a vendor is open (Actions.VendorId), a drop on the panel it's shown in is put on its sell list
@@ -31,6 +33,10 @@ namespace DaraletPlayer.Ui {
 
         private static int item;
         private static DateTime clickedAt;
+
+        /// <summary>The selection when the item was let go, and whether it has been seen cleared since.</summary>
+        private static int selectedBefore;
+        private static bool sawCleared;
 
         /// <summary>How many of the stack go (StackSplit), taken before the click clears the selection; 0 for all of it.</summary>
         private static int amount;
@@ -83,9 +89,14 @@ namespace DaraletPlayer.Ui {
             item = id;
             amount = StackSplit.Amount(id);
             clickedAt = DateTime.UtcNow;
+            selectedBefore = actions.CurrentSelection;
 
             // cleared, so the click's own selection is what tells something was there, even one already selected
             actions.SelectItem(0);
+            sawCleared = actions.CurrentSelection == 0;
+
+            PluginCore.LogFile($"[drop] 0x{id:X8} let go in the world: selection was 0x{selectedBefore:X8}, "
+                + (sawCleared ? "cleared" : $"still 0x{actions.CurrentSelection:X8} after clearing"));
 
             var spot = new IntPtr(((int)at.Y << 16) | ((int)at.X & 0xFFFF));
             var window = CoreManager.Current.Decal.Hwnd;
@@ -174,12 +185,28 @@ namespace DaraletPlayer.Ui {
             var target = actions.CurrentSelection;
             var me = CoreManager.Current.CharacterFilter.Id;
 
+            if (target == 0) {
+                sawCleared = true;
+            }
+
+            // the old selection, never cleared: not something the click picked
+            var stale = target != 0 && target == selectedBefore && !sawCleared;
+
+            if (stale) {
+                target = 0;
+            }
+
             if (target == 0 && DateTime.UtcNow - clickedAt < SelectWait) {
                 return;
             }
 
             var id = item;
             item = 0;
+
+            if (stale) {
+                PluginCore.LogFile($"[drop] 0x{id:X8}: 0x{selectedBefore:X8} was still selected from before, "
+                    + "so it isn't given to it");
+            }
 
             if (target == 0 && amount > 0) {
                 StackSplit.Drop(id, amount);

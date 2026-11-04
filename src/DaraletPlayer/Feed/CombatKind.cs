@@ -11,5 +11,8 @@ namespace DaraletPlayer.Feed {
         Healing,
         Kill,
         Death,
+        /// <summary>Stamina restored; Healing is health. Last, as they came after the rest.</summary>
+        StaminaHealing,
+        ManaHealing,
     }
 }
