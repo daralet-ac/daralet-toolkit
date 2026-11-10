@@ -125,6 +125,7 @@ namespace DaraletPlayer.Ui {
             settings.Swapped += Settings_Swapped;
             GameDrag.Start();
             CursorKeeper.Start();
+            KeyReleases.Start();
         }
 
         /// <summary>Another settings profile: what was worked out from the old one's starts again.</summary>
@@ -309,6 +310,7 @@ namespace DaraletPlayer.Ui {
                 UiThemeStyle.Restore();
                 GameDrag.Stop();
                 CursorKeeper.Stop();
+                KeyReleases.Stop();
                 Appraisal.Stop();
                 ItemUser.Icons = null;
                 ItemTooltip.Scale = () => 1;

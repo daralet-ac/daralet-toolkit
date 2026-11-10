@@ -109,6 +109,13 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
   with its own. `CursorKeeper` answers it instead (the system cursor ImGui's code would pick, `SetCursor`, and `e.Eat`
   on Decal's `WindowMessage`) while ImGui's cursor isn't the plain arrow, which is left to the game. It covers other
   plugins' ImGui windows too: there's one ImGui.
+- **The character ran forward by itself after a click on a plugin window.** UtilityBelt.Service keeps every key message
+  (WM_KEYDOWN to WM_CHAR) from the game while `io.WantCaptureKeyboard`, which ImGui sets whenever an item of any window is
+  active: the mouse held on a window, a button or a hotbar slot, or a text box typed in. Let go of the forward key during
+  that and the game never heard it come up; turning and backing up didn't stop the run, only the stop key or forward again.
+  `KeyReleases` notes each key the game saw go down (judged by UB's own rule, not by whether Decal's handler sees the
+  message, since the order of Decal's handlers isn't promised), and posts the game a WM_KEYUP for one Windows says has been
+  up for 150ms without the game hearing it, once ImGui no longer wants the keyboard. `[keys]` lines in log.txt.
 - **Putting ImGui's cursor back after drawing out of place asserts** ("Code uses SetCursorPos()/SetCursorScreenPos() to
   extend window/parent boundaries"), in a dialog over the game, if nothing is drawn after it. Move it to one item gap
   above where it was and draw `ImGui.Dummy(Vector2.Zero)`, which lands it there (`CombatLogTab.DrawCopy`).
