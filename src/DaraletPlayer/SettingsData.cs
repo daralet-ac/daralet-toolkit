@@ -191,6 +191,9 @@ namespace DaraletPlayer {
         /// <summary>The Carried and Bank views mark items the way the active loot list's rules do (LootMarks).</summary>
         [DataMember(Name = "bankLootMarks")] public bool InventoryLootMarks;
 
+        /// <summary>The Carried views mark the items on a hotbar that's showing, as the game's pack marks its shortcuts.</summary>
+        [DataMember(Name = "inventoryHotbarMarks")] public bool InventoryHotbarMarks;
+
         /// <summary>A healing, stamina or mana kit on a hotbar is used on you at once, with no target to pick.</summary>
         [DataMember(Name = "oneClickHeal")] public bool OneClickHeal;
 
@@ -427,6 +430,7 @@ namespace DaraletPlayer {
             SharedWindowMembers = new List<string> { "carried", "map", "social", "quests", "character" };
             SharedWindowTabs = true;
             OneClickHeal = true;
+            InventoryHotbarMarks = true;
             LfgChatLinks = true;
             EscapeClosesWindows = true;
             // F1: the game ignores Ctrl and Shift on its own keys (Ctrl+Shift+F12 opened the inventory, any S stopped running)

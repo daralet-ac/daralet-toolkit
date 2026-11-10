@@ -295,7 +295,10 @@ namespace DaraletPlayer.Ui {
                     + "before the scrollbar. Its height stays. Needs the items as a grid (Grid).");
         }
 
-        /// <summary>Retail's top line, in place of the /bank buttons: Loot highlights (Sort and Salvage start the line).</summary>
+        /// <summary>
+        /// Retail's top line, in place of the /bank buttons: Loot highlights and Hotbar highlights (Sort and Salvage start
+        /// the line).
+        /// </summary>
         private void RenderRetailBar() {
             ImGui.SameLine();
 
@@ -305,6 +308,9 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Highlights the items your active loot profile's rules would mark, with each rule's highlight and icon "
                 + "(set in the Loot tab). The server describes every item to check them, so full "
                 + "packs take a little while to fill in.");
+
+            ImGui.SameLine();
+            InventoryBrowser.RenderHotbarMarksCheckbox(settings);
         }
 
         private void RenderSortButton() {

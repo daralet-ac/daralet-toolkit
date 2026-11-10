@@ -863,7 +863,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   sends: a 50,000 pyreal stack showed no count, likely read as -15,536. A drag shows
   only the item's icon, centred on the mouse and drawn on the foreground draw list (no preview tooltip, which ImGui fades).
   Dropped on another item, it goes to that item's container and slot (`InventoryBrowser.MoveTo`, `MoveItem` without stacking,
-  unless it's a stack of the same thing), which is how items are reordered within a pack. **Splitting stacks**
+  unless it's a stack of the same thing), which is how items are reordered within a pack. **Hotbar highlights** (`SettingsData.InventoryHotbarMarks`, on to start, beside Loot highlights) marks what's on a hotbar you have showing, as the game's pack marks its shortcuts: a light blue corner at the icon's top right (`ItemIcons.DrawHotbarMark`, clear of the loot, sale and stack marks), "(on hotbar)" in a Compact list. `HotbarItems.OnShownBar` works it out once a frame, a used-up stack's slot counting as the stack it would take next (`HotbarItems.Pick`, what `Resolve` uses without changing the slot); hidden bars and spells don't count. **Splitting stacks**
   (`Ui/StackSplit.cs`, `InventoryBrowser.Split.cs`): a click selects the item, so the game's stack bar shows, and a drag
   carries what it says (`Actions.SelectedStackCount`, while the dragged item is `CurrentSelection`), shown on the drag
   icon. Less than the whole stack, every drop (a pack, an item, an empty slot, the toolbar backpack, the ground, someone)

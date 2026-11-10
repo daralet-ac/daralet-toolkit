@@ -49,6 +49,24 @@ namespace DaraletPlayer.Ui {
                 ImGui.GetColorU32(Colors.Good));
         }
 
+        /// <summary>The light blue the hotbar mark is drawn in.</summary>
+        private static readonly Vector4 HotbarMarkColor = new Vector4(0.45f, 0.8f, 1f, 1f);
+
+        /// <summary>
+        /// The mark of an item on a hotbar: a light blue corner folded over the icon's top right, clear of a loot mark's
+        /// symbol (top left), the sale mark (bottom left) and a stack's count (bottom right).
+        /// </summary>
+        public static void DrawHotbarMark(ImDrawListPtr drawList, Vector2 at, float size) {
+            var side = (float)Math.Round(Math.Max(7f, size * 0.34f));
+            var right = at.X + size;
+            var corner = new Vector2(right, at.Y);
+            var left = new Vector2(right - side, at.Y);
+            var down = new Vector2(right, at.Y + side);
+
+            drawList.AddTriangleFilled(left, corner, down, ImGui.GetColorU32(HotbarMarkColor));
+            drawList.AddLine(left, down, ImGui.GetColorU32(new Vector4(0, 0, 0, 1)), 1.5f);
+        }
+
         public static void StackCount(ImDrawListPtr drawList, int stack, Vector2 at, float cell) {
             var text = StackText.Short(stack);
             var size = Widgets.SquareTextSize(text);

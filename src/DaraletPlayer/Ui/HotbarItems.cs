@@ -92,6 +92,19 @@ namespace DaraletPlayer.Ui {
                 return null;
             }
 
+            var item = Pick(slot);
+
+            if (item == null || item.Id == slot.Id) {
+                return item;
+            }
+
+            slot.Id = item.Id;
+            changed = true;
+            return item;
+        }
+
+        /// <summary>The item a slot would use (Resolve), without the slot taking it: null if you have none.</summary>
+        private static WorldObject Pick(HotbarSlot slot) {
             var item = CoreManager.Current.WorldFilter[slot.Id];
 
             if (item != null && IsMine(item)) {
@@ -101,18 +114,10 @@ namespace DaraletPlayer.Ui {
             Snapshot();
 
             // the fullest, so a used-up stack is followed by a whole one
-            var next = mine
+            return mine
                 .Where(o => slot.SameKind(o.Type, o.Name))
                 .OrderByDescending(o => StackText.FromDecal(o.Values(LongValueKey.StackCount, 1)))
                 .FirstOrDefault();
-
-            if (next == null) {
-                return null;
-            }
-
-            slot.Id = next.Id;
-            changed = true;
-            return next;
         }
 
         /// <summary>
