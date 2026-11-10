@@ -356,8 +356,7 @@ namespace DaraletPlayer.Ui {
                 drawList.AddText(at + new Vector2(3, 3), ImGui.GetColorU32(ImGuiCol.TextDisabled), Initials(item.Name));
             }
 
-            DrawHotbarMark(drawList, item, at, cell);
-            ItemIcons.DrawMark(drawList, item.Mark, at, cell);
+            DrawMarks(drawList, item, at, cell);
 
             if (VendorSale.IsMarked(settings, item.Id)) {
                 ItemIcons.DrawSaleMark(drawList, at, cell);
@@ -627,13 +626,9 @@ namespace DaraletPlayer.Ui {
             return settings.Data.InventoryHotbarMarks ? HotbarItems.KeyOnShownBar(settings.Data, item.Id) : null;
         }
 
-        /// <summary>The hotbar mark over an item's square, if it's on a hotbar. Before a loot mark, which shares its corner.</summary>
-        private void DrawHotbarMark(ImDrawListPtr drawList, Item item, Vector2 at, float size) {
-            var key = HotbarKey(item);
-
-            if (key != null) {
-                icons.DrawHotbarMark(drawList, at, size, key);
-            }
+        /// <summary>An item's loot mark and hotbar mark over its square, which share the top left corner.</summary>
+        private void DrawMarks(ImDrawListPtr drawList, Item item, Vector2 at, float size) {
+            icons.DrawMarks(drawList, at, size, item.Mark, HotbarKey(item));
         }
 
         /// <summary>The Hotbar highlights checkbox: here and on Retail's top line, one setting.</summary>

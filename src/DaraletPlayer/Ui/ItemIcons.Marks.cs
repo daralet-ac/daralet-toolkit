@@ -56,13 +56,31 @@ namespace DaraletPlayer.Ui {
         private static readonly uint HotbarKeyText = PackedColor.Pack(0, 0, 0, 255);
 
         /// <summary>
-        /// The mark of an item on a hotbar, as the game's pack marks what's on its shortcut bar: the icon's top left corner
-        /// dithered in pale gold, and over it a little cream square with the key that uses it ("" for an empty square).
-        /// Drawn before a loot mark, whose symbol shares the corner and goes on top.
+        /// A loot rule's mark and the hotbar mark together, since they share the top left corner: the hotbar's gold under
+        /// the rule's frame and symbol, and its key square over them, so the key always shows. Either can be null (no
+        /// rule; not on a hotbar).
         /// </summary>
-        public void DrawHotbarMark(ImDrawListPtr drawList, Vector2 at, float size, string key) {
-            // the icon's own pixels: 1 in a 32-pixel square, so the dither is the game's at its size
-            var pixel = Math.Max(1f, (float)Math.Round(size / 32));
+        public void DrawMarks(ImDrawListPtr drawList, Vector2 at, float size, LootRule rule, string hotbarKey) {
+            if (hotbarKey != null) {
+                DrawHotbarCorner(drawList, at, size);
+            }
+
+            DrawMark(drawList, rule, at, size);
+
+            if (hotbarKey != null) {
+                DrawHotbarKey(drawList, at, size, hotbarKey);
+            }
+        }
+
+        /// <summary>The icon's own pixels: 1 in a 32-pixel square, so the hotbar mark is the game's at its size.</summary>
+        private static float HotbarPixel(float size) => Math.Max(1f, (float)Math.Round(size / 32));
+
+        /// <summary>
+        /// The hotbar mark's ground, as the game's pack marks what's on its shortcut bar: the icon's top left corner
+        /// dithered in pale gold.
+        /// </summary>
+        private static void DrawHotbarCorner(ImDrawListPtr drawList, Vector2 at, float size) {
+            var pixel = HotbarPixel(size);
             var cells = (int)Math.Round(size * 0.47f / pixel);
 
             for (var y = 0; y < cells; y++) {
@@ -71,7 +89,11 @@ namespace DaraletPlayer.Ui {
                     drawList.AddRectFilled(spot, spot + new Vector2(pixel, pixel), HotbarHatch);
                 }
             }
+        }
 
+        /// <summary>The hotbar mark's square in the corner, cream, with the key that uses the item in black ("" for none).</summary>
+        private void DrawHotbarKey(ImDrawListPtr drawList, Vector2 at, float size, string key) {
+            var pixel = HotbarPixel(size);
             var square = (float)Math.Max(5, Math.Round(size * 0.28f));
             var pixels = (int)Math.Round(square - 1);
             var text = string.IsNullOrEmpty(key) ? null : LabelSize(key, pixels, outlined: false);
