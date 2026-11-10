@@ -356,14 +356,11 @@ namespace DaraletPlayer.Ui {
                 drawList.AddText(at + new Vector2(3, 3), ImGui.GetColorU32(ImGuiCol.TextDisabled), Initials(item.Name));
             }
 
+            DrawHotbarMark(drawList, item, at, cell);
             ItemIcons.DrawMark(drawList, item.Mark, at, cell);
 
             if (VendorSale.IsMarked(settings, item.Id)) {
                 ItemIcons.DrawSaleMark(drawList, at, cell);
-            }
-
-            if (OnHotbar(item)) {
-                ItemIcons.DrawHotbarMark(drawList, at, cell);
             }
 
             if (item.Stack > 1) {
@@ -427,8 +424,8 @@ namespace DaraletPlayer.Ui {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
 
-                var onHotbar = OnHotbar(item);
-                var iconHovered = icons.Draw(Icon(item), item.Mark, onHotbar);
+                var hotbarKey = HotbarKey(item);
+                var iconHovered = icons.Draw(Icon(item), item.Mark, hotbarKey);
                 var label = item.Stack > 1 ? $"{item.Name} ({item.Stack:N0})" : item.Name;
 
                 if (VendorSale.IsMarked(settings, item.Id)) {
@@ -436,8 +433,8 @@ namespace DaraletPlayer.Ui {
                 }
 
                 // with Compact there's no icon to mark
-                if (onHotbar && !icons.Shown) {
-                    label += "  (on hotbar)";
+                if (hotbarKey != null && !icons.Shown) {
+                    label += hotbarKey.Length > 0 ? $"  (hotbar {hotbarKey})" : "  (on hotbar)";
                 }
                 ImGui.Selectable($"{label}##item-{item.Id}", item.Id == selection);
 
@@ -622,9 +619,21 @@ namespace DaraletPlayer.Ui {
             ItemTooltip.Show(ItemUse.With(lines, item.Guid), iconHovered);
         }
 
-        /// <summary>The item's on a hotbar that's showing, and Hotbar highlights is on.</summary>
-        private bool OnHotbar(Item item) {
-            return settings.Data.InventoryHotbarMarks && HotbarItems.OnShownBar(settings.Data, item.Id);
+        /// <summary>
+        /// With Hotbar highlights on, the key that uses the item from a hotbar that's showing ("" for none), or null if it
+        /// isn't on one.
+        /// </summary>
+        private string HotbarKey(Item item) {
+            return settings.Data.InventoryHotbarMarks ? HotbarItems.KeyOnShownBar(settings.Data, item.Id) : null;
+        }
+
+        /// <summary>The hotbar mark over an item's square, if it's on a hotbar. Before a loot mark, which shares its corner.</summary>
+        private void DrawHotbarMark(ImDrawListPtr drawList, Item item, Vector2 at, float size) {
+            var key = HotbarKey(item);
+
+            if (key != null) {
+                icons.DrawHotbarMark(drawList, at, size, key);
+            }
         }
 
         /// <summary>The Hotbar highlights checkbox: here and on Retail's top line, one setting.</summary>
@@ -632,9 +641,10 @@ namespace DaraletPlayer.Ui {
             if (ImGui.Checkbox("Hotbar highlights", ref settings.Data.InventoryHotbarMarks)) {
                 settings.Changed();
             }
-            Widgets.Tip("Marks the items on a hotbar you have showing with a light blue corner at the icon's top right, "
-                + "as the game's pack marks what's on its shortcut bar, so you can find them. Hidden bars don't count. "
-                + "With Compact on, the list says \"(on hotbar)\" instead.");
+            Widgets.Tip("Marks the items on a hotbar you have showing as the game's pack marks what's on its shortcut bar: "
+                + "the icon's top left corner in gold, with the key that uses it in a little square (empty when no key "
+                + "does, or the item's on another page). Hidden bars don't count. With Compact on, the list says "
+                + "\"(hotbar 1)\" or \"(on hotbar)\" after the name instead.");
         }
 
         private LootList ActiveLootList() {

@@ -49,22 +49,43 @@ namespace DaraletPlayer.Ui {
                 ImGui.GetColorU32(Colors.Good));
         }
 
-        /// <summary>The light blue the hotbar mark is drawn in.</summary>
-        private static readonly Vector4 HotbarMarkColor = new Vector4(0.45f, 0.8f, 1f, 1f);
+        // the game's shortcut mark: a pale gold, dithered over the icon, and a cream square with the key in black
+        private static readonly uint HotbarHatch = PackedColor.Pack(236, 212, 120, 255);
+        private static readonly uint HotbarKeyFill = PackedColor.Pack(240, 234, 210, 255);
+        private static readonly uint HotbarKeyEdge = PackedColor.Pack(60, 55, 45, 255);
+        private static readonly uint HotbarKeyText = PackedColor.Pack(0, 0, 0, 255);
 
         /// <summary>
-        /// The mark of an item on a hotbar: a light blue corner folded over the icon's top right, clear of a loot mark's
-        /// symbol (top left), the sale mark (bottom left) and a stack's count (bottom right).
+        /// The mark of an item on a hotbar, as the game's pack marks what's on its shortcut bar: the icon's top left corner
+        /// dithered in pale gold, and over it a little cream square with the key that uses it ("" for an empty square).
+        /// Drawn before a loot mark, whose symbol shares the corner and goes on top.
         /// </summary>
-        public static void DrawHotbarMark(ImDrawListPtr drawList, Vector2 at, float size) {
-            var side = (float)Math.Round(Math.Max(7f, size * 0.34f));
-            var right = at.X + size;
-            var corner = new Vector2(right, at.Y);
-            var left = new Vector2(right - side, at.Y);
-            var down = new Vector2(right, at.Y + side);
+        public void DrawHotbarMark(ImDrawListPtr drawList, Vector2 at, float size, string key) {
+            // the icon's own pixels: 1 in a 32-pixel square, so the dither is the game's at its size
+            var pixel = Math.Max(1f, (float)Math.Round(size / 32));
+            var cells = (int)Math.Round(size * 0.47f / pixel);
 
-            drawList.AddTriangleFilled(left, corner, down, ImGui.GetColorU32(HotbarMarkColor));
-            drawList.AddLine(left, down, ImGui.GetColorU32(new Vector4(0, 0, 0, 1)), 1.5f);
+            for (var y = 0; y < cells; y++) {
+                for (var x = (y & 1); x + y < cells; x += 2) {
+                    var spot = at + new Vector2(x * pixel, y * pixel);
+                    drawList.AddRectFilled(spot, spot + new Vector2(pixel, pixel), HotbarHatch);
+                }
+            }
+
+            var square = (float)Math.Max(5, Math.Round(size * 0.28f));
+            var pixels = (int)Math.Round(square - 1);
+            var text = string.IsNullOrEmpty(key) ? null : LabelSize(key, pixels, outlined: false);
+            var width = text.HasValue ? Math.Max(square, text.Value.X + 2) : square;
+            var topLeft = at + new Vector2(pixel, pixel);
+            var corner = topLeft + new Vector2((float)Math.Round(width), square);
+
+            drawList.AddRectFilled(topLeft, corner, HotbarKeyFill);
+            drawList.AddRect(topLeft, corner, HotbarKeyEdge);
+
+            if (text.HasValue) {
+                var middle = (topLeft + corner) / 2;
+                DrawLabel(drawList, key, middle - text.Value / 2, pixels, HotbarKeyText, outlined: false);
+            }
         }
 
         public static void StackCount(ImDrawListPtr drawList, int stack, Vector2 at, float cell) {

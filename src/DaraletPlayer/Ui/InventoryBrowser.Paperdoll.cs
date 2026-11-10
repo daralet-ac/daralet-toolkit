@@ -128,11 +128,8 @@ namespace DaraletPlayer.Ui {
             }
             else {
                 icons.DrawAt(drawList, Icon(item), at, cell);
+                DrawHotbarMark(drawList, item, at, cell);
                 ItemIcons.DrawMark(drawList, item.Mark, at, cell);
-
-                if (OnHotbar(item)) {
-                    ItemIcons.DrawHotbarMark(drawList, at, cell);
-                }
 
                 if (item.Id == CoreManager.Current.Actions.CurrentSelection) {
                     DrawSelected(drawList, at, cell);

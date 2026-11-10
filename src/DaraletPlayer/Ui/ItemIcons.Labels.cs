@@ -16,25 +16,26 @@ namespace DaraletPlayer.Ui {
         /// <summary>Labels kept at once at most; past this they're all freed and made again as they're drawn.</summary>
         private const int MaxLabels = 400;
 
-        private readonly Dictionary<(string Text, int Pixels), (ManagedTexture Texture, Vector2 Size)> labels =
-            new Dictionary<(string, int), (ManagedTexture, Vector2)>();
-        private readonly HashSet<(string, int)> failedLabels = new HashSet<(string, int)>();
+        private readonly Dictionary<(string Text, int Pixels, bool Outlined), (ManagedTexture Texture, Vector2 Size)> labels =
+            new Dictionary<(string, int, bool), (ManagedTexture, Vector2)>();
+        private readonly HashSet<(string, int, bool)> failedLabels = new HashSet<(string, int, bool)>();
         private readonly List<ManagedTexture> retiredLabels = new List<ManagedTexture>();
         private int retiredLabelsFrame;
         private bool loggedLabelFailure;
         private static FontFamily labelFamily;
 
         /// <summary>How big a label is drawn, in pixels, or null if it can't be made.</summary>
-        public Vector2? LabelSize(string text, int pixels) {
-            return Label(text, pixels)?.Size;
+        /// <param name="outlined">On a black outline, to read on any icon; without, for dark text on a light square.</param>
+        public Vector2? LabelSize(string text, int pixels, bool outlined = true) {
+            return Label(text, pixels, outlined)?.Size;
         }
 
         /// <summary>
         /// Bold white text on a black outline, tinted to the colour (the outline stays black). False if it couldn't be made,
         /// for the caller to draw ImGui's text instead.
         /// </summary>
-        public bool DrawLabel(ImDrawListPtr drawList, string text, Vector2 at, int pixels, uint color) {
-            var label = Label(text, pixels);
+        public bool DrawLabel(ImDrawListPtr drawList, string text, Vector2 at, int pixels, uint color, bool outlined = true) {
+            var label = Label(text, pixels, outlined);
 
             if (label == null) {
                 return false;
@@ -46,13 +47,13 @@ namespace DaraletPlayer.Ui {
             return true;
         }
 
-        private (ManagedTexture Texture, Vector2 Size)? Label(string text, int pixels) {
+        private (ManagedTexture Texture, Vector2 Size)? Label(string text, int pixels, bool outlined) {
             if (disposed || string.IsNullOrWhiteSpace(text) || pixels < 4) {
                 return null;
             }
 
             FreeRetiredLabels(ImGui.GetFrameCount());
-            var key = (text, Math.Min(pixels, 200));
+            var key = (text, Math.Min(pixels, 200), outlined);
 
             if (labels.TryGetValue(key, out var label)) {
                 return label;
@@ -67,7 +68,7 @@ namespace DaraletPlayer.Ui {
             }
 
             try {
-                using (var bitmap = RenderLabel(key.Item1, key.Item2)) {
+                using (var bitmap = RenderLabel(key.Item1, key.Item2, outlined)) {
                     // the texture takes a copy of the bitmap
                     label = (new ManagedTexture(bitmap), new Vector2(bitmap.Width, bitmap.Height));
                 }
@@ -84,17 +85,17 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// The text, bold, white with a black outline, cut close round its letters (so a corner's label sits in the corner
-        /// whatever its letters are), on a transparent background.
+        /// The text, bold, white with a black outline (or none), cut close round its letters (so a corner's label sits in
+        /// the corner whatever its letters are), on a transparent background.
         /// </summary>
-        private static Bitmap RenderLabel(string text, int pixels) {
+        private static Bitmap RenderLabel(string text, int pixels, bool outlined) {
             labelFamily = labelFamily ?? LabelFamily();
 
             using (var path = new GraphicsPath())
             using (var format = (StringFormat)StringFormat.GenericTypographic.Clone()) {
                 path.AddString(text, labelFamily, (int)FontStyle.Bold, pixels, new PointF(0, 0), format);
 
-                var outline = Math.Max(2f, pixels * 0.2f);
+                var outline = outlined ? Math.Max(2f, pixels * 0.2f) : 0;
                 var pad = (float)Math.Ceiling(outline / 2) + 1;
                 var bounds = path.GetBounds();
 
@@ -112,7 +113,10 @@ namespace DaraletPlayer.Ui {
                     graphics.SmoothingMode = SmoothingMode.AntiAlias;
                     graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
                     graphics.Clear(Color.Transparent);
-                    graphics.DrawPath(pen, path);
+                    if (outlined) {
+                        graphics.DrawPath(pen, path);
+                    }
+
                     graphics.FillPath(Brushes.White, path);
                 }
 

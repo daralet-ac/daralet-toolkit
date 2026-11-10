@@ -65,8 +65,10 @@ namespace DaraletPlayer.Ui {
         /// item's name. Returns whether the mouse is over the icon, so its row can show the item's tooltip.
         /// </summary>
         /// <param name="mark">The loot rule that marks the item, or null. A marked item still shows its mark with Compact on.</param>
-        /// <param name="onHotbar">The item's on a hotbar: its icon gets the hotbar mark (DrawHotbarMark).</param>
-        public bool Draw(IconLayers layers, LootRule mark = null, bool onHotbar = false) {
+        /// <param name="hotbarKey">
+        /// For an item on a hotbar, the key that uses it ("" for none): its icon gets the hotbar mark (DrawHotbarMark).
+        /// </param>
+        public bool Draw(IconLayers layers, LootRule mark = null, string hotbarKey = null) {
             var hasIcon = Shown && !disposed && layers != null && !layers.IsEmpty;
             var marked = !disposed && LootMarks.Marks(mark);
 
@@ -82,11 +84,12 @@ namespace DaraletPlayer.Ui {
 
             if (hasIcon) {
                 DrawAt(drawList, layers, at, size);
-                DrawMark(drawList, mark, at, size);
 
-                if (onHotbar) {
-                    DrawHotbarMark(drawList, at, size);
+                if (hotbarKey != null) {
+                    DrawHotbarMark(drawList, at, size, hotbarKey);
                 }
+
+                DrawMark(drawList, mark, at, size);
             }
             else {
                 DrawMarkAlone(drawList, mark, at, size);
