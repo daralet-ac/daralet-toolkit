@@ -102,8 +102,9 @@ namespace DaraletPlayer.Ui {
                     + "alongside it, hotbars of items to use with a click or a hotkey, and floating combat text and a "
                     + "combat log.", combatTab.Render),
                 ("Character", "What the game's Character Information panel says (age, deaths, innate attributes, "
-                    + "augmentations, burden), then your character stats, as the Combat Focus appraisal shows them: gear "
-                    + "mods, ratings, ward, armor level, resistances and jewel effects.", characterTab.Render),
+                    + "augmentations, burden), your XP and rested experience (with an XP bar of its own), then your character "
+                    + "stats, as the Combat Focus appraisal shows them: gear mods, ratings, ward, armor level, resistances "
+                    + "and jewel effects.", characterTab.Render),
                 ("Quests", "Your quests, what the game's Contracts panel lists: their progress and timers, who gives them "
                     + "and who takes them back, and where, with an arrow to point you there.", questsTab.Render),
                 ("Loot", "Loot rules in named loot profiles you can swap, and what happens when you open a corpse or a "

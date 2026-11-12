@@ -286,6 +286,8 @@ namespace DaraletPlayer {
 
         /// <summary>The plugin's chat windows (the Chat tab).</summary>
         [DataMember(Name = "chat")] public ChatSettings Chat;
+        /// <summary>How the XP bar looks and what it shows (the Character tab's Settings).</summary>
+        [DataMember(Name = "xpBar")] public XpBarOptions XpBar;
 
         /// <summary>The hotbars (the Combat tab's Hotbars): their layout, looks and hotkeys, and each character's items.</summary>
         [DataMember(Name = "hotbars")] public HotbarData Hotbars;
@@ -423,6 +425,7 @@ namespace DaraletPlayer {
             CarriedRetail = true;
             Loot = new LootData();
             Chat = new ChatSettings();
+            XpBar = new XpBarOptions();
             Hotbars = new HotbarData();
             PaneSizes = new Dictionary<string, float>();
             QuestTrackerOpen = new List<uint>();

@@ -25,6 +25,7 @@ namespace DaraletPlayer.Ui {
         private readonly PlayerFeed feed;
         private readonly Settings settings;
         private readonly FloatingWindow window;
+        private readonly XpBar xpBar;
 
         /// <summary>
         /// Decal's played time, and when it was that: Decal only hears it now and then, so the time since is added on.
@@ -38,12 +39,14 @@ namespace DaraletPlayer.Ui {
 
             window = new FloatingWindow("character", "Character", settings, new Vector2(420, 100), RenderContents,
                 visibleByDefault: false, defaultSize: new Vector2(420, 640));
+            xpBar = new XpBar(feed, settings);
         }
 
         public FloatingWindow Window => window;
 
         public void Dispose() {
             window.Dispose();
+            xpBar.Dispose();
         }
 
         public void Render() {
@@ -53,15 +56,20 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderSettings() {
-            if (!Form.SettingsHeader("character-settings", "The Character window: whether it's on screen, its size and "
-                + "background. Its toolbar button is under the Config tab's Client UI Override.")) {
+            if (!Form.SettingsHeader("character-settings", "The Character window and the XP bar: whether they're on "
+                + "screen, their size and background, and how the XP bar looks and what it shows. The Character window's "
+                + "toolbar button is under the Config tab's Client UI Override.")) {
                 return;
             }
 
+            Form.Columns("character-settings-grid", RenderCharacterWindowSettings, xpBar.RenderControls);
+            ImGui.Spacing();
+        }
+
+        private void RenderCharacterWindowSettings() {
             Form.Section("Character window");
             window.RenderControls("This tab in a window of its own, to keep on screen while you play. Drag its corner to "
                 + "size it.");
-            ImGui.Spacing();
         }
 
         /// <summary>What the game's Character Information panel says, then the stats: the tab's and the window's.</summary>
@@ -72,6 +80,10 @@ namespace DaraletPlayer.Ui {
             }
 
             RenderRetail();
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+            xpBar.RenderSection();
             ImGui.Spacing();
             ImGui.Separator();
             ImGui.Spacing();

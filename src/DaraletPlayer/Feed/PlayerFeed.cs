@@ -46,6 +46,7 @@ namespace DaraletPlayer.Feed {
         public const string KindShareItem = "shareitem";
         public const string KindShareAgain = "shareagain";
         public const string KindShared = "shared";
+        public const string KindXp = "xp";
 
         // chat types, which Decal passes as the colour
         private const int TellChat = 3;
@@ -130,6 +131,10 @@ namespace DaraletPlayer.Feed {
         /// <summary>Your character stats, the Combat Focus appraisal's, or null before the first reply.</summary>
         public CharacterInfo Character { get; private set; }
         public DateTime CharacterUpdatedAt { get; private set; } = DateTime.MinValue;
+
+        /// <summary>Your level's XP and your rested experience, for the XP bar, or null before the first reply.</summary>
+        public XpInfo Xp { get; private set; }
+        public DateTime XpUpdatedAt { get; private set; } = DateTime.MinValue;
 
         /// <summary>The ranges loot rolls each filter stat in, the same for everyone, or null before the first reply.</summary>
         public RollRangesInfo RollRanges { get; private set; }
@@ -585,6 +590,10 @@ namespace DaraletPlayer.Feed {
                 case KindCharacter:
                     Character = Json.Read<CharacterInfo>(json);
                     CharacterUpdatedAt = DateTime.UtcNow;
+                    break;
+                case KindXp:
+                    Xp = Json.Read<XpInfo>(json);
+                    XpUpdatedAt = DateTime.UtcNow;
                     break;
                 case KindRollRanges:
                     RollRanges = Json.Read<RollRangesInfo>(json);

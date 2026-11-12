@@ -205,7 +205,9 @@ second at most, with every window open: keep it inside those limits, or its wind
 comes (`PlayerFeed.RequestTimeout`). Polling goes through `PlayerFeed.Refresh`. `bankwindow` and `lootwindow`
 (`on|off`, answering `{"on":...}`) are described below. `rollranges` sends the ranges loot rolls each filter stat in (`{"ranges":[{"category","stat","tier","min","max"}]}`), for
 the loot rules' tooltips. `character` sends your character stats (`{"sections":[{"title",
-"lines"}]}`), for the Character tab. `lfg` sends looking for group, for Find a group (see the Social tab). `social`
+"lines"}]}`), for the Character tab. `xp` sends your level's XP and rested experience (`{"level","totalXp","levelXp","nextLevelXp","maxLevel",
+"rested":{"enabled","state","rested","max","bonus","perHour","earnedThisSession"}}`), for the XP bar; the server's
+`/rested` says the same from the same `rested`. `lfg` sends looking for group, for Find a group (see the Social tab). `social`
 sends your friends, squelches, allegiance and the Appear Offline and fellowship options (`PlayerUiSocialData`), and
 `friend`, `squelch`, `allegiance` and `fellowcreate` are the Social tab's buttons (see it). `shareitem <guid>`, `shareagain <key>` and `shared
 <key>...` are item links in chat (see Chat windows). `fellowship spells` adds
@@ -578,6 +580,25 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   line is split at its first ": " into stat and value (`StatsSectionInfo.Split`); in a wide window the sections go in two
   columns.
 
+- **XP bar** (`Ui/XpBar.cs`, `XpBar.Settings.cs`, `Feed/XpInfo.cs`, `RestedInfo.cs`, `XpRate.cs`, `XpBarOptions.cs`): your
+  progress through your level, in the **XP Bar window** (`xp-bar`, hidden to start, sized to fit) and at the top of the
+  Character tab's stats, its settings (`SettingsData.XpBar`, `XpBarOptions`: width, height, text, dividers, colours,
+  the lines under it) under the Character tab's Settings. Your XP is Decal's (`CharacterFilter.TotalXP`), so the bar
+  moves the moment a kill lands; the level's bounds are the server's (`@playerui xp`), since the client has no XP table:
+  past them (a level since the reply) the bar shows full until the next. The bar's drawn by hand on the draw list
+  (background, rested, fill, dividers, border, outlined text), not `Widgets.Bar`. **Compact** (`XpBarOptions.Compact`, the
+  settings or the window's right-click menu) leaves the window the bar alone, no text on it or lines under it: its tooltip
+  has everything (`Lines`). The Character tab's bar is always whole. It asks every 5 seconds, and 1.5
+  seconds after Decal's XP moves since the last reply (not every kill: in a fast fight that's a request each half
+  second). The window asks from its `inUse`, which runs every frame it's on, so Only when needed (hidden at the highest
+  level) still keeps it fresh. **Rested experience** is daralet-ACE's (its `docs/rested-xp.md`, `Player_RestedXp.cs`,
+  `RestedXpRules`): a pool built up while logged out, or in a town landblock out of combat mode, that kill XP (and a
+  fellow's share of a kill) spends, earning `rested_xp_bonus` more until it's gone. The server keeps it; the bar shades
+  it ahead of your XP, and between replies grows it while resting and takes off the bonus share of XP earned
+  (`RestedInfo.RestedAfter`), a guess the next reply corrects. **XP/hour** (`XpRate`, off to start) is the plugin's own:
+  Decal's XP noted once a second on RenderFrame (window or not), over the last 5, 15, 30 or 60 minutes or since login
+  (`XpBarOptions.RateMinutes`), starting again for another character, when XP goes down, or from the window's
+  right-click menu; with the time the next level takes at it.
 - **Quests tab** (`Ui/QuestsTab.cs`): your contracts, labelled as quests, from `@playerui quests` every five seconds while
   open. The client is only sent each contract's id, stage and timers (`GameEventSendClientContractTracker`); the server
   sends the rest of its portal.dat ContractTable entry too (`Entity/PlayerUi/PlayerUiQuestData.cs`): descriptions, the
