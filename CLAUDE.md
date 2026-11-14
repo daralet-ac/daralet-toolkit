@@ -924,7 +924,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   0xE gmUrgentAssistanceUI, 0xF gmVitaeUI, 0x10 map, 0x19 contracts; the tooltips are in `client_local_English.dat`'s
   string table `0x23000005` ("Show/Hide Positive Magic Panel"...). A click opens or closes the panel
   (`ClientElements.SetGamePanel`), the burden pack the plugin's Character window where Client UI Override's Character
-  is ticked, and buffs, debuffs and vitae the plugin's windows where those Replace the game's (`WindowFor`). Modern says the same in words: "Link: good", "Buffs 12" (CharacterFilter's enchantments counted by the
+  is ticked, and buffs, debuffs, vitae and the link the plugin's windows where those Replace the game's (`WindowFor`). Modern says the same in words: "Link: good", "Buffs 12" (CharacterFilter's enchantments counted by the
   portal dat's Beneficial flag, cooldowns left out), "Burden 45%", dimmed where the game dims. Log out button and One
   under another are its settings. `[indicators]` lines in log.txt. Untested in the game when written.
   **Attributes** (`Ui/AttributesPanel*.cs`, `Ui/StatRow.cs`, `Ui/GamePanelInterceptor.cs`, `Ui/ClientTraining.cs`,
@@ -1103,6 +1103,26 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   129, both SendOnLogin and sent again in private int updates (`0x02CD`, `VitaeInfo.ReadPrivateInt`), which the window
   follows in case Decal doesn't. All three can be the shared window's (ticked for new settings), and the Indicators
   window opens them in place of the game's panels while they Replace them. Untested in the game when written.
+  **Link Status** (`Ui/LinkPanel*.cs`, `Ui/LinkMonitor.cs`, `Feed/Link*.cs`, `Feed/PingMessages.cs`,
+  `SettingsData.Link`; the user's call, November 2026): panel 8, gmLinkStatusUI, by `GamePanelInterceptor`, the link
+  indicator's; can share the shared window (`link`). Your round trip to the server, timed with the game's own ping:
+  AcClient's `CM_Character.Event_RequestPing()` (game action 0x01E9, what the game's link panel sends), answered with
+  game event 0x01EA (daralet-ACE's `GameActionPingRequest`, `GameEventPingResponse`, nothing in it but the header), heard
+  on `EchoFilter.ServerDispatch`. The server handles game actions on the world thread's tick (`InboundMessageQueue`), so
+  it's the lag a player feels: the network both ways and the server being busy. The answer carries no id, so one ping is
+  out at a time (`LinkPinger`): the next once it's answered and the interval (1 second to start) has passed; one
+  unanswered in 10 seconds is lost, and the next answer after a loss is let go by (a late one would read as the next
+  ping's, far too quick), as is one nobody asked for. Each ping (`LinkSample`, an hour's kept, `LinkHistory`) notes the
+  usual round trip when it went (`Baseline`, the median of the last 60 answered) and the game's link indicator's state
+  (`ClientElements.GetState(0x100000F8)`); a **spike** is lost, or the margin (150 ms to start) over the usual and half
+  again as long. The window: the last ping, usual, lowest, highest, jitter, spikes and lost over 1, 5, 15 or 60 minutes,
+  a graph of a bar a ping (`LinkPanel.Graph.cs`: spikes red, lost a dim full-height bar, one still out past a spike's
+  length growing in yellow, the usual as a line, the game's link state as a strip along the bottom, scale to a round
+  number, `LinkHistory.ScaleTop`) and the newest spikes. Pinging starts when it's first shown (or with Replace on) and,
+  with Keep measuring, goes on with it closed. The client keeps link averages of its own (`ClientNet.m_LinkStatusAverages`,
+  `LinkStatusHolder.GetPacketLossPercentage`, from the packet layer's echoes), not read: their places in memory weren't
+  checked against acclient.exe. `[link]` lines in log.txt (spikes and losses, 200 a session). Untested in the game when
+  written.
   **Vendor** (`Ui/VendorPanel*.cs`, `Ui/ClientVendor.cs`, `Feed/VendorPrices.cs`, `Ui/PrivateInts.cs`): the game's vendor
   window (gmVendorUI, element type `0x10000017`, layout `0x21000012`, 800x110 in ENVP) with its three tabs, starting on
   Items each time a vendor opens (by Decal's `VendorId` changing, not `ApproachVendor`, which comes after every

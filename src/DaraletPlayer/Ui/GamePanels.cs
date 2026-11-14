@@ -30,6 +30,7 @@ namespace DaraletPlayer.Ui {
                 new EffectsPanel(settings, icons, beneficial: true),
                 new EffectsPanel(settings, icons, beneficial: false),
                 new VitaePanel(settings),
+                new LinkPanel(settings),
                 new VendorPanel(settings, icons, feed),
                 new CreatureAppraisalPanel(settings, icons),
             };
