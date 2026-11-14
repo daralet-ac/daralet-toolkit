@@ -368,6 +368,9 @@ namespace DaraletPlayer {
         /// <summary>The Indicators window (IndicatorsPanel).</summary>
         [DataMember(Name = "indicators")] public IndicatorOptions Indicators;
 
+        /// <summary>The Radar window (RadarPanel).</summary>
+        [DataMember(Name = "radar")] public RadarOptions Radar;
+
         /// <summary>The Attributes window (AttributesPanel).</summary>
         [DataMember(Name = "attributes")] public AttributesOptions Attributes;
 
@@ -532,6 +535,7 @@ namespace DaraletPlayer {
             SpellBar = new SpellBarOptions();
             Toolbar = new ToolbarOptions();
             Indicators = new IndicatorOptions();
+            Radar = new RadarOptions();
             Attributes = new AttributesOptions();
             Spellbook = new SpellbookOptions();
             Hotbars = new HotbarData();

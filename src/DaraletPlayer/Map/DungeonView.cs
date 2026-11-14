@@ -16,10 +16,6 @@ namespace DaraletPlayer.Map {
         private const float MinZoom = 0.5f;
         private const float MaxZoom = 24;
 
-        /// <summary>How many floors below yours and above it are drawn, unless every floor is asked for.</summary>
-        private const int FloorsBelow = 4;
-        private const int FloorsAbove = 1;
-
         private static readonly uint Background = MapView.Col(0.06f, 0.07f, 0.09f, 1f);
         private static readonly uint Floor = MapView.Col(0.42f, 0.5f, 0.62f, 1f);
         private static readonly uint Ramp = MapView.Col(0.62f, 0.52f, 0.38f, 1f);
@@ -72,8 +68,8 @@ namespace DaraletPlayer.Map {
 
             var layout = scene.Layout;
             var selfZ = scene.Self?.Z;
-            var lowest = Math.Max(scene.AllFloors ? int.MinValue : -FloorsBelow, MinFloor(layout, selfZ));
-            var highest = Math.Min(scene.AllFloors ? int.MaxValue : FloorsAbove, MaxFloor(layout, selfZ));
+            var lowest = Math.Max(scene.AllFloors ? int.MinValue : -scene.FloorsBelow, MinFloor(layout, selfZ));
+            var highest = Math.Min(scene.AllFloors ? int.MaxValue : scene.FloorsAbove, MaxFloor(layout, selfZ));
 
             // deepest first, then above (which only shows where yours has no floor), then yours over everything
             for (var floor = lowest; floor < 0; floor++) {
@@ -219,6 +215,11 @@ namespace DaraletPlayer.Map {
                     continue;
                 }
 
+                // a round radar's map is cut to its circle (ImGui only clips to rectangles)
+                if (clipRadius > 0 && !ClipToCircle(ref count)) {
+                    continue;
+                }
+
                 var been = visited != null && visited.Contains(surface.Cell);
                 var color = surface.Ramp ? (been ? visitedRampColor : rampColor) : (been ? visitedColor : floorColor);
                 drawList.AddConvexPolyFilled(ref points[0], count, color);
@@ -228,7 +229,14 @@ namespace DaraletPlayer.Map {
 
             foreach (var wall in scene.Layout.Walls) {
                 if (FloorOf(wall.Z, selfZ) == floor) {
-                    drawList.AddLine(ToScreen(wall.A), ToScreen(wall.B), wallColor, wallWidth);
+                    var a = ToScreen(wall.A);
+                    var b = ToScreen(wall.B);
+
+                    if (clipRadius > 0 && !RadarMath.ClipToCircle(ref a, ref b, viewMid, clipRadius)) {
+                        continue;
+                    }
+
+                    drawList.AddLine(a, b, wallColor, wallWidth);
                 }
             }
         }

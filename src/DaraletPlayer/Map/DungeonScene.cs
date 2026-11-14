@@ -13,6 +13,10 @@ namespace DaraletPlayer.Map {
         /// <summary>Turns the map so the way you face is up.</summary>
         public bool Turn;
         public bool AllFloors;
+        /// <summary>How many floors below yours are drawn, unless AllFloors (the Dungeon window's are 4).</summary>
+        public int FloorsBelow = 4;
+        /// <summary>How many floors above yours are drawn, unless AllFloors.</summary>
+        public int FloorsAbove = 1;
         /// <summary>The cells you've been in (whole cell ids), drawn grey; null for none.</summary>
         public HashSet<uint> Visited;
         /// <summary>What they're drawn in on your floor: ramps lean towards the ramp colour, lower floors darker.</summary>

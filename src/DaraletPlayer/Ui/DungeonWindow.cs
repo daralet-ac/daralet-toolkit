@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using DaraletPlayer.Feed;
 using DaraletPlayer.Map;
@@ -41,6 +42,28 @@ namespace DaraletPlayer.Ui {
         }
 
         public FloatingWindow Window => window;
+
+        /// <summary>
+        /// The map of the landblock a cell is in, for the Radar window: null while it's still being read (a few more cells
+        /// are read each call), and empty for one with no indoor cells.
+        /// </summary>
+        public DungeonLayout LayoutFor(uint landcell) {
+            var layout = loader.For(landcell);
+
+            if (layout == null) {
+                loader.Step();
+            }
+
+            return layout;
+        }
+
+        /// <summary>
+        /// The cells this character has been in in a landblock, for the Radar window's map (which has its own Rooms you've
+        /// been in); null for none.
+        /// </summary>
+        public HashSet<uint> VisitedIn(uint landblock) {
+            return settings.Data.DungeonVisits.For(Character, landblock);
+        }
 
         /// <summary>Whether you're indoors, where there's a dungeon map to show (Only when needed's test).</summary>
         public static bool IsIndoors => Indoors() != null;

@@ -80,6 +80,18 @@ namespace DaraletPlayer.Ui {
 
         public FloatingWindow MapWindow => mapWindow;
 
+        /// <summary>The Dungeon window, whose maps the Radar window draws under its blips.</summary>
+        public DungeonWindow DungeonWindow => dungeonWindow;
+
+        /// <summary>Where game panels whose settings are here say they are (GamePanel.SettingsTab).</summary>
+        public const string SettingsTabName = "World tab's Settings";
+
+        /// <summary>
+        /// The Radar window's settings, a section of the tab's Settings: set by PlayerHud, since the radar (a GamePanel)
+        /// is made after this tab, from its Dungeon window.
+        /// </summary>
+        public Action RadarSettings { get; set; }
+
         /// <summary>
         /// Every frame from login, whether or not a map is showing: loads the map image a tile a frame, so it's ready before
         /// the World tab or the Map window is first opened, and picks up a new one World data downloaded.
@@ -474,15 +486,15 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderSettings() {
-            if (!Form.SettingsHeader("world-settings", "The names' size, the map window and the arrow window, and checking for "
-                + "new map data.")) {
+            if (!Form.SettingsHeader("world-settings", "The names' size, the map window, the arrow window, the dungeon "
+                + "window and the radar, and checking for new map data.")) {
                 return;
             }
 
             using var fold = Form.Folded();
 
             Form.Columns("world-settings-grid", RenderMapSettings, RenderWorldDataStatus, RenderMapWindowSettings,
-                RenderArrowSettings, RenderDungeonWindowSettings);
+                RenderArrowSettings, RenderDungeonWindowSettings, () => RadarSettings?.Invoke());
             ImGui.Spacing();
         }
 

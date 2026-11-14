@@ -33,5 +33,7 @@ keep their own owners' terms:
 - src/DaraletPlayer/Resources/ui/*.png: pictures taken from the Asheron's Call client.
 - src/DaraletPlayer/Resources/dereth-map.png and dereth-map.PSD: drawn from the game's dat files.
 - src/DaraletPlayer/Resources/locations.xml: GoArrow's locations, in Daralet edition.
+- src/DaraletPlayer/Feed/Xbrz.cs: a C# port of xBRZ, Copyright (C) Zenju, under the GNU General Public License
+  version 3 (https://sourceforge.net/projects/xbrz/).
 - UtilityBelt.Service.Installer.exe, which the Daralet installer includes: UtilityBelt.Service, under the MIT License
   (installer/UtilityBelt.Service-LICENSE.txt, installed next to Daralet.dll).

@@ -1254,6 +1254,52 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   has an item. Each has a close button (`FloatingWindow.CloseButton`, `FloatingWindow.Close.cs`: the game's gold X, the
   Indicators' log out picture, in the top right corner over the contents, worked by hand; `EdgeDrag` leaves its corner
   alone). Untested in the game when written.
+  **Radar** (`Ui/RadarPanel*.cs`, `Ui/RadarBlip.cs`, `Ui/ClientRadar.cs`, `Map/RadarMath.cs`, `Feed/RadarOptions.cs`,
+  `Feed/RadarKind*.cs`, `SettingsData.Radar`; its settings a section of the World tab's Settings, `WorldTab.RadarSettings`,
+  its Replace in Client UI Override's row; the user's call, November 2026): replaces
+  the game's radar, element `0x100006D2` (Decal's `UIElementType` Radar, gmRadarUI). Round or square, sized by its
+  edges, made square once the edge is let go (`FloatingWindow.KeepSquare`, `SquareUp`: by the side dragged further
+  since the press, to a whole pixel; the radar drawn square inside meanwhile). Squaring it in ImGui's size callback as
+  it was dragged, the first build's way, made it flicker between two sizes: ImGui works the size out from the mouse
+  every frame. Zoomed with the
+  mouse wheel, indoors and outdoors kept apart, never further out than the game's radar: `CPlayerSystem::GetRadarRadius`
+  (`0x55E5A0`) is 75 meters (`0x7CD6C0`) unless the cell's low word is 0x100 or more, then 25 (`0x7CD6C4`), and
+  `ObjectIsWithinRadarRange` (`0x560CE0`) measures flat, as `RadarMath` does; a square one's corners stay empty. Its
+  window has no scroll bar (`FloatingWindow.ExtraFlags`: NoScrollbar, NoScrollWithMouse), the wheel being its zoom. Blips
+  are Decal's `GetLandscape()` ten times a second, as values (`RadarBlip`), placed in world meters (a landblock's 192
+  meters times its place, plus `RawCoordinates`, `RadarMath.WorldMeters`). Portals, lifestones, doors and corpses go
+  by their own flags first, the game's radar's way (Portal 0x40000, LifeStone 0x4000, Door 0x1000, Corpse 0x2000), or
+  their ItemType (Decal's `Category`: Portal 0x10000, LifeStone 0x10000000), `RadarMath.KindByFlags`: by Decal's
+  `ObjectClass` alone portals came out yellow, as NPCs (`[radar]` lines in log.txt give the first five portal-like
+  objects' class, flags, type and server colour). The rest go by `ObjectClass`, a player's kind by
+  `LongValueKey.Behavior`, the ObjectDescriptionFlag bits (PlayerKiller 0x20, PK Lite 0x2000000, Admin 0x100000 unless
+  HiddenAdmin 0x40; UiHidden 0x80 is left off as the game does), fellows by the server's `fellowship` reply (asked every
+  5 seconds while Fellows are shown). Each kind shown and coloured on its own; the colours to start are the client's
+  RadarColor table (`gmRadarUI::GetBlipColor`, `0x4D8350`, the table at `0x81C69C`) where one fits, by eye otherwise,
+  since its colours by flags are set up at run time. **Server's colours** (`RadarOptions.ServerColors`, on to start):
+  the game's radar colours an object by the RadarBlipColor the server gave it before anything else (a Portal Device's
+  purple, which by kind came out yellow), so the radar does too: the client's ACCWeenieObject
+  (`ClientObjMaintSystem::GetWeenieObject(id)`, `0x5583F0`, static cdecl; its id at `+0x8`) holds it at `+0x104`, its
+  description flags at `+0x100`; 1 to 10 in the order of GetBlipColor's jump table (`0x4D878C`): blue, gold, white,
+  purple, red, pink, green, yellow, cyan, bright green (`RadarKindInfo.ServerColors`). Decal doesn't pass it on.
+  Indoors the Dungeon window's map is drawn under the blips
+  (`DungeonWindow.LayoutFor`, its own loader; `DungeonView.DrawUnderlay`, floors and walls only), cut to the circle
+  by hand when it's round (`RadarMath.ClipToCircle`: ImGui only clips to rectangles), with options of its own (the
+  settings' Dungeon map, and the right-click menu's, sliders and all): opacity, floors below (1 to start, at most 8)
+  and above (1, at most 3; `DungeonScene.FloorsBelow`/`FloorsAbove`, the Dungeon window's being 4 and 1), all floors,
+  rooms you've been in; blips more than half a floor away are faint. Click a blip to select it; right-click for its
+  menu. The selection's ring is the blip's own colour, as the game's (`RadarOptions.WhiteSelection` for white). Round
+  and Retail, it's the game's own art
+  (`RadarPanel.Art.cs`), from layout `0x21000074`: the disc `06004CC1` (`radar-disc`, 120x120, a 10-pixel gold rim
+  round a dark middle of radius 50, where the map and blips are kept), and the compass tokens N `060011FB` (green),
+  E `06001938`, S `0600193A`, W `0600193C` (`radar-north`..., 10x9, centred 54.5 out on the rim), all scaled with the
+  window; the disc's lighter wedge points up whether or not it turns. `client_highres.dat` has no bigger copies of
+  them, so they're upscaled with **xBRZ** (`Feed/Xbrz.cs`, a port of Zenju's GPL-3 pixel-art scaler, ARGB: alpha-aware
+  distances and gradients; NOTICE lists it) when drawn bigger than they are (`ItemIcons.DrawArtSmooth`,
+  `ItemIcons.Smooth.cs`): the factor is the nearest whole number of times bigger, 2 to 6 (`Xbrz.FactorFor`; none under
+  1.4 times), so the GPU only stretches a little after, each picture scaled once per factor (about 10 ms for the disc)
+  and kept with the art (`[art]` lines in log.txt). Any other picture drawn big can use it too. Square, or Modern,
+  it's drawn by hand, its N green too. Untested in the game when written.
 - **Escape closes windows** (`Ui/EscapeCloses.cs`, the Config tab's Escape key section, `SettingsData.EscapeClosesWindows`,
   on to start): the /dap window and the Inventory, Bank (a Use of the bank, as its X), Character and Quests windows, all at
   once; Target, Fellowship, Loot, hotbars, map and the rest stay (the user's call). Read from Windows on Decal's

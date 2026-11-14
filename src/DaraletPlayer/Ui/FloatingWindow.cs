@@ -204,6 +204,22 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         public float? MinHeight { get; set; }
 
+        /// <summary>
+        /// For a window the player sizes, made as wide as it is tall once an edge is let go (the Radar window), by the side
+        /// that was dragged further (SquareUp). Not while it's dragged: squared in ImGui's size callback, the size fought
+        /// the one ImGui works out from the mouse every frame, and the window flickered between the two.
+        /// </summary>
+        public bool KeepSquare { get; set; }
+
+        /// <summary>The window's size when the left button went down, for SquareUp to tell which side was dragged.</summary>
+        private Vector2? squareFrom;
+
+        /// <summary>
+        /// ImGui window flags of its own, added to the usual ones (the Radar window's NoScrollbar and NoScrollWithMouse:
+        /// the wheel zooms it, and a scroll bar coming and going as it's sized made it flicker).
+        /// </summary>
+        public ImGuiWindowFlags ExtraFlags { get; set; }
+
         /// <summary>Whether the window may show at all (its tab's checkbox). Saved.</summary>
         public bool Visible {
             get => Placement.Visible;
@@ -542,6 +558,7 @@ namespace DaraletPlayer.Ui {
                     flags |= ImGuiWindowFlags.NoResize;
                 }
 
+                flags |= ExtraFlags;
                 hud.WindowSettings = flags;
 
                 SetNextPlacement();
@@ -614,6 +631,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            SquareUp();
+
             if (pendingWidth.HasValue) {
                 // allowed under the usual smallest, so it's exactly what was asked
                 minWidth = Math.Min(minSize?.X ?? DefaultMinWidth, pendingWidth.Value);
@@ -623,6 +642,43 @@ namespace DaraletPlayer.Ui {
 
             // the callback snaps a resize's edges as ImGui works the size out from the mouse, so it shows as it's dragged
             SetSizeConstraints(new Vector2(minWidth, MinHeight ?? minSize?.Y ?? 200));
+        }
+
+        /// <summary>
+        /// KeepSquare's work: notes the size as the button goes down, and once it's up makes a window that isn't square
+        /// square, the side by the one that changed more since the press (both alike, the wider), rounded to a whole pixel.
+        /// </summary>
+        private void SquareUp() {
+            if (!KeepSquare || !defaultSize.HasValue) {
+                return;
+            }
+
+            var look = Look;
+            var size = new Vector2(look.Width ?? defaultSize.Value.X, look.Height ?? defaultSize.Value.Y);
+
+            if (ImGui.IsMouseDown(ImGuiMouseButton.Left)) {
+                squareFrom = squareFrom ?? size;
+                return;
+            }
+
+            var from = squareFrom ?? size;
+            squareFrom = null;
+
+            if (Math.Abs(size.X - size.Y) < 0.5f) {
+                return;
+            }
+
+            var widthChange = Math.Abs(size.X - from.X);
+            var heightChange = Math.Abs(size.Y - from.Y);
+            var side = widthChange > heightChange ? size.X
+                : heightChange > widthChange ? size.Y
+                : Math.Max(size.X, size.Y);
+            side = (float)Math.Round(Math.Max(side, Math.Max(minWidth, MinHeight ?? minSize?.Y ?? 0)));
+
+            look.Width = side;
+            look.Height = side;
+            settings.Changed();
+            ImGui.SetNextWindowSize(new Vector2(side, side), ImGuiCond.Always);
         }
 
         /// <summary>

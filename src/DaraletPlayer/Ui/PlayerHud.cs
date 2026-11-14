@@ -113,6 +113,10 @@ namespace DaraletPlayer.Ui {
                     gamePanels.Get("debuffs").Window),
                 [IndicatorOptions.Vitae] = (() => gamePanels.Get("vitae").Options.Replace, gamePanels.Get("vitae").Window),
             }));
+            // its dungeon map is the Dungeon window's, which the World tab makes
+            var radar = new RadarPanel(settings, feed, worldTab.DungeonWindow);
+            gamePanels.Add(radar);
+            worldTab.RadarSettings = radar.RenderSettings;
             // the hud is made below: these read the field when called
             escapeCloses = new EscapeCloses(settings, () => hud.Visible, () => hud.Visible = false,
                 inventoryTab.CarriedWindow, inventoryTab.BankWindow, characterTab.Window, questsTab.Window);
