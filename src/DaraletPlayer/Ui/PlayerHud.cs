@@ -82,7 +82,8 @@ namespace DaraletPlayer.Ui {
                 ("options", "Options", gamePanels.Get<OptionsPanel>().Window),
                 ("buffs", "Buffs", gamePanels.Get("buffs").Window),
                 ("debuffs", "Debuffs", gamePanels.Get("debuffs").Window),
-                ("vitae", "Vitae", gamePanels.Get("vitae").Window));
+                ("vitae", "Vitae", gamePanels.Get("vitae").Window),
+                ("link", "Link", gamePanels.Get<LinkPanel>().Window));
             configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow, sharedWindow,
                 gamePanels), hideGameUi, launcher, borderless);
             leaderboardsTab = new LeaderboardsTab(feed, api);
@@ -112,6 +113,8 @@ namespace DaraletPlayer.Ui {
                 [IndicatorOptions.Debuffs] = (() => gamePanels.Get("debuffs").Options.Replace,
                     gamePanels.Get("debuffs").Window),
                 [IndicatorOptions.Vitae] = (() => gamePanels.Get("vitae").Options.Replace, gamePanels.Get("vitae").Window),
+                [IndicatorOptions.Link] = (() => gamePanels.Get<LinkPanel>().Options.Replace,
+                    gamePanels.Get<LinkPanel>().Window),
             }));
             // its dungeon map is the Dungeon window's, which the World tab makes
             var radar = new RadarPanel(settings, feed, worldTab.DungeonWindow);
