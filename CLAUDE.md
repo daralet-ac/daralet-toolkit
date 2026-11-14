@@ -238,7 +238,14 @@ the loot rules' tooltips. `character` sends your character stats (`{"sections":[
 `/rested` says the same from the same `rested`. `lfg` sends looking for group, for Find a group (see the Social tab). `social`
 sends your friends, squelches, allegiance and the Appear Offline and fellowship options (`PlayerUiSocialData`), and
 `friend`, `squelch`, `allegiance` and `fellowcreate` are the Social tab's buttons (see it). `shareitem <guid>`, `shareagain <key>` and `shared
-<key>...` are item links in chat (see Chat windows). `fellowship spells` adds
+<key>...` are item links in chat (see Chat windows). `style <guid> [number]` is `/style` for one item you carry or
+wear, named by its id (`/style` takes the item last examined, which anything appraised in between would change):
+it switches it to that look (`StyleCommand.Switch`, which says in chat what happened), then answers with the looks
+you can choose (`{"guid","name","problem","styles":[{"name","showing","earned"}]}`, `styles` null for only one;
+`PlayerUiItemStyles` in daralet-ACE). An item's right-click menu (the inventory lists but the bank's, a hotbar slot)
+has **Style** (`Ui/ItemStyleMenu.cs`), which asks each time it opens and lists them, the one showing ticked, earned
+ones starred; a pick goes out on the next frame the server allows (`PlayerFeed.ChooseStyle`). Untested in the game
+when written. `fellowship spells` adds
 each fellow's buffs and debuffs as spell ids; every `fellowship` reply has each fellow's Combat Focus (name and icon
 layers), and leaves nulls out. The server can also send a reply unasked (`PlayerUiProtocol.Send`),
 which the plugin reads the same as one it asked for.

@@ -50,6 +50,7 @@ namespace DaraletPlayer.Feed {
         public const string KindShareAgain = "shareagain";
         public const string KindShared = "shared";
         public const string KindXp = "xp";
+        public const string KindStyle = "style";
 
         // chat types, which Decal passes as the colour
         private const int TellChat = 3;
@@ -86,6 +87,9 @@ namespace DaraletPlayer.Feed {
 
         private DateTime lastCommandSentAt = DateTime.MinValue;
         private bool disposed;
+
+        /// <summary>A look picked in an item's Style menu, sent once the server allows (SendStyleChoice).</summary>
+        private string pendingStyle;
 
         /// <summary>A stray piece of a reply is logged once, not every second.</summary>
         private bool pieceLogged;
@@ -163,6 +167,9 @@ namespace DaraletPlayer.Feed {
         /// thread, as every reply is read.
         /// </summary>
         public event Action<ShareReplyInfo> ItemShared;
+
+        /// <summary>What the server last said about each item's looks (@playerui style), by guid, for the Style menus.</summary>
+        public Dictionary<uint, ItemStylesInfo> ItemStyles { get; } = new Dictionary<uint, ItemStylesInfo>();
 
         /// <summary>
         /// When the latest bank request had been sent by the time a bank reply came: a reply to one sent after a command
@@ -330,6 +337,42 @@ namespace DaraletPlayer.Feed {
         }
 
         /// <summary>
+        /// Asks the server which looks one of your items has (@playerui style); the answer lands in ItemStyles. Each time
+        /// a Style menu opens, since a quest can unlock a look.
+        /// </summary>
+        public void AskStyles(uint guid) {
+            if (guid != 0 && Supports(KindStyle)) {
+                waitingSince.Remove(KindStyle);
+                Request(KindStyle, Display.TargetArguments(guid));
+            }
+        }
+
+        /// <summary>
+        /// Switches one of your items to a look, by its number in ItemStyles (from 1), as /style does; the server says in
+        /// chat what happened and answers with the looks again. Sent on the next frame the server allows.
+        /// </summary>
+        public void ChooseStyle(uint guid, int number) {
+            if (guid != 0 && number > 0 && Supports(KindStyle)) {
+                pendingStyle = $"{Display.TargetArguments(guid)} {number}";
+            }
+        }
+
+        private void SendStyleChoice() {
+            if (pendingStyle == null || disposed || Status != FeedStatus.Ready) {
+                return;
+            }
+
+            // the menu's own request may have gone out a moment ago: the server drops one sooner than 400ms after it
+            if (lastSentAt.TryGetValue(KindStyle, out var at) && DateTime.UtcNow - at < MinInterval) {
+                return;
+            }
+
+            waitingSince.Remove(KindStyle);
+            Request(KindStyle, pendingStyle);
+            pendingStyle = null;
+        }
+
+        /// <summary>
         /// Asks the server to keep someone else's chat link under your name too, to pass on (@playerui shareagain); the answer
         /// comes as ItemShared. False when the server can't, or one is still on its way.
         /// </summary>
@@ -467,6 +510,7 @@ namespace DaraletPlayer.Feed {
 
                 SendDescribeBatch();
                 SendSharedBatch();
+                SendStyleChoice();
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
@@ -578,6 +622,15 @@ namespace DaraletPlayer.Feed {
                 case KindShareAgain:
                     ItemShared?.Invoke(Json.Read<ShareReplyInfo>(json));
                     break;
+                case KindStyle: {
+                    var styles = Json.Read<ItemStylesInfo>(json);
+
+                    if (styles != null && styles.Guid != 0) {
+                        ItemStyles[styles.Guid] = styles;
+                    }
+
+                    break;
+                }
                 case KindShared: {
                     var lookup = Json.Read<SharedLookupInfo>(json);
                     var found = lookup?.Items?.Select(i => i.Key) ?? Enumerable.Empty<string>();
