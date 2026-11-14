@@ -123,6 +123,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             var boards = arena.Boards ?? new List<ArenaBoardInfo>();
 
             if (boards.Count == 0) {
@@ -173,6 +175,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             if (duels.Count == 0) {
                 Widgets.TextDisabled("No duels to watch.");
                 return;
@@ -202,6 +206,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             if (recent.Count == 0) {
                 Widgets.TextDisabled("None since the server started.");
                 return;
@@ -223,6 +229,8 @@ namespace DaraletPlayer.Ui {
             if (!ImGui.CollapsingHeader("Top ratings###arena-top")) {
                 return;
             }
+
+            using var fold = Form.Folded();
 
             var changed = false;
 

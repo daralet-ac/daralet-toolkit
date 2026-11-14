@@ -46,6 +46,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             Form.Section("Social window");
             window.RenderControls("A window with these same tabs that stays on screen while you play. With Client UI "
                 + "Override's Social ticked (the Config tab), the game toolbar's Social button opens it instead of the "

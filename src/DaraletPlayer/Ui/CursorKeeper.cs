@@ -62,8 +62,10 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
-                // what ImGui asked for in the frame it last drew: the plain arrow is the game's to draw
-                var cursor = Cursor(ImGui.GetMouseCursor());
+                // a window's top edge (FloatingWindow.EdgeDrag) first, then what ImGui asked for in the frame it last
+                // drew: the plain arrow is the game's to draw
+                var cursor = FloatingWindow.WantsMoveCursor ? Game(GameCursors.Move, IDC_SIZEALL)
+                    : Cursor(ImGui.GetMouseCursor());
 
                 if (cursor == IntPtr.Zero) {
                     return;
@@ -77,29 +79,58 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>
+        /// Puts the cursor on again while the left button is held on something that moves or sizes a window (a top edge,
+        /// one of ImGui's resize edges), from every FloatingWindow's draw. Windows sends no WM_SETCURSOR while the button
+        /// is held, and ImGui's own code sets Windows' arrow whenever its cursor changes, which it does as the press
+        /// starts: the move cursor was gone the moment a drag began, and stayed gone till it ended.
+        /// </summary>
+        public static void KeepWhileHeld() {
+            if (!started || !ImGui.IsMouseDown(ImGuiMouseButton.Left)) {
+                return;
+            }
+
+            var cursor = FloatingWindow.WantsMoveCursor ? Game(GameCursors.Move, IDC_SIZEALL)
+                : Cursor(ImGui.GetMouseCursor());
+
+            if (cursor != IntPtr.Zero) {
+                SetCursor(cursor);
+            }
+        }
+
         /// <summary>The system cursor for one of ImGui's, or zero for the arrow and anything else left to the game.</summary>
         private static IntPtr Cursor(ImGuiMouseCursor wanted) {
             if (cursors.TryGetValue(wanted, out var known)) {
                 return known;
             }
 
-            int id;
+            IntPtr cursor;
 
+            // moving and sizing use the game's own arrows (GameCursors), as its panels' edges do
             switch (wanted) {
-                case ImGuiMouseCursor.TextInput: id = IDC_IBEAM; break;
-                case ImGuiMouseCursor.ResizeAll: id = IDC_SIZEALL; break;
-                case ImGuiMouseCursor.ResizeEW: id = IDC_SIZEWE; break;
-                case ImGuiMouseCursor.ResizeNS: id = IDC_SIZENS; break;
-                case ImGuiMouseCursor.ResizeNESW: id = IDC_SIZENESW; break;
-                case ImGuiMouseCursor.ResizeNWSE: id = IDC_SIZENWSE; break;
-                case ImGuiMouseCursor.Hand: id = IDC_HAND; break;
-                case ImGuiMouseCursor.NotAllowed: id = IDC_NO; break;
+                case ImGuiMouseCursor.TextInput: cursor = SystemCursor(IDC_IBEAM); break;
+                case ImGuiMouseCursor.ResizeAll: cursor = Game(GameCursors.Move, IDC_SIZEALL); break;
+                case ImGuiMouseCursor.ResizeEW: cursor = Game(GameCursors.SizeWE, IDC_SIZEWE); break;
+                case ImGuiMouseCursor.ResizeNS: cursor = Game(GameCursors.SizeNS, IDC_SIZENS); break;
+                case ImGuiMouseCursor.ResizeNESW: cursor = Game(GameCursors.SizeNESW, IDC_SIZENESW); break;
+                case ImGuiMouseCursor.ResizeNWSE: cursor = Game(GameCursors.SizeNWSE, IDC_SIZENWSE); break;
+                case ImGuiMouseCursor.Hand: cursor = SystemCursor(IDC_HAND); break;
+                case ImGuiMouseCursor.NotAllowed: cursor = SystemCursor(IDC_NO); break;
                 default: return IntPtr.Zero;
             }
 
-            var cursor = LoadCursor(IntPtr.Zero, new IntPtr(id));
             cursors[wanted] = cursor;
             return cursor;
+        }
+
+        /// <summary>One of the game's cursors, or Windows' own if it couldn't be made.</summary>
+        private static IntPtr Game(string name, int fallback) {
+            var cursor = GameCursors.Get(name);
+            return cursor != IntPtr.Zero ? cursor : SystemCursor(fallback);
+        }
+
+        private static IntPtr SystemCursor(int id) {
+            return LoadCursor(IntPtr.Zero, new IntPtr(id));
         }
     }
 }

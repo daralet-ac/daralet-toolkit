@@ -9,9 +9,10 @@ using UtilityBelt.Service.Views;
 namespace DaraletPlayer.Ui {
     /// <summary>
     /// A small window outside the main one that stays on screen while you play (fellowship vitals, target, hotbars...).
-    /// Unlocked, it has a title bar to drag it by; locked, it has none. Its place and visibility are saved in the settings.
+    /// It has no title bar: unlocked, it's dragged by its top edge (EdgeDrag) and sized by its others; locked, only with
+    /// Ctrl held (CtrlDrag). Its place and visibility are saved in the settings.
     /// </summary>
-    internal class FloatingWindow : IDisposable {
+    internal partial class FloatingWindow : IDisposable {
         private const float DefaultMinWidth = 300;
 
         private readonly Hud hud;
@@ -54,10 +55,30 @@ namespace DaraletPlayer.Ui {
         /// <summary>Set while the plugin shows or hides the hud itself, so OnHide can tell that from the close button.</summary>
         private bool settingVisibility;
 
-        /// <summary>The title bar's height as last drawn, or 0 before it has been.</summary>
-        private float titleBarHeight;
-
         private bool bringToFront;
+
+        /// <summary>Where in a locked window the mouse took hold of it with Ctrl, while it's being dragged; else null.</summary>
+        private Vector2? ctrlGrab;
+
+        /// <summary>The frame a window held to this one last moved it (MoveTo), when its own drag mustn't place it.</summary>
+        private int ledFrame = -10;
+
+        /// <summary>A locked window's edge taken hold of with Ctrl (CtrlResize): it resizes till the button's let go.</summary>
+        private bool ctrlSizing;
+
+        /// <summary>
+        /// Set by what's in the window, every frame, while it has hold of a handle of its own that works with Ctrl held (the
+        /// XP bar's width grip, XpBar.Resize.cs): a Ctrl press there isn't a move. Contents are drawn before CtrlDrag, so
+        /// one set on the press is seen that frame.
+        /// </summary>
+        public bool CtrlHandleHeld { get; set; }
+
+        /// <summary>
+        /// Set by what's in the window, every frame, while the mouse is on (or holding) a handle of its own drawn on the
+        /// window's edge (the XP bar's width grips, down its sides): the top-edge move (EdgeDrag), which shares the top
+        /// corners, leaves it alone.
+        /// </summary>
+        public bool HandleHovered { get; set; }
 
         /// <summary>Set by OpenMenu: the right-click menu opens this frame, at the window's level, where it's looked for.</summary>
         private bool openMenu;
@@ -101,6 +122,7 @@ namespace DaraletPlayer.Ui {
 
             // made here so a window that starts hidden is saved that way
             settings.Window(id, visibleByDefault);
+            Showing.Add(this);
             settings.Swapped += Settings_Swapped;
 
             hud = UBService.Huds.CreateHud(title);
@@ -125,13 +147,36 @@ namespace DaraletPlayer.Ui {
         public Func<WindowPlacement> SharedLook { get; set; }
 
         /// <summary>
-        /// A box on screen the window is held to (the shared window attached to the toolbar), else null: no title bar, no
+        /// A box on screen the window is held to (the shared window attached to the toolbar), else null: no
         /// dragging or ImGui sizing (SharedWindow sizes the box itself), and nothing saved here.
         /// </summary>
         public Func<(Vector2 Position, Vector2 Size)?> Anchor { get; set; }
 
+        /// <summary>
+        /// The plugin window this one is held to (Anchor) while it is (the shared window on the plugin's Toolbar window),
+        /// else null: a Ctrl drag of this one moves that one, which this follows, and that one doesn't snap to this.
+        /// </summary>
+        public Func<FloatingWindow> Follows { get; set; }
+
         /// <summary>Drawn above what's in the window (the shared window's tabs), or null.</summary>
         public Action Header { get; set; }
+
+        /// <summary>
+        /// Items at the top of the window's own menu items (the shared window's Share with the other panels), or null.
+        /// </summary>
+        public Action SharedMenu { get; set; }
+
+        /// <summary>Whether it's one of the shared window's now (SharedWindow sets it), or null for never.</summary>
+        public Func<bool> SharesNow { get; set; }
+
+        /// <summary>Takes it out of the shared window into a window of its own (SharedWindow's Separate), or null.</summary>
+        public Action PopOut { get; set; }
+
+        /// <summary>
+        /// While true the window isn't drawn, whatever its own setting (the Dungeon window while the Map window shows the
+        /// dungeon map in itself); null for never.
+        /// </summary>
+        public Func<bool> Suppressed { get; set; }
 
         /// <summary>
         /// The words in its title bar (a chat window's name). UtilityBelt knows a window by the name it was made with, which
@@ -145,6 +190,19 @@ namespace DaraletPlayer.Ui {
                 }
             }
         }
+
+        /// <summary>
+        /// For a window the player sizes: locked, it can still be resized by its edges while Ctrl is held, as Ctrl moves it.
+        /// The Vendor window's first, every window's since (the user's call, November 2026: nearly every window sized by
+        /// its edges); a window that sizes itself is sized by EdgeScale instead.
+        /// </summary>
+        public bool CtrlResize { get; set; } = true;
+
+        /// <summary>
+        /// For a window the player sizes, the least height its contents need, measured by them as they draw (the Vendor
+        /// window's single row: it follows the Text size and the title bar); null for minSize's.
+        /// </summary>
+        public float? MinHeight { get; set; }
 
         /// <summary>Whether the window may show at all (its tab's checkbox). Saved.</summary>
         public bool Visible {
@@ -166,12 +224,7 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
-                // locking takes the title bar away, so the window moves down by its height (and back up on unlocking):
-                // what's in it stays exactly where it was
-                var title = TitleBarHeight();
-                Look.Y = (Look.Y ?? defaultPosition.Y) + (value ? title : -title);
-                positioned = false;
-
+                // no title bar either way (EdgeDrag), so nothing in it moves
                 Look.Locked = value;
                 settings.Changed();
             }
@@ -270,8 +323,10 @@ namespace DaraletPlayer.Ui {
 
             var locked = Locked;
 
-            if (Form.FlowCheck(ref first, $"Locked##{id}-locked", ref locked, "A locked window has no title bar and can't "
-                + "be dragged. Unlock it to move it. You can also right-click the window to lock or unlock it.")) {
+            if (Form.FlowCheck(ref first, $"Locked##{id}-locked", ref locked, "Unlocked, a window is moved by dragging its "
+                + "top edge (the mouse shows the four arrows there) and sized by its other edges. Locked, it stays put. "
+                + "Either way, hold Ctrl and drag it from anywhere on it to move it. You can also right-click the window "
+                + "to lock or unlock it.")) {
                 Locked = locked;
             }
 
@@ -305,7 +360,7 @@ namespace DaraletPlayer.Ui {
             var min = (int)(WindowPlacement.MinScale * 100);
             var max = (int)(WindowPlacement.MaxScale * 100);
 
-            if (ImGui.SliderInt(label, ref percent, min, max, "%d%%")) {
+            if (Sliders.SliderInt(label, ref percent, min, max, "%d%%")) {
                 Scale = percent / 100f;
             }
             Widgets.Tip("How big the window's text and bars are drawn. Ctrl+click to type a size. You can also right-click the window for Bigger, Smaller and Normal size.");
@@ -321,11 +376,11 @@ namespace DaraletPlayer.Ui {
         public void BackgroundSlider(string label) {
             var percent = (int)Math.Round(Look.BackgroundAlpha * 100);
 
-            if (ImGui.SliderInt(label, ref percent, 0, 100, "%d%%")) {
+            if (Sliders.SliderInt(label, ref percent, 0, 100, "%d%%")) {
                 Look.Background = percent / 100f;
                 settings.Changed();
             }
-            Widgets.Tip("How solid the window's background is. At 0% there's no box at all, only what's in it (lock the window too, to lose the title bar). Right-click what's left to get this back.");
+            Widgets.Tip("How solid the window's background is. At 0% there's no box at all, only what's in it. Right-click what's left to get this back.");
         }
 
         /// <summary>
@@ -378,6 +433,8 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>Lock, Bigger, Smaller, Normal size and the background slider.</summary>
         private void RenderWindowItems(string lockLabel, string backgroundId) {
+            SharedMenu?.Invoke();
+
             if (ImGui.MenuItem(lockLabel)) {
                 Locked = !Locked;
             }
@@ -399,14 +456,10 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// The title bar's height as last drawn, or for a window never drawn unlocked, what ImGui gives one: a line of the
-        /// window's font and the frame's padding.
+        /// The height of the title bar unlocked windows had (UpgradeFromTitleBar): a line of the window's font and the
+        /// frame's padding, as ImGui made it.
         /// </summary>
         private float TitleBarHeight() {
-            if (titleBarHeight > 0) {
-                return titleBarHeight;
-            }
-
             // the font's own size, not GetFontSize: that's whichever window is being drawn, at its own scale
             var line = ImGui.GetFont().FontSize * ImGui.GetIO().FontGlobalScale * FontScale;
             return (float)Math.Round(line + ImGui.GetStyle().FramePadding.Y * 2);
@@ -442,7 +495,8 @@ namespace DaraletPlayer.Ui {
                 // over: what they draw reads Decal's hooks (your heading, your selection), and those read the game's
                 // memory, which isn't there yet: an access violation, which no catch stops and which kills the game.
                 // HideGameUi hides them all for a screenshot, keeping each one's own setting.
-                if (!Visible || HideGameUi.PluginWindowsHidden || CoreManager.Current.CharacterFilter.LoginStatus != 3) {
+                if (!Visible || HideGameUi.PluginWindowsHidden || CoreManager.Current.CharacterFilter.LoginStatus != 3
+                    || Suppressed?.Invoke() == true) {
                     SetHudVisible(false);
                     return;
                 }
@@ -471,8 +525,21 @@ namespace DaraletPlayer.Ui {
                     flags |= ImGuiWindowFlags.AlwaysAutoResize;
                 }
 
+                // no title bar, locked or not: an unlocked window is moved by its top edge, as the game's panels are
+                // (EdgeDrag), never by ImGui
+                flags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove;
+                UpgradeFromTitleBar();
+
                 if (Locked || Anchor?.Invoke() != null) {
-                    flags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize;
+                    flags |= ImGuiWindowFlags.NoResize;
+
+                    if (CanCtrlResize() && (ImGui.GetIO().KeyCtrl || ctrlSizing)) {
+                        flags &= ~ImGuiWindowFlags.NoResize;
+                    }
+                }
+                else if (edgeHover || edgeGrab.HasValue) {
+                    // ImGui resizes from the top edge too: there it moves the window instead
+                    flags |= ImGuiWindowFlags.NoResize;
                 }
 
                 hud.WindowSettings = flags;
@@ -518,7 +585,9 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            if (!positioned || !ImGui.IsMouseDown(ImGuiMouseButton.Left)) {
+            // a Ctrl drag or a drag by the top edge moves Look itself, so the window follows it
+            if (!positioned || !ImGui.IsMouseDown(ImGuiMouseButton.Left) || ctrlGrab.HasValue || edgeGrab.HasValue
+                || Led) {
                 ImGui.SetNextWindowPos(new Vector2(Look.X ?? defaultPosition.X, Look.Y ?? defaultPosition.Y), ImGuiCond.Always);
             }
 
@@ -552,8 +621,8 @@ namespace DaraletPlayer.Ui {
                 pendingWidth = null;
             }
 
-            ImGui.SetNextWindowSizeConstraints(new Vector2(minWidth, minSize?.Y ?? 200),
-                new Vector2(float.MaxValue, float.MaxValue));
+            // the callback snaps a resize's edges as ImGui works the size out from the mouse, so it shows as it's dragged
+            SetSizeConstraints(new Vector2(minWidth, MinHeight ?? minSize?.Y ?? 200));
         }
 
         /// <summary>
@@ -562,6 +631,12 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         private void SetNextBackground(ImGuiWindowFlags flags) {
             var alpha = Look.BackgroundAlpha;
+
+            // with a hole the window draws its background itself, round it (DrawBackgroundRoundHole)
+            if (alpha > 0 && HasHole) {
+                hud.WindowSettings = flags | ImGuiWindowFlags.NoBackground;
+                return;
+            }
 
             if (alpha > 0) {
                 ImGui.SetNextWindowBgAlpha(alpha);
@@ -603,22 +678,64 @@ namespace DaraletPlayer.Ui {
 
                 ImGui.SetWindowFontScale(FontScale);
                 Widgets.TextScale = settings.Data.ClampedTextScale * (textScale?.Invoke() ?? 1);
+                DrawBackgroundRoundHole();
 
-                // the contents start below the title bar and the padding, so this is the title bar's height
-                if (!Locked) {
-                    titleBarHeight = ImGui.GetCursorStartPos().Y - (padding ?? ImGui.GetStyle().WindowPadding).Y;
-                }
 
                 // a drag from the game's pack let go over this window mustn't drop the item on the ground
                 GameDrag.Cover();
                 Header?.Invoke();
-                render();
+
+                // with Ctrl held a locked window is a handle to move it by: nothing in it takes a click meanwhile (a
+                // hotbar slot uses its item on the press), drawn at full strength rather than greyed out
+                var ctrlMove = CanCtrlMove() && (ImGui.GetIO().KeyCtrl || ctrlGrab.HasValue);
+
+                if (ctrlMove) {
+                    var style = ImGui.GetStyle();
+                    var disabledAlpha = style.DisabledAlpha;
+                    style.DisabledAlpha = 1;
+                    ImGui.BeginDisabled();
+                    style.DisabledAlpha = disabledAlpha;
+                }
+
+                try {
+                    render();
+                }
+                finally {
+                    if (ctrlMove) {
+                        ImGui.EndDisabled();
+                    }
+                }
+
+                // the game's scroll bar over the window's own, if it has one
+                Scrollbars.Draw();
+
+                // over the contents, before the top-edge move, which leaves its corner alone
+                RenderCloseButton();
+
+                // a window that sizes itself: its edges change its Size
+                EdgeScale();
+
+                if (ctrlMove) {
+                    DrawCtrlMoveHighlight();
+                }
+
+                // before the menu, whose items would count as hovered
+                EdgeDrag();
                 RenderContextMenu();
 
-                // held to a box on screen: nothing to save
+                // held to a box on screen: nothing to save, but a Ctrl drag may move the window it's held to
                 if (Anchor?.Invoke() == null) {
+                    SnapWhileDragged();
                     RememberPosition();
+                    TrackCtrlSizing();
                 }
+
+                CtrlDrag();
+
+                // the move or resize cursor through a drag, which Windows and ImGui would otherwise take away
+                CursorKeeper.KeepWhileHeld();
+                TrackResizePress();
+                NoteBox();
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
@@ -629,9 +746,134 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>
+        /// A faint wash and a frame in the theme's accent over the whole window, so it's plain which windows Ctrl can move,
+        /// brighter on the one being dragged.
+        /// </summary>
+        private void DrawCtrlMoveHighlight() {
+            var position = ImGui.GetWindowPos();
+            var corner = position + ImGui.GetWindowSize();
+            var accent = ImGui.GetStyle().Colors[(int)ImGuiCol.ButtonHovered];
+            var dragging = ctrlGrab.HasValue;
+            var fill = ImGui.GetColorU32(new Vector4(accent.X, accent.Y, accent.Z, dragging ? 0.18f : 0.08f));
+            var frame = ImGui.GetColorU32(new Vector4(accent.X, accent.Y, accent.Z, dragging ? 1f : 0.7f));
+            var rounding = ImGui.GetStyle().WindowRounding;
+
+            // the window's own clip stops at its padding: the frame goes round its very edge
+            var drawList = ImGui.GetWindowDrawList();
+            drawList.PushClipRect(position, corner);
+            drawList.AddRectFilled(position, corner, fill, rounding);
+            drawList.AddRect(position + new Vector2(1, 1), corner - new Vector2(1, 1), frame, rounding, ImDrawFlags.None, 2);
+            drawList.PopClipRect();
+        }
+
+        /// <summary>
+        /// Any window, locked or not (the user's call, November 2026), not held to a box on screen, or one held to another
+        /// plugin window (Follows): Ctrl and a drag move it, or the one it's held to.
+        /// </summary>
+        private bool CanCtrlMove() {
+            return Anchor?.Invoke() == null || Follows?.Invoke() != null;
+        }
+
+        /// <summary>The window a Ctrl drag of this one moves: itself, or the one it's held to; null for neither.</summary>
+        private FloatingWindow CtrlMover() {
+            return Anchor?.Invoke() == null ? this : Follows?.Invoke();
+        }
+
+        /// <summary>A locked window the player sizes, with CtrlResize: Ctrl and a drag of an edge resize it.</summary>
+        private bool CanCtrlResize() {
+            return CtrlResize && defaultSize.HasValue && Locked && Anchor?.Invoke() == null;
+        }
+
+        /// <summary>A window held to this one moved it this frame or the last (MoveTo): its place isn't a drag's.</summary>
+        private bool Led => ledFrame >= ImGui.GetFrameCount() - 1;
+
+        /// <summary>
+        /// Puts the window here, from a Ctrl drag of a window held to it (CtrlDrag): it's drawn there from its next Begin,
+        /// though the button is down, and doesn't save where it was back meanwhile (RememberPosition).
+        /// </summary>
+        public void MoveTo(Vector2 position) {
+            ledFrame = ImGui.GetFrameCount();
+
+            if (Look.X != position.X || Look.Y != position.Y) {
+                Look.X = position.X;
+                Look.Y = position.Y;
+                settings.Changed();
+            }
+        }
+
+        /// <summary>
+        /// Whether an edge or corner has hold of the mouse. ImGui's resize grips are its only active items while Ctrl is held
+        /// (everything in the window is disabled then), so an active item at the press is one. Kept till the button's let go.
+        /// </summary>
+        private void TrackCtrlSizing() {
+            // an unlocked one the player sizes keeps its edges with Ctrl held too: one taken hold of mustn't also move it
+            var sizable = CanCtrlResize() || !Locked && defaultSize.HasValue && Anchor?.Invoke() == null;
+
+            if (!sizable || !ImGui.IsMouseDown(ImGuiMouseButton.Left)) {
+                ctrlSizing = false;
+                return;
+            }
+
+            if (!ctrlSizing && ctrlGrab == null && ImGui.GetIO().KeyCtrl && ImGui.IsAnyItemActive()) {
+                ctrlSizing = true;
+            }
+        }
+
+        /// <summary>
+        /// Moves a locked window while Ctrl and the left button are held on it. Done by hand, not by lifting NoMove: ImGui
+        /// only moves a window from its empty background, and a hotbar is all slots. A window held to another plugin window
+        /// (Follows: the shared window on the Toolbar window) moves that one instead, and follows it.
+        /// </summary>
+        private void CtrlDrag() {
+            var mover = CtrlMover();
+
+            if (!CanCtrlMove() || mover == null || !ImGui.IsMouseDown(ImGuiMouseButton.Left)) {
+                ctrlGrab = null;
+                return;
+            }
+
+            var box = mover == this ? (ImGui.GetWindowPos(), ImGui.GetWindowSize()) : mover.DrawnBox;
+
+            if (box == null) {
+                ctrlGrab = null;
+                return;
+            }
+
+            var mouse = ImGui.GetMousePos();
+
+            if (!ctrlGrab.HasValue) {
+                var hovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows
+                    | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
+
+                // an edge taken hold of with Ctrl resizes it (CtrlResize), and mustn't move it too
+                if (!ImGui.GetIO().KeyCtrl || !hovered || !ImGui.IsMouseClicked(ImGuiMouseButton.Left) || ctrlSizing
+                    || CtrlHandleHeld) {
+                    return;
+                }
+
+                ctrlGrab = mouse - box.Value.Position;
+            }
+
+            // the window's drawn there from the next frame (SetNextPlacement)
+            var position = mover.Snapped(mouse - ctrlGrab.Value, box.Value.Size, true);
+
+            if (mover != this) {
+                mover.MoveTo(position);
+                return;
+            }
+
+            if (Look.X != position.X || Look.Y != position.Y) {
+                Look.X = position.X;
+                Look.Y = position.Y;
+                settings.Changed();
+            }
+        }
+
         private void RememberPosition() {
-            // a new position is on its way (Locked, Reset position): this frame's is the old one
-            if (!positioned) {
+            // a new position is on its way (Reset position, a window held to this one, a drag by the top edge, which moved
+            // Look just before this): this frame's is the old one, and saving it put the window back every frame
+            if (!positioned || Led || edgeGrab.HasValue) {
                 return;
             }
 
@@ -682,8 +924,20 @@ namespace DaraletPlayer.Ui {
             positioned = false;
         }
 
+        /// <summary>
+        /// Puts the window where its placement says, size and all, on the next frame: for its placement changed behind it
+        /// (a window taken out of the shared window, given the shared place as its own).
+        /// </summary>
+        public void PlaceAgain() {
+            positioned = false;
+        }
+
+        /// <summary>The window's own placement, not the shared one it may be using now.</summary>
+        public WindowPlacement OwnPlacement => Placement;
+
         public void Dispose() {
             disposed = true;
+            Showing.Remove(this);
             settings.Swapped -= Settings_Swapped;
             CoreManager.Current.RenderFrame -= Core_RenderFrame;
             hud.OnPreRender -= Hud_OnPreRender;

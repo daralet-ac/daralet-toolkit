@@ -30,7 +30,7 @@ namespace DaraletPlayer.Ui {
             if (Widgets.BeginChild("loot-rules", new Vector2(width, 0), true)) {
                 RenderRuleList(looter.ActiveList);
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
 
             ImGui.SameLine(0, 0);
             Panes.Divider("loot-rules", true, width, avail, minList, minEditor, "Drag to widen or narrow the rule list.");
@@ -44,7 +44,7 @@ namespace DaraletPlayer.Ui {
                     Widgets.TextDisabled("Add a rule, or pick one to edit.");
                 }
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
         }
 
         /// <summary>A rule list width dragged before Panes, in pixels: kept, as lines of text at the size it was dragged at.</summary>
@@ -274,7 +274,7 @@ namespace DaraletPlayer.Ui {
             var label = LootMarks.Icons.FirstOrDefault(i => i.Value == rule.Icon).Label ?? "None";
             ImGui.SetNextItemWidth(Form.ControlWidth);
 
-            if (!ImGui.BeginCombo("##rule-icon", label, ImGuiComboFlags.HeightLargest)) {
+            if (!Combos.Begin("##rule-icon", label, ImGuiComboFlags.HeightLargest, false)) {
                 return false;
             }
 
@@ -313,7 +313,7 @@ namespace DaraletPlayer.Ui {
                 shown++;
             }
 
-            ImGui.EndCombo();
+            Combos.End();
             return changed;
         }
 

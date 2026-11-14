@@ -10,8 +10,11 @@ namespace DaraletPlayer.Ui {
     /// The Inventory, Map, Social, Quests and Character windows sharing one place on screen, as the game's panels share the
     /// space above the toolbar: the one opened last shows, and opening it closes the others. They stay windows of their
     /// own, but take one place, size, lock, Size and background (the window "shared", FloatingWindow.SharedLook), and
-    /// carry a row of tabs for each other (FloatingWindow.Header). Which ones share is the player's (SharedWindowMembers),
-    /// from the Config tab's Client UI Override section.
+    /// carry a row of tabs for each other (FloatingWindow.Header). Every one shares it but those kept separate
+    /// (SharedWindowSeparate), which each window says for itself: Share with the other panels in its right-click menu
+    /// (FloatingWindow.SharedMenu), and Separate at the end of the shared window's tabs. On for everyone: settings from
+    /// before have SharedWindowSeparate worked out from what was ticked (SharedWindowMembers), and the shared window
+    /// switched on (Upgrade).
     /// Attach to toolbar holds it right above the toolbar, as wide, wherever the toolbar is moved (FloatingWindow.Anchor),
     /// with its free edge dragged to any height (SharedWindowAttachHeight), and it takes turns with the game's panels: a game panel opening (one of the toolbar's buttons that isn't
     /// overridden, or the game's own key) closes it, and one of its windows opening closes the game's panel.
@@ -52,8 +55,19 @@ namespace DaraletPlayer.Ui {
 
         private bool disposed;
 
+        /// <summary>
+        /// The plugin's Toolbar window while it stands in for the game's toolbar (Replace), else null: Attach to toolbar
+        /// sits on it then (its DrawnBox), the game's own toolbar being hidden, and a Ctrl drag of the shared window moves
+        /// it (FloatingWindow.Follows). Set by PlayerHud, which makes it after this.
+        /// </summary>
+        public Func<FloatingWindow> PluginToolbar { get; set; }
+
+        /// <param name="more">
+        /// Other windows that may share it (the game panels' that stand in for a panel the game shows in its frame: the
+        /// Attributes window), by id, label and window; each must size by the player (a defaultSize), as these do.
+        /// </param>
         public SharedWindow(Settings settings, FloatingWindow inventory, FloatingWindow map, FloatingWindow social,
-            FloatingWindow quests, FloatingWindow character) {
+            FloatingWindow quests, FloatingWindow character, params (string Id, string Label, FloatingWindow Window)[] more) {
             this.settings = settings;
             windows = new List<(string, string, FloatingWindow)> {
                 ("carried", "Inventory", inventory),
@@ -62,16 +76,22 @@ namespace DaraletPlayer.Ui {
                 ("quests", "Quests", quests),
                 ("character", "Character", character),
             };
+            windows.AddRange(more);
 
-            foreach (var (id, _, window) in windows) {
+            foreach (var (id, label, window) in windows) {
                 window.SharedLook = () => Shares(id) ? Placement() : null;
                 window.Anchor = () => Shares(id) && settings.Data.SharedWindowAttach ? PanelBox() : null;
+                window.Follows = () => Shares(id) && settings.Data.SharedWindowAttach ? AttachedToolbar() : null;
                 window.Header = () => {
                     RenderAttachedGrip(id);
                     RenderTabs(id);
                 };
+                window.SharedMenu = () => RenderShareItem(id, label);
+                window.SharesNow = () => Shares(id);
+                window.PopOut = () => PopOut(id, window);
             }
 
+            Upgrade();
             settings.Swapped += Settings_Swapped;
             CoreManager.Current.RenderFrame += Core_RenderFrame;
         }
@@ -93,10 +113,107 @@ namespace DaraletPlayer.Ui {
             return placement;
         }
 
-        /// <summary>Whether a window is one of the shared window's now.</summary>
+        /// <summary>Whether a window is one of the shared window's now: every one but those kept separate.</summary>
         private bool Shares(string id) {
             var data = settings.Data;
-            return data.SharedWindow && data.SharedWindowMembers != null && data.SharedWindowMembers.Contains(id);
+            return data.SharedWindow && (data.SharedWindowSeparate == null || !data.SharedWindowSeparate.Contains(id));
+        }
+
+        /// <summary>
+        /// Settings from before the windows chose for themselves (no SharedWindowSeparate yet): the windows that weren't
+        /// ticked to share are kept separate, and the shared window is switched on, as it now is for everyone.
+        /// </summary>
+        private void Upgrade() {
+            var data = settings.Data;
+
+            if (data.SharedWindowSeparate != null) {
+                return;
+            }
+
+            var members = data.SharedWindowMembers ?? new List<string>();
+            data.SharedWindowSeparate = windows.Select(w => w.Id).Where(id => !members.Contains(id)).ToList();
+            data.SharedWindow = true;
+            settings.Changed();
+            PluginCore.LogFile("[shared-window] on, every window sharing it but "
+                + (data.SharedWindowSeparate.Count == 0 ? "none" : string.Join(", ", data.SharedWindowSeparate)));
+        }
+
+        /// <summary>
+        /// A window's own Pop out (the Map window's): separated as Separate does, then made square and put in the middle
+        /// of the screen (the user's call, November 2026), as big as its longer side was, but no more than 60% of the
+        /// screen's shorter side, and brought to the front. Left exactly where it was, the first build's looked as if
+        /// nothing had happened (the same box, the tabs gone).
+        /// </summary>
+        private void PopOut(string id, FloatingWindow window) {
+            SetShared(id, false);
+
+            var own = window.OwnPlacement;
+            var screen = ImGui.GetIO().DisplaySize;
+            var longer = Math.Max(own.Width ?? 420, own.Height ?? 420);
+            var side = (float)Math.Round(Math.Max(200, Math.Min(longer, Math.Min(screen.X, screen.Y) * 0.6f)));
+            own.Width = side;
+            own.Height = side;
+            own.X = (float)Math.Round(Math.Max(0, (screen.X - side) / 2));
+            own.Y = (float)Math.Round(Math.Max(0, (screen.Y - side) / 2));
+            window.PlaceAgain();
+            window.Visible = true;
+            window.BringToFront();
+            settings.Changed();
+        }
+
+        /// <summary>Keeps a window out of the shared window, or puts it back in.</summary>
+        private void SetShared(string id, bool shared) {
+            var data = settings.Data;
+            data.SharedWindowSeparate = data.SharedWindowSeparate ?? new List<string>();
+            data.SharedWindowSeparate.Remove(id);
+
+            if (!shared) {
+                data.SharedWindowSeparate.Add(id);
+            }
+
+            // separated, it stays just where it was, taking the shared place and size as its own; put back, it shows in the
+            // shared window in place of the one showing
+            var window = windows.First(w => w.Id == id).Window;
+
+            if (!shared) {
+                // where it was drawn, which for one attached to the toolbar isn't the shared placement's place
+                var place = Placement();
+                var box = window.DrawnBox;
+                var own = window.OwnPlacement;
+                own.X = box?.Position.X ?? place.X;
+                own.Y = box?.Position.Y ?? place.Y;
+                own.Width = box?.Size.X ?? place.Width;
+                own.Height = box?.Size.Y ?? place.Height;
+                own.Locked = place.Locked;
+                window.PlaceAgain();
+            }
+            else if (window.Visible) {
+                Show(id);
+            }
+
+            settings.Changed();
+            PluginCore.LogFile($"[shared-window] {id} {(shared ? "put back in it" : "kept out of it")}");
+        }
+
+        /// <summary>
+        /// Share with the other panels, ticked while it does, in the window's own right-click menu: unticking separates it
+        /// into a window of its own, ticking puts it back.
+        /// </summary>
+        private void RenderShareItem(string id, string label) {
+            if (!settings.Data.SharedWindow) {
+                return;
+            }
+
+            var shares = Shares(id);
+
+            if (ImGui.MenuItem("Share with the other panels", null, shares)) {
+                SetShared(id, !shares);
+            }
+
+            Widgets.Tip(shares
+                ? $"Takes the {label} window out of the shared window, into a window of its own, placed and sized by itself."
+                : $"Puts the {label} window back in the shared window, which the other panels share.");
+            ImGui.Separator();
         }
 
         /// <summary>
@@ -187,9 +304,18 @@ namespace DaraletPlayer.Ui {
         /// top), or null when the toolbar can't be found. As tall as the player dragged it, or until then as the game's
         /// panels, which a new character's can be too short to use. Not the panel frame's own place: it's a floaty window
         /// the game keeps where it was last put (gmFloatyPanelUI saves its position), so it never follows the toolbar.
+        /// While the plugin's Toolbar window stands in for the game's (PluginToolbar), it's that window it sits on.
         /// </summary>
         private (Vector2 Position, Vector2 Size)? PanelBox() {
-            if (!ClientElements.TryGetFrameBox(ClientElements.Toolbar, out var barMin, out var barMax)) {
+            Vector2 barMin;
+            Vector2 barMax;
+            var plugin = PluginToolbar?.Invoke()?.DrawnBox;
+
+            if (plugin.HasValue) {
+                barMin = plugin.Value.Position;
+                barMax = plugin.Value.Position + plugin.Value.Size;
+            }
+            else if (!ClientElements.TryGetFrameBox(ClientElements.Toolbar, out barMin, out barMax)) {
                 return null;
             }
 
@@ -280,12 +406,13 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            var first = true;
+
             foreach (var (id, label, window) in sharing) {
                 var active = id == showing;
 
-                if (id != sharing[0].Id) {
-                    ImGui.SameLine(0, ImGui.GetStyle().ItemSpacing.X / 2);
-                }
+                // a row that wraps when the window's too narrow for them all, rather than running off its edge
+                Form.Flow(ref first, ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 2);
 
                 if (active) {
                     ImGui.PushStyleColor(ImGuiCol.Button, ImGui.GetColorU32(ImGuiCol.ButtonActive));
@@ -301,6 +428,17 @@ namespace DaraletPlayer.Ui {
 
                 Widgets.Tip(active ? $"The {label} window, showing now." : $"Shows the {label} window here instead.");
             }
+
+            // and at the end, taking the one showing out into a window of its own (its right-click menu puts it back)
+            var showingLabel = sharing.First(w => w.Id == showing).Label;
+            Form.Flow(ref first, ImGui.CalcTextSize("Separate").X + ImGui.GetStyle().FramePadding.X * 2);
+
+            if (ImGui.SmallButton($"Separate##shared-separate-{showing}")) {
+                SetShared(showing, false);
+            }
+
+            Widgets.Tip($"Takes the {showingLabel} window out of the shared window, into a window of its own just where "
+                + "it is, placed and sized by itself. Share with the other panels in its right-click menu puts it back.");
 
             ImGui.Separator();
         }
@@ -325,27 +463,14 @@ namespace DaraletPlayer.Ui {
             var first = true;
 
             if (Form.FlowCheck(ref first, "Shared window##shared-window", ref data.SharedWindow,
-                "The windows ticked beside it share one place on screen, as the game's panels do: opening one, from the "
-                + "toolbar or anywhere, shows it there in place of the one before. They share one position and size.")) {
+                "The Inventory, Map, Social, Quests, Character and game panel windows share one place on screen, as the "
+                + "game's panels do: opening one, from the toolbar or anywhere, shows it there in place of the one before. "
+                + "They share one position and size. To keep one out, use Separate at the end of the shared window's tabs, "
+                + "or untick Share with the other panels in its right-click menu; tick it again to put it back.")) {
                 settings.Changed();
             }
 
             ImGui.BeginDisabled(!data.SharedWindow);
-
-            foreach (var (id, label, _) in windows) {
-                var shares = data.SharedWindowMembers.Contains(id);
-
-                if (Form.FlowCheck(ref first, $"{label}##shared-member-{id}", ref shares,
-                    $"The {label} window is one of the shared window's. Unticked, it's a window of its own.")) {
-                    data.SharedWindowMembers.Remove(id);
-
-                    if (shares) {
-                        data.SharedWindowMembers.Add(id);
-                    }
-
-                    settings.Changed();
-                }
-            }
 
             if (Form.FlowCheck(ref first, "Tabs##shared-window", ref data.SharedWindowTabs,
                 "A row of tabs at the top of the shared window, one for each window in it, to switch between them.")) {
@@ -367,6 +492,13 @@ namespace DaraletPlayer.Ui {
         private void Settings_Swapped() {
             wasOn.Clear();
             current = null;
+            Upgrade();
+        }
+
+        /// <summary>The plugin's Toolbar window while the shared window sits on it (PanelBox), else null.</summary>
+        private FloatingWindow AttachedToolbar() {
+            var toolbar = PluginToolbar?.Invoke();
+            return toolbar?.DrawnBox != null ? toolbar : null;
         }
 
         public void Dispose() {
@@ -377,7 +509,10 @@ namespace DaraletPlayer.Ui {
             foreach (var (_, _, window) in windows) {
                 window.SharedLook = null;
                 window.Anchor = null;
+                window.Follows = null;
                 window.Header = null;
+                window.SharesNow = null;
+                window.PopOut = null;
             }
         }
     }

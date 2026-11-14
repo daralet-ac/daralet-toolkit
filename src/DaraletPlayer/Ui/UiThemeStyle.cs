@@ -17,7 +17,12 @@ namespace DaraletPlayer.Ui {
         /// <summary>ImGuiCol by name, for the names this ImGui has; the theme's other names are skipped.</summary>
         private static Dictionary<string, int> colorIds;
 
+        /// <summary>The game's scroll bar's width, which ImGui's is made in the themed windows (Scrollbars draws over it).</summary>
+        private const float ScrollbarWidth = 16;
+
         private static Vector4[] savedColors;
+
+        /// <summary>The roundings Apply changed, then the scroll bar's size.</summary>
         private static float[] savedRounding;
 
         public static void Apply(UiTheme theme) {
@@ -40,8 +45,11 @@ namespace DaraletPlayer.Ui {
 
             savedRounding = new[] {
                 style.WindowRounding, style.ChildRounding, style.FrameRounding, style.PopupRounding,
-                style.ScrollbarRounding, style.GrabRounding, style.TabRounding,
+                style.ScrollbarRounding, style.GrabRounding, style.TabRounding, style.ScrollbarSize,
             };
+
+            // the game's scroll bar (Scrollbars) is 16 wide
+            style.ScrollbarSize = ScrollbarWidth;
 
             foreach (var color in theme.Colors) {
                 if (ColorIds().TryGetValue(color.Key, out var id) && id < count) {
@@ -79,6 +87,7 @@ namespace DaraletPlayer.Ui {
             style.ScrollbarRounding = savedRounding[4];
             style.GrabRounding = savedRounding[5];
             style.TabRounding = savedRounding[6];
+            style.ScrollbarSize = savedRounding[7];
             savedColors = null;
             savedRounding = null;
         }

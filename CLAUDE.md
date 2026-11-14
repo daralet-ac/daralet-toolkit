@@ -106,9 +106,17 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
 - **ImGui's mouse cursors (a window edge's resize arrows, a divider's, the I-beam) flashed for a frame and were gone.**
   UtilityBelt.Service passes ImGui every window message but WM_SETCURSOR (`HudManager.WindowMessage` skips 32 and 132),
   ImGui's Windows code only sets a cursor when it changes, and the game answers WM_SETCURSOR, sent on every mouse move,
-  with its own. `CursorKeeper` answers it instead (the system cursor ImGui's code would pick, `SetCursor`, and `e.Eat`
-  on Decal's `WindowMessage`) while ImGui's cursor isn't the plain arrow, which is left to the game. It covers other
-  plugins' ImGui windows too: there's one ImGui.
+  with its own. `CursorKeeper` answers it instead (the cursor ImGui's code would pick, `SetCursor`, and `e.Eat` on
+  Decal's `WindowMessage`) while ImGui's cursor isn't the plain arrow, which is left to the game. It covers other
+  plugins' ImGui windows too: there's one ImGui. Moving and sizing use the game's own cursors (`GameCursors`, the
+  user's call, November 2026): its floaty frames' edges each carry one (the panel frame's layout, Cursor media):
+  `06006119` the four arrows (move, also for a window's top edge, `FloatingWindow.WantsMoveCursor`), `06005E66` up and
+  down, `06006126` and `06006127` the diagonals, `06006128` left and right, 32x32 with the point in the middle,
+  `cursor-*.png` made into Windows cursors (`Bitmap.GetHicon`, then `CreateIconIndirect` with the hotspot); Windows'
+  own if one can't be made. The text I-beam, the hand and the no-entry sign are still Windows'. While the left button
+  is held Windows sends no WM_SETCURSOR, and ImGui's code sets Windows' arrow as its cursor changes at the press, so
+  the move cursor was gone the moment a drag began: every FloatingWindow's draw puts it on again while the button's
+  held (`CursorKeeper.KeepWhileHeld`). Untested in the game when written.
 - **The character ran forward by itself after a click on a plugin window.** UtilityBelt.Service keeps every key message
   (WM_KEYDOWN to WM_CHAR) from the game while `io.WantCaptureKeyboard`, which ImGui sets whenever an item of any window is
   active: the mouse held on a window, a button or a hotbar slot, or a text box typed in. Let go of the forward key during
@@ -118,11 +126,31 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
   up for 150ms without the game hearing it, once ImGui no longer wants the keyboard. `[keys]` lines in log.txt.
 - **Putting ImGui's cursor back after drawing out of place asserts** ("Code uses SetCursorPos()/SetCursorScreenPos() to
   extend window/parent boundaries"), in a dialog over the game, if nothing is drawn after it. Move it to one item gap
-  above where it was and draw `ImGui.Dummy(Vector2.Zero)`, which lands it there (`CombatLogTab.DrawCopy`).
+  above where it was and draw `ImGui.Dummy(Vector2.Zero)`, which lands it there (`CombatLogTab.DrawCopy`). The same goes
+  for the end of a group or child: `GamePanelArt.Centred` put the cursor back after its text even when the text had left
+  it there already, and the Vendor window, whose picked line ends a group with two, stopped the game every time it
+  opened. It now only moves it when it isn't there. It still puts it back where the line began, so text centred beside
+  something (the Vendor window's picked line, beside the kind menu) goes in a group of its own, or what follows starts
+  mid-row. And `SameLine(x)` inside a group adds the group's offset to an x that has it already: `GamePanelArt.LeftRight`
+  placed its value so, a group's width too far, which pushed the Vendor window's Buy and Sell buttons out of the window;
+  it now goes by the distance from the label (`SameLine(0, spacing)`).
+- **Never keep Decal's `WorldObject` from one frame to the next.** Decal lets go of the COM object behind it, and the
+  kept one then throws InvalidComObjectException ("COM object that has been separated from its underlying RCW"). Thrown
+  between an ImGui Begin and its End, that also leaves the stack open, and ImGui stops the game with "BeginGroup/EndGroup
+  Mismatch" (the Vendor window's stock did this a second after it opened). Keep the id and the values you need
+  (`VendorStockItem`), and look the object up again with `WorldFilter[id]` when you need it.
 - **The clipboard goes through `SystemClipboard`**, which uses Windows directly and says if it couldn't, not ImGui's calls,
   which can't say. `[clipboard]` lines in log.txt.
 - **A button drawn only while `IsWindowHovered()` never gets clicked.** A pressed button is an active item, which that says
   blocks the window, so the button goes before its release counts. Pass `AllowWhenBlockedByActiveItem` (`CombatLogTab.DrawCopy`).
+  But never `AllowWhenDisabled` to `IsWindowHovered`: it's an item's flag only, and ImGui asserts ("Invalid flags for
+  IsWindowHovered()!", the XP bar's side grips' first build). A window's hover doesn't care whether its items are
+  disabled.
+- **ImGui.NET's `ImGuiSizeCallback` crashes the game.** The delegate type has no `UnmanagedFunctionPointer(Cdecl)`, so on
+  x86 .NET makes it stdcall, and cimgui calls it cdecl: the argument came off the stack twice, and the game died in
+  `igBegin` (an AccessViolationException, cimgui.dll in the Windows event log) the first frame a window drew with
+  `ImGui.SetNextWindowSizeConstraints(..., callback)`. Call cimgui's own function with a delegate type of your own marked
+  cdecl (`FloatingWindow.SetSizeConstraints`), and check any other ImGui.NET callback type the same way first.
 - **Every Decal event handler and render callback is wrapped in try/catch.** An exception escaping into Decal can crash the
   client.
 - **JSON:** System.Text.Json writes dictionaries as objects; `DataContractJsonSerializer` only reads them with
@@ -297,7 +325,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`NameWithMaterial`; `ItemLines.WithMaterial` adds it if missing), and its value, burden and stack go on the workmanship
   line.
   The bank asks for descriptions as the mouse passes over items (`PlayerFeed.Describe`, 20 a request; `@playerui describe`
-  covers your packs and your open bank). The server sends nothing for an item it won't
+  covers your packs, your open bank and, with the `vendordescribe` feature, the stock of the vendor you last opened,
+  found as the game's appraisal finds it, `PlayerUiCorpseData.FindVendorItem`). The server sends nothing for an item it won't
   describe, nor for a request its rate limit drops, so DescribeRequests keeps track: a request with no answer in 3
   seconds is sent again (3 tries), an item a reply left out is not yours (DescribeState.NotYours), and either is asked
   about again after 5 seconds if something still wants it; PlayerFeed.DescribeWaitText says which in place of the
@@ -482,7 +511,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   100 are kept), never the command: anyone can put that id in a tell, and a made-up link must send nothing. The first line
   linked each session is logged (`[lfg-chat]` in log.txt), with its colour and window.
 
-- **Combat tab** (`Ui/CombatTab.cs`): the Target tab it used to be (`Ui/TargetTab.cs`, still its own sub tab) and
+- **Combat tab** (`Ui/CombatTab.cs`): **Vitals**, the Target tab it used to be (`Ui/TargetTab.cs`, still a class of its
+  own), with your own Vitals window's settings above the target's (the user's call); **Combat Bars**, the Power bar's and
+  Spell bar's settings (see Game panels); and
   **Hotbars** (`Ui/Hotbars.cs`, `Ui/HotbarWindow.cs`, `Ui/HotbarItems.cs`, `Ui/Hotkeys.cs`, `Feed/Hotbar.cs`,
   `Feed/Keys.cs`). Each bar (`HotbarBar`, in `SettingsData.Hotbars`) is a `FloatingWindow` (`hotbar-<id>`, titled
   `Hotbar <id>`, since UtilityBelt knows a window by its title) of columns by rows on up to ten pages, with its layout,
@@ -588,7 +619,17 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   past them (a level since the reply) the bar shows full until the next. The bar's drawn by hand on the draw list
   (background, rested, fill, dividers, border, outlined text), not `Widgets.Bar`. **Compact** (`XpBarOptions.Compact`, the
   settings or the window's right-click menu) leaves the window the bar alone, no text on it or lines under it: its tooltip
-  has everything (`Lines`). The Character tab's bar is always whole. It asks every 5 seconds, and 1.5
+  has everything (`Lines`). The Character tab's bar is always whole. **Dragging the window's left or right side** widens
+  or narrows the bar (`XpBar.Resize.cs`, through `Ui/SideGrips.cs`, which the Vitals, Power bar and Spell bar windows
+  share; the user's call, November 2026): the window sizes itself to the bar, so ImGui's
+  edges can't, and a strip down each side sets Width as it's dragged, with the resize cursor and a line down that side;
+  the left one moves the window too (`FloatingWindow.MoveTo`), so the right side stays put. The first build's grip sat
+  at the bar's end, inside the window, where it wasn't found. On a locked window they work with Ctrl held. Ctrl
+  disables the contents and makes a press a move (`CtrlDrag`), so the strips are worked by hand
+  (`IsMouseHoveringRect`, the press and release), and say when they have the press (`FloatingWindow.CtrlHandleHeld`,
+  which `CtrlDrag` and `SnapWhileDragged` check, the contents being drawn first) or the mouse (`HandleHovered`, which
+  keeps `EdgeDrag`'s top-edge move off the top corners). Untested in the game when written. It asks every
+  5 seconds, and 1.5
   seconds after Decal's XP moves since the last reply (not every kill: in a fast fight that's a request each half
   second). The window asks from its `inUse`, which runs every frame it's on, so Only when needed (hidden at the highest
   level) still keeps it fresh. **Rested experience** is daralet-ACE's (its `docs/rested-xp.md`, `Player_RestedXp.cs`,
@@ -622,15 +663,24 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   backpack, Contracts (quill), Social (two heads) and Map (compass) buttons, and the Character Information button in the
   indicators beside it (the burden pack), drawn again over the game's own, opening the Inventory, Quests, Social, Map and
   Character windows instead of the game's panels; each on or off by itself, together in the Config tab's **Client UI
-  Override** section (`ClientUiOverride`, with Bank window, Loot window and Chat; `ToolbarButtons.RenderToggles`;
+  Override** section (`ClientUiOverride`, with Bank window, Loot window, Chat and the game panels (see Game panels);
+  `ToolbarButtons.RenderToggles`;
   `SettingsData.ToolbarInventory`, `ToolbarQuests`, `ToolbarSocial`, `ToolbarMap`, `ToolbarCharacter`, off to start),
   all seven in one row under **Enable all** and
   **Disable all**. Enable all asks first when it would turn Bank window or Loot window on (`Windows.ConfirmAllOn`), as
   their own checkboxes do, and leaves them off on a server too old for them; Disable all says what follows when either
   was on (`Windows.NoticeAllOff`). The rest is the game's.
-  **Shared window** (`Ui/SharedWindow.cs`, a row of its own in Client UI Override; `SettingsData.SharedWindow`, off to
-  start): the Inventory, Map, Social, Quests and Character windows ticked beside it (`SharedWindowMembers`, by window
-  id) share one place on screen, as the game's panels do. They stay windows of their own: the one opened last, from
+  **Shared window** (`Ui/SharedWindow.cs`, a row of its own in Client UI Override, under a line that sets it apart
+  from the panels' checkboxes; `SettingsData.SharedWindow`, on for
+  everyone, the user's call, November 2026): the Inventory, Map, Social, Quests, Character, Attributes, Spellbook,
+  Options, Buffs, Debuffs and Vitae windows share one place on screen, as the game's panels do, all but those kept
+  separate (`SharedWindowSeparate`, by window id). Each window says so for itself, not the Config tab: **Separate** at
+  the end of the shared window's tabs takes the one showing out, and **Share with the other panels**, ticked while it
+  shares, at the top of its right-click menu's window items (`FloatingWindow.SharedMenu`), takes it out or puts it back.
+  Taken out, it stays just where it was drawn (`FloatingWindow.DrawnBox`, the box snapping notes), that box made its
+  own placement (`OwnPlacement`, `PlaceAgain`); put back, it shows in the shared window. Settings from before
+  (`SharedWindowSeparate` null) are worked out once from what was ticked (`SharedWindowMembers`, read only for that)
+  and the shared window switched on (`SharedWindow.Upgrade`, at start and on a profile swap). They stay windows of their own: the one opened last, from
   anywhere, shows, and the others are closed (`FollowOpening`, by each one's Visible from frame to frame); they take one
   position, size, lock, Size and background, the window `shared` (`FloatingWindow.SharedLook`, with Visible and Only
   when needed kept their own; the size is put on every frame the mouse isn't down, so whichever shows takes it), and
@@ -707,6 +757,493 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   or reloading shows it again. Its key is read straight from Windows on Decal's RenderFrame, not through
   `Hotkeys.Pressed`, which only runs when some window draws, and with every window hidden nothing would. `/dap hideui`
   toggles it and `/dap showui` only shows. `[hide-ui]` lines in log.txt.
+- **Game panels** (`Ui/GamePanel.cs`, `Ui/GamePanels.cs`, `Ui/GameElementHider.cs`, `Feed/GamePanelOptions.cs`): plugin
+  windows that take the place of a game panel, the start of replacing nearly all of the game's UI (still to do: the
+  Options' Chat page and Config's lists).
+  Each is a `GamePanel`: a `FloatingWindow` (its key as id, hidden to start), **Replace**
+  (`GamePanelOptions.Replace`; ticking it shows the window too), which hides the game's elements while on, and a
+  **Look**, Retail (the client's art, the default, and what an unknown value reads as) or Modern (plain ImGui in the
+  plugin's theme), also in the window's right-click menu. Replace is a checkbox in Client UI Override's row, and again
+  with the look, the window's controls and the panel's own settings where the panel says (`SettingsTab`: Vitals on the
+  Combat tab's **Vitals**, the Power bar and Spell bar on its **Combat Bars**, two abreast); a panel with none (the
+  Toolbar, the Indicators) has them under Client UI
+  Override's folded **Game panels**, which isn't drawn while every panel has a tab. Choices are
+  `SettingsData.GamePanels` by key (`SettingsData.GamePanel(key)` makes one). The hiding is `GameElementHider`, Hide
+  game chat's way made general: `ClientElements.SetVisible` by element id, looked at again once a second
+  (`checkEvery`, every frame for one the game shows often), those that were showing (or that the game has shown since)
+  shown again when Replace goes off or the plugin stops (`showAgain` decides for one the game would have hidden since);
+  at logout it just forgets, as the game makes its UI again; while Hide game UI is on it does nothing, since that hides
+  and shows the whole UI itself. Hiders may share an element (the Combat floaty is both the power bar's and the spell
+  bar's): whether each was showing is kept per element for all of them (`WasShown`), and one isn't shown again while
+  another hider still wants it hidden, so a change from melee to magic hands it over without a flash. A panel can hide
+  the game's only some of the time (`hideWhen`) and say when its window has something to show (`inUse`, for Only when
+  needed). `[game-panels]` lines in log.txt. Enable all and Disable all don't touch them, as with Hide hotbar and Chat.
+  A new panel is a `GamePanel` subclass made in `GamePanels` (or added with `GamePanels.Add`, after the windows it
+  needs: the Toolbar). **Resizing sideways** (`GamePanel.WidthGrip`, the user's call, November 2026): the Power bar,
+  Spell bar and Vitals windows size themselves, so they're made wider or narrower by dragging the window's left or
+  right side (`Ui/SideGrips.cs`, shared with the XP bar), which changes what's in them (the bar's width; the vitals'
+  Bar width, a drag shared among the bars when they're side by side; spells to a row). The first builds' grip, three
+  short lines at the right of the contents, unlocked windows only, wasn't found ("I still can't resize the vitals
+  bar by dragging the edge"). Not ImGui's window edge, which a window that sizes itself hasn't: a strip down each
+  side, worked by hand, on an unlocked window or a locked one with Ctrl held, with the resize cursor and a line down
+  that side; the left one keeps the right side put (`FloatingWindow.MoveTo`, from the window's width each frame). It
+  snaps as a resized edge does (`FloatingWindow.SnapSideEdge`), and returns how far the contents are to grow each
+  frame. A window with them (`FloatingWindow.ContentGrips`) isn't scaled by its edges (EdgeScale).
+  **Vitals** (`Ui/VitalsPanel.cs`, `Feed/VitalsOptions.cs`, `SettingsData.Vitals`): replaces the game's vitals panel,
+  element `0x100005FA` (Decal's `UIElementType` Vitals, one of Hide game UI's pieces; its layout `0x2100006C`, meters as
+  under Retail bars), and the game's other one, `0x100006D5` (layout `0x21000075`, 460x26, the three bars in a row, also
+  in the main UI's layout `0x21000005`), which the first build left showing ("0x100005FA wasn't shown" in log.txt while
+  the game's vitals were on screen); both are hidden, and Hide game UI hides it too. The numbers are Decal's `Actions.Vital` (`VitalType.CurrentHealth`, `MaximumHealth`...), read from
+  the client's memory as its own panel shows them, buffs included, so only once logged in (`CharacterFilter.Health` and
+  `EffectiveVital` are Decal's other copy, from the network). Retail draws the meters' art at 16 pixels
+  (`Widgets.Bar(..., retail: true)`, which takes the look from the caller instead of Retail bars), Modern ImGui's bar.
+  Health, Stamina, Mana, Side by side, Bar width (150 to start, the game's) and Text (numbers, percent rounded down, both
+  or none, `VitalsOptions.Format`); Bold numbers is the shared `BoldVitalText`. The window doesn't start where the game's
+  panel was: put it there by hand. Untested in the game when written.
+  **Power bar** (`Ui/PowerBarPanel.cs`, `Ui/ClientCombat.cs`, `Feed/PowerBarOptions.cs`, `Feed/CombatSnapshot.cs`,
+  `SettingsData.PowerBar`): the power bar (melee) or accuracy bar (missile), the desired power, and High, Medium and Low.
+  The game's is the Combat floaty, element `0x100006B5` (Decal's `UIElementType` Combat), layout `0x21000073`: a 610x90
+  frame holding gmCombatUI (`0x1000005C`, from layout `0x21000007`) for melee and missile and the spell bar
+  (`0x10000061`, from `0x1000009F`/`0x21000010`) for magic. So it's hidden only in melee and missile, looked at every
+  frame (gmCombatUI::RecvNotice_SetCombatMode, `0x4CD210`, shows itself again at each change to melee or missile, in
+  states `0x10000003` and `0x10000004`), and shown again only in a combat mode, since the game hides it in peace. In
+  `0x21000007`: the background `0x1000004C`-`4E` (`06004CC2`), the slider `0x1000004F` (type 0xB, 707x14, track
+  `060074CA`, its thumb `06001923`) with the meter `0x10000050` (type 7, fill `06001200`) in it, text `0x10000051`-`55`,
+  and the height buttons `0x10000057`-`59` (High, Medium, Low; the window stacks them High on top as the game does, or
+  in a row Low, Medium, High from the left, the user's call, `PowerBarOptions.HeightsInOrder`; in `0x10000056`, from
+  template `0x1000005A`: states 1
+  normal `06004D1C`, 3 pressed `06004D1D`, 6 chosen `06004D1E`, 8 chosen and pressed `06004D1F`). The bar's art is 60x13
+  tiles the game repeats along it (`ItemIcons.DrawArtTiled`). `0x10000613` (ProgressBar, layout `0x21000072`, the yellow
+  `06001354` and cyan `0600195B` fills) is a different bar, likely the jump bar, left alone. Everything shown is the
+  client's `ClientCombatSystem` (`s_pCombatSystem` at `0x87166C`, which `GetCombatSystem`, `0x56B210`, returns; fields at
+  AcClient's offsets: `combatMode` `+0x1C` (COMBAT_MODE 1 peace, 2 melee, 4 missile, 8 magic), `requestedAttackHeight`
+  `+0x24` (1 high, 2 medium, 3 low), `buildInProgress` `+0x30`, `latestPowerBarLevel` `+0x38`, `m_rUIRequestedPower`
+  `+0x4C` (the slider's desired power), `m_bAdvancedCombatMode` `+0x50`), read every frame; while it builds the level is
+  `GetPowerBarLevel` (`0x56BB20`). What the window does is what gmCombatUI::ListenToElementMessage (`0x4CD020`) does for
+  its own: a height pressed (message 0x1C) is `SetRequestedAttackHeight` (`0x56D640`), which starts building; let go
+  (message 1) `EndAttackRequest(height, *(float*)0x7B9420)` (`0x56CE30`; that global is -1, the bar's own level, and no
+  attack goes past the desired power, advanced combat or not); the slider (message 0xA) stores the desired power at
+  `+0x4C`, which the window does too, then calls `CM_Combat::SendNotice_DesiredAttackPowerChanged` (`0x6AAE60`, static
+  cdecl) so the game's slider follows. A held button is let go of when the mouse is, read from Windows, in case the
+  window went first. Only when needed is ticked the first time it's made (`PowerBarOptions.WindowSetUp`). Its grip
+  sets Bar width. Found with
+  throwaway tools: Iced over `acclient.exe`, and daralet-ACE's dat-loader dumping LayoutDescs and exporting textures.
+  Untested in the game when written.
+  **Spell bar** (`Ui/SpellBarPanel.cs`, `Ui/ClientSpellBar.cs`, `Feed/SpellBarOptions.cs`, `SettingsData.SpellBar`): the
+  game's eight tabs of favourite spells in magic combat. The game's is gmSpellcastingUI (element type `0x10000015`), the
+  Combat floaty's `0x10000061`, layout `0x21000010`: the tab panel `0x100000A2` (a `UIElement_Panel`) with tab buttons
+  `0x100000A3`-`A9` and `0x100005C2` (47x20, from template `0x1000048F`: state B `06005EB9` closed, C `06005EB8` open)
+  and their pages `0x100000AA`-`B0` and `0x100005C3` (each from `0x100000B4`: an item list `0x100000B6` between scroll
+  arrows, `0x10000070` in layout `0x21000008`, `06004CDC`-`DF`), the endowment icon `0x100000B1` (the wielded caster's
+  own spell; not shown by the plugin yet), the Cast button `0x100000B2` (79x32, template `0x100002CD` in `0x21000040`:
+  ends 32 wide and a 15-pixel middle, state 1 `06004C96`/`99`/`9C`, 3 pressed `95`/`98`/`9B`, D disabled `94`/`97`/`9A`)
+  and the spell's name `0x1000048B`. The floaty is hidden only in magic, the power bar's the rest of the time (see the
+  hider above). Everything goes through the game's bar (`ClientSpellBar`), so the game's keys (cast, next and previous
+  spell and tab) work on what the window shows: gmSpellcastingUI's tab panel is at `+0x5FC`, its open page at the
+  panel's `+0x6D8` (as `GetOpenSubMenuIndex`, `0x4C6500`, reads it), and its eight SpellCastSubMenus are `0x1C` bytes
+  each from `+0x628` (item list `+0x4`, selected spell `+0xC`, count `+0x10`), each slot a `UIElement_UIItem` with its
+  `spellID` at `+0x600`; found with `UIElement::DynamicCast` (vtable `+0x94`) from the element. A tab opens with
+  `UIElement_Panel::OpenTab(panel, tab button)` (`0x46C110`); a spell is picked with `SpellCastSubMenu::SetSelected`
+  (`0x4C66F0`); Cast is `gmSpellcastingUI::Cast` (`0x4C6C40`, the game's cast key's own, which casts the open tab's
+  picked spell with the game's targeting and messages); adding is `SpellCastSubMenu::AddFavorite(spell, place, 1)`
+  (`0x4C7C50`, which updates the client's favourites and sends `CM_Character::Event_AddSpellFavorite`), then
+  `UpdateEndowmentIcon` and `UpdateCastButtonTooltip` as `AddSpellShortcut` does; removing is `RemoveSpellFromMenu`
+  (`0x4C74E0`, which sends `Event_RemoveSpellFavorite`); moving is the two. Decal's `CharacterFilter.SpellBar(n)` and
+  `Actions.SpellTabAdd` were passed over: Decal's are its own copy, from the network, and only tell the server. A click
+  picks a spell (Click casts: casts it), a double-click and Cast cast; spells dragged from the game's spellbook
+  (`SpellDrag`) go in where they're let go, slots drag to another place or another tab, and right-click has Cast, Move
+  left, Move right, Copy to tab and Remove. Tabs are I to VIII; Per row, Icon size, Spell name and Cast button are its
+  settings; its grip sets Per row, a slot at a time, and a row keeps its whole width with fewer spells in it.
+  `[spell-bar]` lines in log.txt. Untested in the game when written.
+  **Toolbar** (`Ui/ToolbarPanel.cs`, `Ui/ClientToolbar.cs`, `Feed/ToolbarOptions.cs`, `Feed/ToolbarButtonInfo.cs`,
+  `SettingsData.Toolbar`; its settings under Client UI Override's Game panels): replaces the game's toolbar, TBAR
+  `0x10000603` (its frame from layout `0x21000070`), shortcut bar and all. Layout `0x21000016` (300x122): the combat
+  button, four elements on one spot that the game shows one of, `0x10000192` peace (`06004CEC`, pressed `CED`),
+  `0x10000193` melee (`CEE`/`CEF`), `0x10000194` missile (`CF0`/`CF1`), `0x10000195` magic (`CF2`/`CF3`), 55x58 at 0,0;
+  the panel buttons along the top, 34x27 (state 1 normal, 6 open), each with its panel's id in property `0x10000029`:
+  Social `0x10000197` (0xC) at 55, Spellbook `0x10000198` (0xD, the star, `06001119`/`111B`) at 85, Character
+  (attributes and skills) `0x10000199` (0xB, the arm, `06001122`/`1124`) at 115, Contracts `0x1000055A` (0x19) at 145,
+  Map `0x1000019A` (0x10) at 175, Options `0x1000019B` (0xA, the checklist, `0600111C`/`111E`) at 204, the backpack
+  `0x100001B1` (7) 63x58 at 238; between them on the middle row the selection strip: Use `0x1000019D` (the hand, 23x31
+  at 55,27: `06001129`, pressed `112A`, disabled `120E`), the strip `0x1000019E` (140x31 at 78,27, `06001126`) with the
+  name `0x1000019F`, the selection's health meter `0x100001A1` (`0600193E` empty, `193F` full) and mana meter
+  `0x100001A2` (`060022D5`/`22D6`), the stack box `0x100001A3` and slider `0x100001A4`, and Appraise `0x100001A5` (the
+  magnifier, 22x31 at 218,27: `06001127`/`1128`); then the 18 shortcut slots. What the buttons do is
+  gmToolbarUI::ListenToElementMessage's (`0x4BFB20`): the combat button `ClientCombatSystem::ToggleCombatMode`
+  (`0x56D610`); Appraise `ClientUISystem::ExamineObject` with the selection (`[0x871E54]`), which is
+  `CM_Examine::SendNotice_ExamineObject` (`0x6B0510`, static cdecl): an appraisal the game starts itself, so its panel
+  opens (the plugin's Appraisal window takes items while Plugin appraisal is on, and Creature Appraisal creatures,
+  NPCs and players while it Replaces the game's: `ClientExamine.TryTakeOver` is asked first, since this call skips the
+  hook the game's own appraisals pass, and the first build opened the game's panel for them); Use `ClientUISystem::UseObject`, which
+  is `ItemHolder::UseObject(id, 0, 0)` (`0x5898B0`, static cdecl); the stack slider `CM_UI::SendNotice_StackSliderChanged`
+  (`0x47A550`, the split size at `0x81D7EC` and the stack at `0x81D7F0`), which the window sets through
+  `StackSplit.SetAmount`. A panel button is `CM_UI::SendNotice_SetPanelVisibility(id, open)` (`ClientElements.
+  SetGamePanel`), lit while `ClientElements.OpenGamePanel` says it's the one open, or opens the plugin's window instead
+  where Client UI Override's Inventory, Quests, Social or Map is ticked. Items let go over the backpack (from the
+  plugin's lists or the game's pack) go in the main pack (`ToolbarButtons.PutInMainPack`). The strip's health is
+  `PlayerFeed.ClientHealth`; the mana meter isn't drawn (Decal doesn't say an item's mana before an appraisal). Retail
+  places everything as the game does, scaled with the text; Modern is a row of lit buttons and the strip under it.
+  With the toolbar hidden, Toolbar buttons have nothing to sit on and don't show, and Shared window's Attach to toolbar
+  sits on this window instead (`SharedWindow.PluginToolbar`, set by `PlayerHud`: its `FloatingWindow.DrawnBox` while
+  Replace is on and it's been drawn this frame or the last, else the game's hidden toolbar as before; the first build
+  went by the hidden one only). Sitting on it, the shared window's windows `Follows` it: a Ctrl drag of one moves the
+  Toolbar window (`FloatingWindow.MoveTo`, which also keeps the Toolbar window from placing itself by the held button,
+  `Led`), and the shared window follows, as when the Toolbar window itself is dragged. Untested in the game when written.
+  **Indicators** (`Ui/IndicatorsPanel.cs`, `Feed/IndicatorOptions.cs`, `Feed/IndicatorInfo.cs`,
+  `SettingsData.Indicators`; its settings under Client UI Override's Game panels): replaces INDI `0x10000611`
+  (gmIndicatorsUI, layout `0x21000071`, 150x30 in a 5-pixel frame). Its 20x20 indicators, each a class of the client's
+  and each drawn in a state of its own (`UIElement.m_state`, `+0x400`, which `UIElement::SetState`, `0x464FA0`, sets;
+  read with `ClientElements.GetState`, so the window shows just what the game's would): link status `0x100000F8` at 5
+  (gmUIElement_LinkStatusIndicator: states 0x11 good `06007498`, 0x12 fair `7499`, 0x13 poor and 0x14 lost `749A`, as
+  `SetLinkState`, `0x4E7270`, sets them from 1 to 4); beneficial spells `0x100000F5` at 25 and harmful `0x100000F6` at
+  45 (gmUIElement_EffectsIndicator, property `0x1000000C` 1 and 2: `0600749C`/`749E` lit, `749D`/`749F` in the dim
+  state 0xD when there are none); vitae `0x100000F4` at 65 (`060074A0`, dim `74A1`); the burden pack `0x100000F7` at 85
+  (states 0xE, 0xF, 0x10, as under Toolbar buttons); a game of chess `0x100000F3` at 105 (gmUIElement_MiniGameIndicator,
+  the knight, `060074A5`, dim `74A6`); and the X `0x100000FA` at 125 (`060074B1`, pressed `74B2`), which logs out:
+  gmIndicatorsUI::ListenToElementMessage (`0x4C0710`) calls `CM_UI::SendNotice_EndCharacterSession(1)` (`0x479F40`,
+  static cdecl) for it, which the window does too, after asking. Each child `0x100000F2` is the frame drawn while its
+  panel's open (`0600749B`). The panels' ids come from the panel frame's layout `0x2100006E`, whose pages each carry one
+  in property `0x10000029`, matched to their classes by their root elements' types (each class's
+  `GetUIElementType`): 1 gmAbuseUI, 2 gmBookUI, 3 gmCharacterInfoUI (the burden pack's), 4 and 5 gmEffectsUI (both
+  layout `0x2100001B`, from `0x1000011F` and `0x10000121`: taken to be beneficial then harmful, by the indicators'
+  order), 7 inventory, 8 gmLinkStatusUI, 9 gmMiniGameUI, 0xA options, 0xB character detail, 0xC social, 0xD spells,
+  0xE gmUrgentAssistanceUI, 0xF gmVitaeUI, 0x10 map, 0x19 contracts; the tooltips are in `client_local_English.dat`'s
+  string table `0x23000005` ("Show/Hide Positive Magic Panel"...). A click opens or closes the panel
+  (`ClientElements.SetGamePanel`), the burden pack the plugin's Character window where Client UI Override's Character
+  is ticked, and buffs, debuffs and vitae the plugin's windows where those Replace the game's (`WindowFor`). Modern says the same in words: "Link: good", "Buffs 12" (CharacterFilter's enchantments counted by the
+  portal dat's Beneficial flag, cooldowns left out), "Burden 45%", dimmed where the game dims. Log out button and One
+  under another are its settings. `[indicators]` lines in log.txt. Untested in the game when written.
+  **Attributes** (`Ui/AttributesPanel*.cs`, `Ui/StatRow.cs`, `Ui/GamePanelInterceptor.cs`, `Ui/ClientTraining.cs`,
+  `Feed/XpTable.cs`, `Feed/AttributesOptions.cs`, `SettingsData.Attributes`; its settings under Client UI Override's
+  Game panels): your attributes, vitals and skills, raised with unassigned XP and trained with skill credits, in place
+  of the game's Character Detail panel (panel 0xB, layout `0x2100002E`: tabs `0x10000228`, `0x10000229` and
+  `0x10000538`, 92x25 from template `0x1000043A`, its ends 17x25 and middle 66x25, closed state B `06005D93`/`95`/`97`,
+  open state C `06005D92`/`94`/`96`; its pages attributes `0x1000022B` (`0x2100002C`), skills `0x1000022C`
+  (`0x2100002D`) and titles `0x10000539` (`0x2100005E`)). That panel lives in the panel frame with every other, so
+  there's nothing of its own to hide: `GamePanelInterceptor` (shared with the Spellbook) closes panel 0xB the moment
+  `ClientElements.OpenGamePanel` says it's open, from the toolbar, the game's key or anywhere, and shows the window
+  instead; the Toolbar window's Character button opens it too (`GamePanels.Get`). **Titles** is the plugin's own
+  (`AttributesPanel.Titles.cs`, `Ui/ClientTitles.cs`, `Feed/TitleMessages.cs`, `CharacterTitles.cs`, `TitleNames.cs`),
+  laid out as the game's Titles page, layout `0x2100005E` (a page of its own, no character at the top): "Current
+  Display Title:" (`0x1000052E`) and the title (`0x1000052F`), the gold bar `06001420` (`title-separator`), "All
+  Available Titles:" and the list (`0x10000532`, 270x455 on the stone with the usual scroll bar; rows from
+  `0x10000536`, 270x24, the picked one under `06001AAF`, `title-row-selected`), a search box of the plugin's, the bar
+  again and **Set as Display Title** (`0x10000535`, 200x32, the Cast button's art), the words from string table
+  `0x23000001`. Which titles you have isn't Decal's: the server's game events are read (`TitleMessages`): at login
+  CharacterTitle (`0x0029`: version 1, the display title, the count and each id, daralet-ACE's
+  `GameEventCharacterTitle`), then UpdateTitle (`0x002B`: a title, and 1 when it's now the display title) for each one
+  granted or picked; so after a hot reload there are none until the next login, which the tab says. Names are the
+  game's: the portal dat's EnumMapper `0x22000041` gives a title its string id (`ID_CharacterTitle_Life_Mage`), and
+  client_local_English.dat's string table `0x2300000E` the name under that string's hash (`TitleNames.Hash`,
+  daralet-ACE's `SpellTable.ComputeHash`), the language dat opened from the game's folder once, the first time a name
+  is wanted (UtilityBelt.Common's `LanguageDatDatabase`), as `Player.GetTitle` does. Picking one (the button, or a
+  double-click) is the client's own `CM_Social.Event_SetDisplayCharacterTitle(id)` (`0x6A6680`, message 0x002C), and
+  the server's UpdateTitle answer moves the display title. `[titles]` lines in log.txt. Untested in the game when
+  written. It sizes by
+  the player and is one of the **shared window**'s unless kept separate (`attributes`; `SharedWindow` takes more
+  windows after its five). **Laid out as the game's pages** (layout `0x21000045`, the user's
+  call): the character at the top of both tabs (`AttributesPanel.Header.cs`, the game's `0x10000230`: name, gender
+  race and template, player killer status from PropertyInt 134, Total Experience, the XP bar `0x10000236` to the next
+  level, its track `060011A6` and red fill `060011A5`, from the server's level bounds as the XP bar has them, Infinity!
+  at the top level; then past the gold divider `06004CB8`, "Character Level" and the level, big, drawn by
+  `ItemIcons.DrawLabel`), the separator `06004CC7`, the list (`AttributesPanel.Rows.cs`, rows from template
+  `0x10000248`, 282x20: a 20x20 icon, the name, the value at the right; picked, the gold-framed bar `06000F93`; values
+  above their base green and below it red, the user's call; vitals as current/max), and the picked row's raise
+  (`AttributesPanel.Footer.cs`, the game's `0x1000024D`: "Strength: 10039 (+40)", "Experience To Raise:" and
+  "Unassigned Experience:", and the +10 arrow `0x100005EB` over the +1 `0x10000246`; an untrained skill's skill credits
+  and Train, in Retail the game's own button for it, the +1's green arrow (`06004CB6`), bright with credits enough and
+  dulled (`06004CB7`) without, beside the two lines of credits, as the game's; the user's call). Icons are the portal
+  dat's: attributes by DID mapper `0x25000006` (Strength `060002C8`, Endurance `2C4`,
+  Quickness `2C6`, Coordination `2C9`, Focus `2C5`, Self `2C7`), vitals by `0x25000007` (`06004C3B`/`3C`/`3D`), skills
+  their skill table entry's `IconId` (the client's `InfoRegion::SetID`, `0x4F1CF0`, looks them up so). Skills sit
+  under the game's group bars (`0x10000249`-`4C`: `06000F90` specialized, `06000F86` trained, `06000F98` untrained,
+  `06000F89` unusable). **Skills are Daralet's** (the user's call): the list and the names are the client's portal dat
+  skill table's (`UBService.PortalDat.SkillTable`, 31 skills: Physical Defense, Martial Weapons, Bows, Thievery,
+  Perception, Portal Magic, Two-Handed Combat, the crafts...), which is what the game's panel shows and matches
+  daralet-ACE's `NewSkillNames`; Decal's `SkillInfoWrapper.Name` and its skill list are retail's (Melee Defense, Heavy
+  Weapons, Lockpick, and the retired Axe, Sword, Mace...). The numbers are Decal's `CharacterFilter` (`Attributes[...]`,
+  its `Exp`, `Base` and `Creation`; `Vitals[...]`, a `SkillInfoWrapper` with `XP` and `Base`; `Skills[...]`, with
+  `Training`; `EffectiveAttribute` and `EffectiveSkill` for the values shown; a vital's current and maximum are
+  `Actions.Vital`'s, since `CharacterFilter.EffectiveVital` gave the unbuffed base (5246 where the game showed
+  100051, tried in the game); `UnassignedXP`, `SkillPoints`), XP spent read as unsigned (Decal's are Int32; the top costs pass
+  two billion). Costs are the client's own experience tables, each read once through ExperienceSystem's statics
+  (cdecl): `ExperienceToAttributeLevel(rank)` `0x5C9330`, `ExperienceToAttribute2ndLevel(rank)` `0x5C9370`,
+  `ExperienceToSkillLevel(advancement class, rank)` `0x5C93B0` (2 trained, 3 specialized), each the total XP for that
+  many raises (-1 past the end), up to `GetMaxAttributeLevel` `0x5C95B0`, `GetMaxAttribute2ndLevel` `0x5C95E0`,
+  `GetMaxTrainedSkillLevel` `0x5C9580` and `GetMaxSpecializedSkillLevel` `0x5C9550`; a raise costs the next step's total
+  less what's spent (`XpTable`). (UtilityBelt.Common's portal dat has the same table as `XpTable`.) The raise is the
+  client's own `CM_Train` message, static cdecl: `Event_TrainAttribute(STypeAttribute 1-6, xp)` `0x6A8E90`,
+  `Event_TrainAttribute2nd(1 max health, 3 max stamina, 5 max mana; Decal's vitals are 2, 4, 6, xp)` `0x6A8FA0`,
+  `Event_TrainSkill(STypeSkill, Decal's numbers too, xp)` `0x6A90B0`, and training an untrained skill
+  `Event_TrainSkillAdvancementClass(skill, credits)` `0x6A91C0` with the skill table's `TrainedCost` (Daralet's crafts
+  cost 1000, so can't be trained that way); specializing is left to the game. A row's buttons wait for the server
+  (what's spent to change, or two seconds) so a second click can't spend the same XP twice. Decal's own
+  `Actions.AddAttributeExperience` and the like were passed over: Decal's actions have crashed the client before.
+  `[game-panels]` and `[training]` lines in log.txt. The first build was tried in the game (an admin at the top level:
+  every raise "As high as it goes", as it should); this layout is untested in the game.
+  **Spellbook** (`Ui/SpellbookPanel*.cs`, `Ui/SpellPayload.cs`, `Ui/GamePanelArt.cs`, `Feed/SpellbookOptions.cs`,
+  `Feed/SpellLevels.cs`, `SettingsData.Spellbook`): in place of the game's Spell Management panel (panel 0xD, layout
+  `0x21000034`: spellbook page `0x100002AC`, layout `0x21000032`, a list over a filter box `06002722` of school and level
+  checkboxes; components page `0x100002AD`, `0x21000033`), by `GamePanelInterceptor` as Attributes; sizes by the player
+  and can share the shared window (`spellbook`). Spells are `CharacterFilter.SpellBook`, each the portal dat's spell
+  table (`Spells.Info`, now with `Power`, `Duration` and `Components`, the formula's component ids); a spell's level is
+  the client's rule (`SpellLevels`, daralet-ACE's `SpellFormula.Level`): the formula's first component, a scarab (Lead I
+  to Platinum and Dark VII; Mana VIII held to 7), else retail's power steps (1, 50... 300), which the client's table
+  keeps; the server's own power rule (10, 150... 400) left Acid Bane I with none and called IV a II. The list leaves
+  room for what was under it last frame (`bottomHeight`), so Cast never needs scrolling to; school names are Daralet's skill names (Item Enchantment is Portal Magic). Search, school
+  and level filters, the list by name as the game's, or by level then name with By level (`SpellbookOptions.ByLevel`,
+  `Order`); a double-click or Cast casts (`Spells.Cast`); right-click or Add to spell bar puts it on a spell bar
+  tab (`ClientSpellBar.Add`); a spell drags (`SpellPayload`, an ImGui payload) onto the Spell bar window or a hotbar slot.
+  **Appraise** in the right-click menu opens the **Spell Appraisal** window (`Ui/SpellAppraisal.cs`, `spell-appraisal`,
+  hidden to start; the user's call): icon, name, school and level, the description, then the game's own spell lines in
+  its words and order, read from acclient's spell text (`0x4B6A60` on): "School: ", "Mana: %d" with " + %d per target"
+  (the table's `ManaMod`), "Duration: %u sec." under a minute and "%u min." from one (none for -1 or 0), and "Range: %.1f
+  yds.", the client's sum (`0x4AD7D0`): `BaseRangeMod` times your skill in the spell's school (the school-to-skill table
+  at `0x597984`: War 34, Life 33, Item 32, Creature 31, Void 43; your best of them for a spell with none) plus
+  `BaseRangeConstant`, held to 75 meters (`0x7AFF58`), over 0.9144 (`0x7AFE88`), and left out when 0; then the
+  components with their icons, and Cast. All from the portal dat's spell table: the game asks the server nothing for
+  this either. Untested in the game when written.
+  Components lists what you carry (ObjectClass SpellComponent, stacks added up) and what the picked spell takes, named by
+  `UBService.PortalDat.SpellComponentsTable`. **Buy to** (the user's call): a box beside each held count sets how many
+  the game's own /fillcomps (`ClientCommunicationSystem::DoFillComponents`, `0x570B20`, a client command, not the
+  server's) buys up to at a vendor, as the game's components page does (its handler near `0x48A7C3`):
+  `CM_Character::Event_SetDesiredComponentLevel(wcid, amount)` (`0x6A3170`, static cdecl; the server's
+  `HandleSetDesiredComponentLevel`, saved as the character's fill components and sent back at login), then
+  `PlayerModule::SetDesiredCompLevel(wcid, amount)` (`0x5D5A90`) on the client's copy, read with `GetDesiredCompLevel`
+  (`0x5D5850`); the PlayerModule is `CPlayerSystem::GetPlayerSystem()` (`0x55E1D0`) `+0x34` (its `playerModule` at
+  `+0x30`). Levels go by weenie class id: the portal dat's dual DID mapper `0x27000002` turns a component table id
+  into one (daralet-ACE's `Spell.GetComponentWCID`), and you carry what Decal has of that `Type`. A box sends once it's
+  let go of (`ClientComponents`, `ComponentRow.Build`; All components lists every one, else those carried, set or
+  needed). `[components]` lines in log.txt. `GamePanelArt` holds the frame's tabs,
+  separator and line helpers both windows share. Its tabs are each as wide as their label; when the row is wider than
+  the window, the room past each label goes first, the tabs with most to spare first, then all narrow alike, a label
+  drawn smaller (to 70%) then clipped (`TabWidths`: first builds ran Config and Titles off the edge, then squeezed
+  Gameplay Options while short tabs kept room); the shared window's own tab buttons wrap to another row instead
+  (`Form.Flow`). Untested in the game when written.
+  **Options** (`Ui/OptionsPanel*.cs`, `Ui/ClientOptions.cs`, `Ui/ClientMenu.cs`, `Feed/GameOptions.cs`,
+  `Feed/GameOption.cs`): the game's Options panel (panel 0xA, layout `0x2100002B`) in a window of its own, by
+  `GamePanelInterceptor`; can share the shared window (`options`). Its tabs are the game's (tab panel `0x10000208`):
+  **Gameplay Options** (`0x1000020D`, page `0x10000212`, gmGameplayOptionsUI, layout `0x2100002A`), the "main menu" (the
+  user's words): seven 240x32 blue buttons (template `0x10000618`, ends 32 wide: `060074A9`/`AC`/`AF`, pressed
+  `A8`/`AB`/`AE`, disabled `A7`/`AA`/`AD`), whose actions are gmGameplayOptionsUI::ListenToElementMessage's (`0x49E390`):
+  Exit to Character Selection (`0x10000203`) `CM_UI::SendNotice_EndCharacterSession(1)`; Exit Game (`0x10000617`) and
+  Use Mouse Turning Settings (`0x100005CC`) `UIElementManager::BroadcastGlobalMessage` (`0x45B4C0`) with (1,
+  `0x10000027`) and (0xC, 0); Urgent Assistance (`0x10000206`) and Report Abuse (`0x10000207`) ShellExecute
+  `support.turbine.com`, gone, so the plugin opens the game's own panels 0xE and 1 instead; Configure Keyboard
+  (`0x10000204`) and In-Game Help Files (`0x10000205`) aren't handled there: a button's property 0x12 is an input
+  action it fires as a key would (`0x472210`: if the object at `0x837FF4` says yes, its vtable `+0x44`, an input event
+  made by `0x430EE0`, the action at `+0`, 3 at `+0x1C`, 1 at `+0x20`, handed to the UIElementManager's first virtual
+  function), theirs `0x1000001F`, which opens and closes the keyboard window (layout `0x21000009`, root element
+  `0x1000001F`, gmKeyboardUI `0x10000020`, element type `0x1000000E`), and `0x7B`, the help. `ClientMenu.InputAction`
+  does the same; if it can't, they open the game's panel at this tab. `[options]` lines in log.txt. The exits ask
+  first.
+  **Character** (`0x1000020E`, page `0x10000211`, gmCharacterSettingsUI, element type `0x10000027`, layout
+  `0x21000028`): the game's six groups in its order (gmCharacterSettingsUI::InitOptions, `0x4A05B0`:
+  PlayerOptionPage::AddHeader `0x4F3510`, AddToggleOption `0x4F3660` with each PlayerOption, AddSeperator), headed in
+  yellow as the game shows them (User Interface Behavior, User Interface Display, Grouping, Other Players, Character
+  Behavior, Chat), with the gold bar `060012C5` between groups; labels and tooltips from client_local_English.dat's
+  string table `0x23000003` (`GameOptions`); option 52, past retail's enum, is Daralet's PK death messages. Each option
+  is a light (template `0x1000032B`: 13x13, `06004D15` off, `16` off pressed, `17` on, `18` on pressed, `19` disabled;
+  `GamePanelArt.Light`). As in the game a change waits for **Apply** (Apply, Reset, Defaults: 80x32 from template
+  `0x100002CD`, the Cast button's art); Reset drops the waiting changes, Defaults sets each to
+  `PlayerModule::GetDefaultOptionValue(option)` (`0x5D3A30`). Read with `PlayerModule::GetOption(option)` (`0x5D4AF0`),
+  set with `PlayerModule::SetOption(option, on)` (`0x5D4F20`) on the client's PlayerModule
+  (`ClientComponents.PlayerModule`), whose change raises `CPlayerModule::OnChanged` (`0x59B8F0`): the game's UI hears
+  `CM_UI::SendNotice_PlayerOptionChanged` and the server gets `CM_Character::Event_PlayerOptionChangedEvent` (auto-saved
+  options at once, the rest with the character's options), so the game's own panel agrees, unlike the Social tab's
+  options, which send the event alone. **Config** (`0x1000020F`, page `0x10000213`, gmConfigUI `0x10000028`;
+  `OptionsPanel.Config.cs`, `ClientPreferences`, `Feed/ConfigOptions.cs`): the game's six groups (Sound, Camera,
+  Graphics, Rendering Quality, Input, UI) as its screenshots show them, each row a light, a slider (track `06001285`
+  stretched, thumb `06001286`, template `0x1000036E`, the words for its ends under it), both, or a list. These are the
+  client's own preferences (UIPreferences, items keyed by name in the table at `0x82514C`), registered at start by
+  gmClient::InitUIPreferences (`0x4037B0`) with `UIPreferences::AttachPreference(&name, type, 0x10000003, label hash,
+  help hash)` (`0x5DEE50`), the names held in globals `0x837564`-`0x837694` (the label's `ID_Sound_EffectVolume`... string
+  ids beside each), type 4 bool, 3 float, 2 list. The plugin passes the global's address as the name (statics, cdecl):
+  bool `InqPreferenceValue` `0x5DEC90` / `ModifyPreference` `0x5DEB90` (the item's vtable `+4`/`+8`), float `0x5DED50` /
+  `0x5DEC50` (`+0x30`/`+0x34`), a float's range `InqPreferenceRange(name, &min, &max)` `0x5DE9E0` (`+0x38`); lists'
+  `+0x1C`/`+0x20`, their choices `+0x24` (`InqEnumChoices` `0x5DEAC0`) aren't decoded yet, so each list row and Defaults
+  open the game's own Config page. The sound lights are the client's Disable... preferences, so they're lit while off
+  (`ConfigOption.Inverted`). Changes wait for Apply, as the game's do, but a slider changes its preference as it's
+  dragged, as the game's Field of View does (`sliderOriginals`), and goes back on Reset, once the page isn't drawn
+  (another tab, the window closed) or at shutdown, unless applied. Every change that took is followed by
+  `CM_UI::SendNotice_PreferenceChanged(name)` (`0x47A740`, cdecl), as the game's preference controls do (`0x485795`,
+  `0x4871F7`, `0x48457E`): it's what has the camera, sound and the rest pick it up. **Chat** (`0x1000050B`, page `0x1000050C`,
+  gmChatOptionsUI, element type `0x10000042`, layout `0x2100005C`: one checkbox set per chat window,
+  `AddCheckboxBitfield64Option` `0x49F020`) keeps its settings in the PlayerModule's gameplay option collection
+  (`m_colGameplayOptions`, `+0x9C`), changed with `PlayerModule::SetChatWindowOption(window, BaseProperty*)` (`0x5D66C0`),
+  which takes the client's property objects, not yet built from the plugin: it opens the game's panel at that tab
+  (`LetOpen`, then `ClientElements.OpenTab` once it's showing). Untested in the game when written.
+  **Buffs and Debuffs** (`Ui/EffectsPanel.cs`, one class made twice, keys `buffs` and `debuffs`): the game's Positive and
+  Negative Magic panels (panels 4 and 5, gmEffectsUI, layout `0x2100001B`, 300x362, property `0x1000000C` 1 or 2), by
+  `GamePanelInterceptor`. The spells on you from Decal's `CharacterFilter.Enchantments`, beneficial or harmful by the
+  portal dat's flag as the indicators count them (cooldowns aren't in the spell table; the vitae, spell 666, has its own
+  window), by name then time left (`TimeRemaining`; no time for a `Duration` of 0 or less). As the game's: the list
+  `0x10000123` of 300x32 rows (template `0x10000128`: `effect-row` `06001396`, picked `effect-row-selected` `06001397`, a
+  32x32 icon, the name at 37, the time at 225), and the picked spell's name and description in the box under it
+  (`0x10000125`, `effect-description` `06001395`, 300x88). **Vitae** (`Ui/VitaePanel.cs`, `Feed/VitaeInfo.cs`): panel 0xF,
+  gmVitaeUI, layout `0x21000020` (its words at 8,25 in 284x337 on the 48x48 stone `vitae-background` `06004CC2`, tiled).
+  The game's own words (string table `0x23000001`: "Your Vitae, or life force, is at full strength." or "Due to your
+  recent death, you have temporarily lost X% ... You will regain 1% of your Vitae once you earn Y more experience."):
+  X from the vitae enchantment's `Adjustment` (its StatModValue, 0.95 for 5%), Y daralet-ACE's
+  `Player.VitaeCPPoolThreshold`, min((DeathLevel² × 5 + 20) × vitae⁵ + 0.5, 12500), less `VitaeCpPool`: PropertyInts 139 and
+  129, both SendOnLogin and sent again in private int updates (`0x02CD`, `VitaeInfo.ReadPrivateInt`), which the window
+  follows in case Decal doesn't. All three can be the shared window's (ticked for new settings), and the Indicators
+  window opens them in place of the game's panels while they Replace them. Untested in the game when written.
+  **Vendor** (`Ui/VendorPanel*.cs`, `Ui/ClientVendor.cs`, `Feed/VendorPrices.cs`, `Ui/PrivateInts.cs`): the game's vendor
+  window (gmVendorUI, element type `0x10000017`, layout `0x21000012`, 800x110 in ENVP) with its three tabs, starting on
+  Items each time a vendor opens (by Decal's `VendorId` changing, not `ApproachVendor`, which comes after every
+  purchase too), flatter than the panels' as the game's are (92x20: `GamePanelArt.Tabs`' `tabHeight`, `TabHeight`),
+  on the brown strip along the top of the game's window (`vendor-tab-strip`, `06005F10`, 64x20, repeated: element
+  `0x1000008D`, 800x20), the vendor's name and Close right of them in the same row (`GamePanelArt.Tabs`' `maxWidth` leaves
+  them room), and beside the kind menu the picked item's name in bold bright white, with its material as the game
+  writes it (the server's description's name, `PickedName`; Decal's has none), and its price under it. The bold is a
+  label (`ItemIcons.DrawLabel`, GDI+ Segoe UI bold at 85% of the text's size, off-white, on whole pixels,
+  `BoldCentred`; at the full size, an em, it came out bigger and heavier than the text round it): ImGui's text drawn
+  twice a pixel apart, at the fractional place centring gave, came out smeared. The name takes exactly a text line,
+  as "Pick an item..." does in its place, and neither has the frame's padding, or the items under them moved a few
+  pixels as an item was picked and unpicked. The slots wrap
+  to the width, or, with the window too short for two rows, go in one row scrolling sideways as the game's do
+  (`VendorPanel.Cells.cs`, which draws only those in sight either way). It can't be made shorter than that one row and
+  the buttons beside it (`HoldOneRow`, measured as it draws, into `FloatingWindow.MinHeight`, which overrides the least
+  height a window was made with, and so follows the Text size and the title bar). **Loot highlights** (the user's
+  name for it; `MarksLabel`)
+  (`SettingsData.VendorLootMarks`, off to start, a box in the tab row before the vendor's name; `VendorPanel.Marks.cs`)
+  marks each slot in sight as the Inventory's Loot highlights do: the server's description (yours, and the stock with
+  `vendordescribe`) through the active profile (`Loot.Decide`), the deciding rule's mark by `ItemIcons.DrawMark`, kept
+  per item until new descriptions come, the profile changes or two seconds pass. **The Selling tab opens while** a
+  sellable item (`VendorSale.Buys`), a pack or the main pack is held over the window (`VendorPanel.Drag.cs`), from the
+  plugin's lists (the ImGui payload) or the game's pack (`GameDrag.Dragging`, the selection; ImGui counts no window
+  hovered then, so the mouse against the window's box), as the game's window does (`gmVendorUI::UpdateDragOver`), not
+  only once it's let go; and the sell list's slot under it, empty or not, has the green ring, or the red circle for what
+  it won't buy (`DragToSell`, `DrawSellDropMark`, `ItemIcons.DrawDropArt` as the Inventory window's slots): **Items**
+  (page `0x100000BC`: a kind menu `0x100000BF`, here the kinds the vendor has by ItemType bit, `VendorPrices.Kinds`; the
+  items `0x100000BD`, here wrapping; the picked one's name and "costs 11,787p (you have 9,474p)"; Buy `0x100000C2` and Add
+  to List `0x100000C3`, with a count for one sold by the stack, the game's stack bar's, set first with
+  `StackSplit.SetAmount`, back to 1 whenever another item is picked or another vendor opens, `amountFor`; the first
+  build kept the last), **Buying** and **Selling** (pages `0x100000C4`, `0x100000CD`: Clear Item and Clear List, small
+  buttons `060012BA`/`B9`/`B8` and on Selling `06001927`/`28`; the list with empty slots after; "Buying 3 items worth
+  ...p" and "You have ...p"; Buy or Sell Item and All, red buttons `06004C4C`/`4D`/`4E`, cut into three for
+  `GamePanelArt.Button`) on the stone (`GamePanelArt.Stone`). The lists are gmVendorUI's own (AcClient's layout: the buy
+  list a `PackableList<ItemProfile>` at `+0x614`, the sell list at `+0x624`, head `+4`, each node's amount `+4`, item
+  `+8`, next `+0x10`), so Decal, other plugins and the game agree, and every button is the game's:
+  `gmVendorUI::HandleButtonClicks(button id)` (`0x4C5CC0`, ids `0x100000C2` to `0x100000D6`, the close button
+  last), which acts on the client's selection (`0x871E54`), so the item is picked (selected) first. The gmVendorUI is
+  found from its tab panel `0x100000B8` up the parents, by DynamicCast (its root `0x100000B7` is never made under that
+  id). Prices are daralet-ACE's `Vendor.GetSellCost` and `GetBuyCost` with Decal's `Vendor.SellRate` and `BuyRate`
+  (alternate currencies aren't known yet); pyreals are CoinValue, PropertyInt 20, through `PrivateInts` (Decal's, then
+  the server's private updates), which the Vitae window uses too. Items let go over the window go on the sell list.
+  **Decal's WorldFilter hasn't got a vendor's items** (`WorldFilter[id]` is null for each): they're only in its
+  `Vendor` (`WorldFilter.OpenVendor`), whose WorldObjects don't outlive it. So `VendorStock` reads them once, as values
+  (`VendorStockItem`: id, name, kind, value, burden, stack, icon layers, sold by the stack, where it's worn; never the
+  WorldObject itself), when Decal's `WorldFilter.ApproachVendor` says the list came (on opening and after every
+  purchase) or another vendor opens, and everything finds them there by id: the Items tab, the buy list (the vendor's
+  items too, `VendorStockItem.Of`), the tooltips and the Toolbar window's selection name (which showed the hex id).
+  Only the rows in the list's sight are drawn, the rest a `Dummy`: reading ten or so of Decal's values an item every
+  frame hung the game at a vendor with thousands. Decal's Vendor gives the items in an order of its own (a Trade Note
+  M before the I, armor jumbled), and the game's window shows them in the server's order (grouped by kind: weight class,
+  then slot...), so they're put in that order: gmVendorUI's `shopItemProfileList` (a pointer at `+0x610` to a
+  PackableList&lt;ItemProfile&gt;, nodes as the buy list's), which `VendorItemsUI::UpdateItemsList` (`0x4C2A90`) walks to
+  fill the game's list (`ClientVendor.ShopOrder`). Not the game's on-screen list (`0x100000BD`), the first try: it holds
+  only the kind its menu shows, so every other kind stayed in Decal's order. Looked at again every half second until
+  the game's list has come. It's also what the vendor sells now, so an item Decal still has that isn't on it is left
+  out (logged): a gear vendor's random uniques rotate away (`RotUniques` in daralet-ACE), and one still listed could be
+  added to the buy list, which the server turned down as stale ("That item is no longer available.", the vendor saying
+  it refreshed its stock, `HandleStaleVendorPurchase`), so Buy All never bought. `[vendor]` lines say how many were read
+  and how long it took.
+  The slot under the mouse has the selection's frame at 40% (`HoverTint`, `ItemIcons.DrawArtBox`'s tint; the user's
+  call). Every slot has the item tooltip (`VendorPanel.Tooltip.cs`), ending with what it costs or pays, every item described by
+  the server: yours (the sell list's) as in your packs, the vendor's stock where the server has the `vendordescribe`
+  feature (`@playerui describe` takes what the vendor you last opened sells, `Vendor.TryGetItemForSale`, as the game's
+  appraisal does). On an older server the stock shows what the client has (value, burden, stack). A double-click on
+  the stock buys (the game's Buy); a right-click has the slot's menu (`VendorPanel.Menu.cs`): Buy and Add to List, or
+  Buy/Sell Item and Clear Item on a list, and Appraise (`Appraisal.MenuItems` with the item's `EquipableSlots`, for the
+  compare).
+  **Replace** can't hide the game's window: `gmVendorUI::OnVisibilityChanged` (`0x4C4410`) closes every tab and resets
+  the shop when it goes. So ENVP is moved off the left of the screen while a vendor is open (`VendorPanel.Hide.cs`,
+  `ClientElements.Place`), checked once a second, and put back when the vendor closes, Replace goes off or the plugin
+  stops; meanwhile WorldDrop's drops on the vendor panel can't happen (it's off the screen), so let go over the plugin's
+  window instead. Like the Bank and Corpse windows it's only ever shown with a vendor open (`alwaysOnlyInUse`, by the
+  vendor's id, through `GamePanel`'s constructor), and its close button closes the vendor (the game's close button)
+  instead of switching the window off: the first build's X switched it off for good, and with Replace moving the game's
+  window away, vendors then showed nothing at all. While Replace has the game's window off the screen, a window found
+  switched off is switched on again. With anything on a list the game's close button asks first, in a Yes/No dialog
+  (`HandleButtonClicks`' close case builds it, `0x478830`, with `CloseVendorDialogCallback`, `0x4C3C70`), and answering it
+  crashed the game (why isn't known: the window was off the screen); so the plugin's close empties both lists first with
+  the game's own Clear List buttons, and the game closes without asking. Add to List is the game's selection
+  (`[0x871E54]`, looked up with `0x5583F0`) handed to `VendorItemsUI::AddToBuyList(object, amount)` (`0x4C49B0`, the stack
+  bar's count for a stack), which links a node onto `gmVendorUI+0x614` (head `+0x618`, tail `+0x61C`, count `+0x620`)
+  and takes it off the shop's view (`RemoveFromShop`, `0x4C48D0`), which deselects it; the window stays on Items (the
+  user's call). **Buy All and Sell All send the game's page, not the list**: their case in `HandleButtonClicks` calls
+  `gmVendorUI::RecordContents` (`0x4C1F00`), which empties the list and makes it again from the Buying or Selling
+  page's item slots (`m_buyUI` `+0x638`, `m_sellUI` `+0x63C`, each's slot list at `+8`, its count at `+0x610`), then
+  `SendShopEvent` (`0x4C0EA0`) with the vendor's id (`+0x608`). The page only catches up with the list when the game's
+  tab opens, which with Replace's window off the screen it never did: Buy All sent nothing, or items from before that
+  the vendor no longer had ("That item is no longer available."), and emptied the list. So the plugin opens the game's
+  tab first (`ClientElements.OpenTab`, `VendorBuyingTab` `0x100000BA` or `VendorSellingTab`) and presses the button
+  two frames later (`PressAll`, `StepPressAll`), logging the page's slots and the list's count. Each click logs both lists'
+  counts, and each change of a list as the plugin reads it (`[vendor] buy list as read`); an entry the plugin can't name
+  shows a "?". `[vendor]` lines in log.txt. Untested in the game when written.
+  **Creature Appraisal** (`Ui/CreatureAppraisalPanel.cs`, `Ui/ClientExamine.cs`, `Feed/CreatureAppraisal.cs`,
+  `Feed/CreatureSheet.cs`, `Feed/CreatureStats.cs`, `Feed/CreatureTypes.cs`; key `creature-appraisal`, its settings under
+  Client UI Override's Game panels): the game's examination panel for a creature, NPC or player. That panel is the
+  Examination floaty (Decal's `UIElementType` Examination, `0x100005F7`, layout `0x2100006B`, 310x400; its creature
+  page `0x10000140`: name and kind `0x1000014D`-`52` left of the divider `060012C6`, the level `0x1000014A`-`4C` on the
+  right, the list `0x10000148` under a separator `0600612C`, the description `0x10000335`), not in the panel frame, so
+  it isn't hidden: the appraisal is taken before it starts. Every way the game appraises (the key, the magnifier, its
+  menus) goes through `ClientUISystem::ExamineObject` (`0x5657B0`), which calls `CM_Examine::SendNotice_ExamineObject`
+  (`0x6B0510`, static cdecl) once, at `0x5657BC`; that call is hooked (`ClientExamine`, AcClient.Hook as SpellDrag), and
+  with Replace on a Monster, Player, Npc or Vendor (Decal's ObjectClass) is never passed on: Decal's `RequestId` asks
+  instead, which the client doesn't show. Decal doesn't pass on a creature's profile, so the server's own message is read
+  (game event `0x00C9`, SetAppraiseInfo, in daralet-ACE's `AppraiseInfo.Write` order: flags, success, the property
+  tables, spells, armor profile, then `CreatureProfile`: health, and with ShowAttributes (0x8) the six attributes,
+  stamina, mana and their maxima; with 0x1 which a spell raised or lowered, `AttributeMask` bits; then resistances'
+  highlights and, for a player or a creature that can't be attacked, armor by body part). The window shows the name
+  (in bold, `GamePanelArt.BoldCentred`, the Vendor window's GDI+ label made shared) and under it the game's lines
+  (`CreatureSheet.HeaderLines`): "Male Gharu'ndim", from Gender (PropertyInt 113) and HeritageGroup (188), the
+  numbers the server sends for players and NPCs alike (the Sex and HeritageGroup strings the first build waited for
+  aren't AssessmentProperties, so never came, and a vendor showed as "Human", its CreatureType), the heritage's name
+  the portal dat's (`CharGen.HeritageGroups`, Daralet's own; retail's when it can't be read); a creature's
+  CreatureType (PropertyInt 2, spaced as the game writes it) for one with no heritage; the Template (string 5:
+  "Spellsword", "Humble Servant"); and player killer or not, for one with a heritage. They're centred down the top
+  box (by last frame's height, at least the game's 60), the level and "Level" centred in theirs. Then attributes and
+  vitals, as the game lists them (green raised, red lowered), the ratings `AppraiseInfo.AddRatings` adds, armor three to a line as the
+  game writes it ("Head/Chest/Groin" and "AL: 90/95/95", then "Bicep/Wrist/Hand", "Thigh/Shin/Foot"), allegiance
+  (AllegianceName 47, AllegianceRank 30, followers, Monarch's and Patron's titles 21 and 35, Fellowship 10), character
+  (Title, birth, age, deaths, titles, chess rank,
+  fishing) and LongDesc. A failed appraisal has health alone. A later appraisal of the one shown (Appraise again, or
+  another plugin's) updates it. Items still go to the game's panel. `[appraisal]` lines in log.txt. Untested in the
+  game when written. **The model** (`Ui/CreatureModelView.cs`, `SettingsData.CreatureAppraisalModel`, Model in the
+  window's settings and menu, on to start; the user's call, November 2026) is the game's own: its examination panel
+  draws a creature's model in a 3D view, `0x10000148` (a `UIElement_Viewport` with a `CreatureMode`; 300x265 at 0,68
+  of the creature page `0x10000140`, over the stone `0x10000141`, under the stats list `0x10000149`). So with Model on
+  the game is let appraise a creature itself again (TakeOver says no, after noting it, `CreatureModelView.Expect`),
+  and its panel is cut down to the model: every other piece of the floaty (frame, title, close, other pages) and of
+  the page (name, level, stats, description) hidden, the floaty sized to the view and the page moved up so the view
+  sits at its corner (a parent clips its children), the stone and view sized to match, and the floaty put under the
+  window's body, all with UIElement's own MoveTo, ResizeTo and SetVisible, found under the floaty
+  (`ClientElements.Under.cs`: its pieces' ids are used in other layouts too), none of which the game saves. The game
+  draws its UI under ImGui's, so the window leaves the body see-through (`FloatingWindow.SetHole`,
+  `FloatingWindow.Hole.cs`: no ImGui background, its own drawn round the hole; the Retail stone drawn round it too,
+  on a draw-list channel under the header, being known only after it), and the stats draw over the model as in the
+  game. Anything ImGui draws is in front of the model, so over it the parts are set apart by gaps, as in the game's
+  own list, and the one bar, before the description, is the game's own (`0x10000461`, 300x5, drawn behind the model),
+  placed at that gap each frame (`CreatureModelView.PlaceBar`; where it was and whether it showed put back after; the
+  user asked for the model in front of the bars). It's laid out again only when the place changes or the game has moved it back. Put back (places, and the
+  pieces that were showing) when the game appraises anything else (an item, for its own panel), and put back and
+  hidden once the window stops placing it (250ms: closed, hidden, another appraisal window up) and when the plugin
+  stops. Tried in the game: the model shows, at another size than 300x265 too, but the floaty kept to a least size
+  (310x400, while the hole was 294x335) and stood out of the window: its limits (attributes `0x3C`-`0x3F`, which
+  ResizeTo holds it to; `0x3E` the least height, the least width the smaller of `0x3D` and `0x3F`) are lowered while
+  it's cut down and put back after (`LowerLeastSize`, logged), untested. `[appraisal]` lines in log.txt say
+  where it was put. Untested in the game when written.
+  **The appraisal windows share one window** (`Ui/AppraisalGroup.cs`, the user's call, November
+  2026): the item Appraisal window (the first; Appraise in new window's stay apart), Creature Appraisal and Spell
+  Appraisal take one place, size, lock, Size and background (`FloatingWindow.SharedLook`, the placement `appraisals`,
+  starting where the item window was), and the one that came up last shows, the others closed (`Dismiss`; the item
+  window forgets its item), going by `FloatingWindow.Shown`, since the item window is always Visible and shows when it
+  has an item. Each has a close button (`FloatingWindow.CloseButton`, `FloatingWindow.Close.cs`: the game's gold X, the
+  Indicators' log out picture, in the top right corner over the contents, worked by hand; `EdgeDrag` leaves its corner
+  alone). Untested in the game when written.
 - **Escape closes windows** (`Ui/EscapeCloses.cs`, the Config tab's Escape key section, `SettingsData.EscapeClosesWindows`,
   on to start): the /dap window and the Inventory, Bank (a Use of the bank, as its X), Character and Quests windows, all at
   once; Target, Fellowship, Loot, hotbars, map and the rest stay (the user's call). Read from Windows on Decal's
@@ -721,7 +1258,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
 - **Borderless window** (`Ui/BorderlessWindow.cs`, `Feed/BorderlessPlacement.cs`, the Config tab's Game window section,
   `SettingsData.BorderlessWindow`, off to start): takes `WS_CAPTION` and `WS_THICKFRAME` off the game's window and resizes
   it to its client area, so the client area doesn't change size and the game has nothing to rebuild. A window as big as its
-  monitor goes exactly over it; any other stays where its picture was, kept on screen. It waits for login (the character's
+  monitor, or within 64 pixels of it each way (`BorderlessPlacement.ScreenSlack`), is made exactly the monitor's size
+  and put over it: Windows keeps a bordered window from being taller than the screen, so a 2560x1440 game's picture
+  was 2560x1431, and the first build placed it at 0,9, a strip empty at the top and the picture squeezed. Any other
+  stays where its picture was, its size kept, on screen. It waits for login (the character's
   profile), looks again once a second in case the game puts the border back, and puts the border back when turned off or
   at shutdown. A true fullscreen game has no caption, so nothing happens. Centre and Top left move it, having no title bar
   to drag. `[borderless]` lines in log.txt. Untested in the game when written.
@@ -1060,6 +1600,15 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   one above as a faint fill and outline, yours last and brightest, with anti-aliased fill off for the floors (seams).
   **Turn with me** turns it by your heading, with a compass needle; **Follow me**, dragging turning it off, as the maps.
   The window's Only when needed shows it only indoors. Inside a building it maps every building's rooms in the landblock.
+  **In the Map window** (`SettingsData.MapEmbedDungeon`, off to start, the Map window's Dungeon map checkbox, which
+  shows only while it's one of the shared window's, as does its **Pop out** button, `FloatingWindow.PopOut`, the
+  shared window's Separate, then made square in the middle of the screen (as big as its longer side, at most 60% of
+  the screen's shorter side) and brought to the front, `SharedWindow.PopOut`: left exactly where it was, the first build's looked as if nothing had happened; both
+  wrap onto a line of their own, `Form.Flow`, the first build having run them off the
+  window's right edge, unseen; the user's call, November 2026): indoors, the Map window draws the dungeon map at its top
+  (`DungeonWindow.RenderEmbedded`, the same drawing, in a child; `WorldTab.RenderEmbeddedDungeon`), a divider to drag
+  (`Panes`, `map-dungeon`) and the world map under it; the Dungeon window is hidden meanwhile
+  (`FloatingWindow.Suppressed`, while the Map window shares and shows). Untested in the game when written.
   **Map opacity** (`SettingsData.DungeonMapOpacity`, under the window's settings beside Background) fades the map's own
   dark ground, floors and walls (`DungeonScene.Opacity`); markers, you and the route stay solid.
   **Rooms you've been in** are grey (`DungeonVisits`, in settings.json as `dungeonVisits`: by character name, then
@@ -1085,7 +1634,23 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   UtilityBelt's own dungeon maps paste one of 614 hand-drawn 10-meter tiles per piece instead, so pieces without a tile
   (Daralet's own) and cells off its grid go missing; this draws whatever the dats have.
 - **Floating windows** (`Ui/FloatingWindow.cs`): small auto-sized UB huds that stay on screen (fellowship vitals, target,
-  tracked target). Locked means no title bar and no dragging; right-click one to lock, unlock or hide it. Two things decide
+  tracked target). Locked means no dragging by the top edge and no sizing, and with Ctrl held
+  any window, locked or not, is dragged from anywhere on it
+  (`FloatingWindow.CtrlDrag`, by hand: ImGui only moves a window from its empty background, and a hotbar is all slots),
+  its contents disabled meanwhile (`BeginDisabled`, `DisabledAlpha` 1 so nothing greys out) so a slot isn't used on the
+  press; a window held to the toolbar (`Anchor`) isn't moved. A window the player sizes with `CtrlResize` set (the Vendor
+  window) can be resized by its edges too while Ctrl is held: NoResize is lifted then, and an edge taken hold of
+  (ImGui's grips being the only active items while the contents are disabled, `TrackCtrlSizing`) goes on resizing till
+  the button's let go, and isn't also moved. `CtrlResize` is on for every window now (the user's call, November 2026:
+  nearly every window adjustable by its edges), not only the Vendor's. **A window that sizes itself** (no
+  defaultSize: the target, fellowship, hotbars, toolbar, quest tracker and the like) is sized by its edges too
+  (`FloatingWindow.EdgeScale.cs`): dragging its left, right or bottom edge or a bottom corner changes its Size, the
+  scale its contents are drawn at, by as much as the edge has gone (snapped as a resized edge is), the top edge still
+  being the move; unlocked as it is, locked with Ctrl held; the strip is the window's padding (at least 3 pixels), so
+  a hotbar's slots keep their clicks; worked by hand like SideGrips, which a window with its own (the bars) has
+  instead. Untested in the game when written. Ctrl+click in a locked Corpse grid moves it instead of
+  ticking. While Ctrl is held each such window gets a faint wash and frame in the theme's accent
+  (`DrawCtrlMoveHighlight`), brighter on the one being dragged. Right-click one to lock, unlock or hide it. Two things decide
   whether one is drawn, worked out every frame (`Core_RenderFrame`): `Visible`, the saved setting its tab's checkbox and
   Hide change, and `inUse`, what it's showing now (null for nothing). A window with **Only when needed**
   (`WindowPlacement.OnlyInUse`) is drawn only while in use; the Corpse and Bank windows always are (`alwaysOnlyInUse`).
@@ -1095,8 +1660,47 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   switch their windows on, as asked for. **Background** (`WindowPlacement.Background`, null for the old 0.55 locked / 0.85
   unlocked) fades each window's box; at 0% it's `NoBackground`, and the style's `WindowBorderSize` is zeroed for that
   window's Begin and put back in `Hud_OnRender` (or the next `Core_RenderFrame`), since UB begins the window between the two.
-  Locking takes the title bar away, so `Locked` moves the window down by the title bar's height (measured while unlocked,
-  `titleBarHeight`) and back up when unlocked: what's in it stays exactly where it was. `RememberPosition` skips a frame
+  **No title bars** (the user's call, November 2026; `Ui/FloatingWindow.Edge.cs`): locked or not, a window has none
+  (`NoTitleBar | NoMove` always). Unlocked, it's moved by its top edge, as the game's panels are (`EdgeDrag`): a band
+  from 4 pixels above the window (ImGui's own top-edge resize reaches that far) to 6 inside, wherever no item is under
+  the mouse, takes hold on a press and moves `Look`, snapped, like a Ctrl drag (`RememberPosition` skips while it's on:
+  it runs after, and saving the window's old place undid the move every frame, the first build); ImGui's resizing is off while the mouse
+  is on it or a drag is on (`edgeHover`, `edgeGrab`), or that edge would resize the window instead. Its other edges and
+  corners still size it. The mouse shows the game's move cursor there (`WantsMoveCursor`, through `CursorKeeper`). So
+  locking no longer moves anything; before, it took the title bar away and moved the window down by its height (and
+  shrank one the player sizes by it), so what was in it stayed put. Settings from before (`WindowPlacement.NoTitleBar`
+  false) are moved once the same way for an unlocked window (`UpgradeFromTitleBar`: down by the height ImGui gave the
+  title bar, a player-sized one that much shorter). With no title bar there's no close button: the right-click menu's
+  Hide and Close do that, but a window with `CloseButton` set (the appraisal windows) has the game's gold X in its top
+  right corner (`FloatingWindow.Close.cs`). Untested in the game when written. **Snapping** (`Ui/FloatingWindow.Snap.cs`,
+  `Feed/WindowSnap.cs`, the Config tab's Window snapping: `SettingsData.SnapWindows`, on to start, `SnapDistance` 10,
+  `SnapGrid` off, `SnapGridSize` 20, `SnapGridShown`): a window being dragged snaps to the screen's edges, to the edges
+  of the plugin's other windows showing (each notes its box every frame it's drawn, `NoteBox`; an edge only lines up
+  with a window beside it the other way), and with the grid on to the grid where no edge is near; Shift places it
+  freely. ImGui moves an unlocked window itself, so one is taken to be dragged while the button's down, it's focused and
+  it moved without changing size (`SnapWhileDragged`), and its snapped place is put on it (`SetWindowPos`) before
+  `RememberPosition` saves it; ImGui works the place out from the mouse every frame, so nothing builds up. A locked
+  one's Ctrl drag snaps in `CtrlDrag`. **Resizing snaps too** (`SettingsData.SnapResize`, on to start;
+  `FloatingWindow.SnapSize`, `WindowSnap.SnapEdge`): a window the player sizes has the edges it's being resized by
+  snapped to the screen's, other windows' beside it and the grid, as it's dragged, through ImGui's size callback
+  (`FloatingWindow.SetSizeConstraints`, cimgui's `igSetNextWindowSizeConstraints` called directly with a cdecl
+  delegate kept in a field: see the gotcha on ImGui.NET's callbacks): ImGui works a
+  resize out from the mouse inside Begin, every frame, and asks the callback before it uses it. The edge moving is the
+  one nearer the mouse (ImGui keeps the other put, moving the window for a left or top edge). The first build snapped
+  after Begin, which ImGui undid the next frame, so it only showed once let go. The grid is drawn faintly on the
+  background list while one's dragged or resized. **Guide lines** (the user's call, November 2026; `WindowSnap.Guides`):
+  with the grid on, the screen's middle (3 pixels) and its thirds and quarters (2) are drawn thicker over it, a
+  window's middle snaps to them as it's moved and the edge being dragged as it's resized, as near as any edge, and the
+  guide the middle (or that edge) is on is drawn lit, in gold (`DrawGrid`'s `litX`, `litY`, `WindowSnap.OnGuide`): the
+  grid is drawn once the snapped place is known (`ShowGrid`). **Snap resizing to the grid** (`SnapResizeGrid`, on to
+  start, the user's call, November 2026) is a setting of its own: resizing snaps to the grid and its guide lines with
+  it on, whether or not moving does (`ResizeGridSpacing`, where moving has `GridSpacing` and Snap to a grid), and so
+  do the width grips (`GamePanel.WidthGrip`, the XP bar's end), which change a window that sizes itself. ImGui asks
+  the size callback of windows that size themselves too, whose wanted size can differ from their own on any click,
+  so with that on by default the grid showed for every press: `SnapSize` now only acts for a window the player sizes
+  and a press begun on its edge (`TrackResizePress`: 4 pixels outside to half a line inside, more at the corners).
+  Untested in the game when written. A window doesn't snap to those held to it (`Follows`), or its edge
+  against theirs held it in place and it moved in jumps. The main /dap window isn't a FloatingWindow and doesn't snap. Untested in the game when written. `RememberPosition` skips a frame
   whose new position is still on its way (`positioned` false), or it would save the old one back. **Only a drag moves a
   window**: every frame the left button isn't down, `SetNextPlacement` puts it where it was saved (`ImGuiCond.Always`),
   and `RememberPosition` only saves while the button is down. ImGui pulls a window back inside a screen smaller than where
@@ -1110,13 +1714,15 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`Widgets.VitalBarWidth`): a big font wrote each bar's numbers over the next. Clicking a threat row selects that
   creature or player. The Target and Tracked Target windows share their vitals' settings, as the fellowship window has
   them: Health, Stamina and Mana each shown or not, Side by side and Bar width (`TargetShowHealth`..., `TargetSideBySide`,
-  `TargetBarWidth`, 220 to start), with spells and threat as wide as the row of bars; the Target tab shows all three.
+  `TargetBarWidth`, 220 to start), with spells and threat as wide as the row of bars; the Combat tab's Vitals shows all three.
   They're in both windows' right-click menus too (`TargetTab.RenderVitalsMenu`), which open from anywhere on the window
   (`OpenMenuOnRightClick`), since it's nearly all bars and the menu doesn't open over items.
   The **Map window** is the World tab's map in a `FloatingWindow` with its own `MapView` (its own pan,
-  zoom and Follow me); the arrow window's **Details** box leaves the arrow alone.
+  zoom and Follow me) and the tab's **Show...** (kinds of places, names, fellows, the names' Text size, and the Arrow
+  and Dungeon windows, the last three added to the popup for it); the arrow window's **Details** box leaves the arrow
+  alone.
 - **The game's UI pictures** (`Resources/ui`, embedded as `DaraletPlayer.Resources.ui.<name>.png`, drawn by `ItemIcons.DrawArt`): taken from the client by hand, since they aren't item icons: the main pack (`main-pack`), the green behind each pack in the Retail column (`pack-background`, with the pack's icon on it without its usual tile), the ring over the slot an item is held over in a drag (`drop-ring`, 17x16, scaled to the slot's width; a frame over a list line), and the red crossed-out circle (`drop-invalid`, not the reticle's) where it can't go, letting go there doing nothing (`Accepted(allowed)`: a pack only in a pack slot, on a pack, the main pack or the bank's own slots, never among a pack's items; an item not in a full pack; a paperdoll square only for what its `EquipableSlots` include), the empty slot (`empty-slot`: a pack's room left in the grids, which show a pack as its every slot, `InventoryBrowser.Slots`, and the side pack slots left in the Retail column), the selection frame (`selected`: the selected item, as `Actions.CurrentSelection` says, in the grids, the paperdoll and the Retail pack column, a click in a list selecting it as the game's pack does), and the target reticles (`reticle`, `reticle-invalid`). The Retail chosen pack's arrow is still drawn with shapes: the game's own hasn't been found. The grids have no gap between squares, as the game's pack has none.
-  **Retail bars** (`SettingsData.RetailVitalBars`, off to start, ticked in the fellowship window's or the Target tab's
+  **Retail bars** (`SettingsData.RetailVitalBars`, off to start, ticked in the fellowship window's or the Combat tab's Vitals'
   settings): `Widgets.Bar` draws any bar in a vital's colour (`Colors.Health`, `Stamina`, `Mana`) with the game's vitals
   panel art instead of ImGui's progress bar (`ItemIcons.DrawVitalBar`, `ItemIcons.Bars.cs`), its numbers outlined on
   top (bold, `SettingsData.BoldVitalText`, drawn twice a pixel apart: ImGui has no bold font; plain bars too, their
@@ -1166,7 +1772,14 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   every `FloatingWindow` (times the window's own Size, `FloatingWindow.FontScale`). Popups and menus inherit their
   window's scale, but a tooltip is a window of its own drawn at the font's size, so tooltips open with
   `Widgets.BeginTooltip`, which scales them to the window they're shown from: never call `ImGui.BeginTooltip` or
-  `SetTooltip` directly. ImGui sizes a child window's text by its own scale times its direct parent's only, so a child
+  `SetTooltip` directly. Going through it is also what makes **Tooltips only while holding** a key work
+  (`SettingsData.TooltipsNeedAlt`, on to start, its name from when the key was always Alt, and `TooltipKey`, a
+  Windows virtual key code, Alt to start: the drop-down beside it has Alt, Ctrl and Shift, and Other key... takes the
+  next key pressed, Alt, Ctrl and Shift on their own included (`ConfigTab.Modifiers`: `Hotkeys.Pressed` reads the
+  hotbars' keys, which leave them out, so the first build ignored them); the Config tab's Text section; the user's call, November 2026): without the key held, read from
+  Windows (`Hotkeys.IsDown`, through `Widgets.TooltipsHidden`, which `PlayerHud` sets), the tooltip is begun far off
+  the screen (`SetNextWindowPos`), since every caller draws into it and ends it itself; the setting's own tooltips
+  pass `always`. ImGui sizes a child window's text by its own scale times its direct parent's only, so a child
   inside a child (the Quests list's scrolling table in its `quests-list` child) drew at 100% whatever the Text size:
   child windows open with `Widgets.BeginChild`, and tables that scroll (ScrollX/ScrollY, a child of their own) with
   `Widgets.BeginTable`, which match the parent's font size; never call `ImGui.BeginChild` directly. Sizes picked in
@@ -1224,12 +1837,66 @@ checks (greying out market buttons away from a broker, say) are only there to be
   Fields go at the top of the class, and lines stay under about 125 characters: long tooltips are joined with `+`.
 - Small shared pieces live in one place: `Widgets` (text, tips, `Button`, `OutlineIfHovered`, bars), `Colors`,
   `PluginCore.Chat` for a line in chat, `Words.Count` for "3 rules".
+- **Sliders** are `Sliders.SliderInt` and `SliderFloat` (`Ui/Sliders.cs`), never ImGui's directly: ImGui's own slider
+  (dragging, Ctrl+click or double-click to type) drawn see-through under the game's option slider art (track `06001285`,
+  thumb `06001286`, `option-slider*.png`), the thumb where ImGui's grab is, the number outlined on top
+  (`Feed/SliderText.cs` reads ImGui's printf formats), the label redrawn past the frame (the user's call, November
+  2026). While a number is typed it's ImGui's plain box.
+- **Drop-down menus** are `Combos.Begin` / `Combos.End` (`Ui/Combos.cs`), never `ImGui.BeginCombo` directly, and a row that's
+  just a name is `Combos.Item`: the game's look (the user's call, November 2026), from the vendor window's kind menu
+  (template `0x1000034B` in layout `0x21000043`: the 100x18 field `060012B3`, dark green in a grey bevel, cut into 4-pixel
+  ends and a middle, `combo-left`...; the arrow `060012B1`, open `060012B2`, 17x19 at its right; rows `0x10000352`,
+  `060012B3`, the picked one and the one under the mouse `060012B4`, `combo-row-selected-*`). ImGui still makes the combo:
+  the art goes on the window's draw list before `BeginCombo` (once open, `GetWindowDrawList` is the popup's), under a
+  see-through frame with `NoArrowButton`, the arrow over its right end after; the list's background, border and
+  highlight are the art's colours, pushed till `End`. The open list is exactly as wide as the field
+  (`SetNextWindowSizeConstraints` before `BeginCombo`, which takes them over and clears them when it doesn't open; as
+  tall as ImGui's row count for the height flag, in rows of the field's height, `ListHeight`), its scroll bar inside
+  rather than out past the arrow; the icon grids pass `listAsWide: false`, being laid out by their own widths. Rows that aren't a plain name (the icon grids, tick boxes) keep
+  ImGui's own items on those colours. Plain ImGui before the art can be drawn. Untested in the game when written.
+- **Scroll bars** are the game's (`Ui/Scrollbars.cs`, the user's call, November 2026): layout `0x2100003E`'s vertical
+  `0x10000367` (16 wide: chain track `06004C5F`, thumb top/middle/bottom `06004C60`/`63`/`66`, arrows up `06004C6C` and
+  down `06004C69`: the template's decrement button, property 0x77, is `0x10000072`, though `0x10000071` sits at 0,0,
+  and the first build had them the wrong way up) and horizontal `0x1000036D` (16 high: chain `06004C7F`, thumb
+  `06004C80`/`83`/`86`, arrows left `06004C8C`, its 0x77, and right `06004C89`), each part's next two pictures its
+  hover (light blue) and pressed states
+  (`scrollbar-*.png`, `scrollbar-h-*.png`). ImGui still makes the bar (its room, the wheel; `ScrollbarSize` 16 in
+  the themed windows, `UiThemeStyle`), and the game's is drawn over it, opaque, at the box ImGui uses
+  (`igGetWindowScrollbarRect`, and `igGetCurrentWindow`, `igGetActiveID`, `igClearActiveID`: ImGui's internal
+  functions, which UtilityBelt's `cimgui.dll` exports and its ImGui.NET doesn't wrap, P/Invoked; the window's flags
+  read at `+8` of ImGuiWindow, ImGui 1.89.7). The game's clicks are its own: the arrows step (repeating while held),
+  the track pages, the thumb drags, along the travel between the arrows; ImGui's bar took the press as the window
+  began, so its hold is let go and the scroll it jumped to replaced (a frame of the jump can show). Drawn from the end
+  of each window that scrolls: `FloatingWindow`, the main window, `Widgets.EndChild` (every child begun with
+  `Widgets.BeginChild` ends there, never `ImGui.EndChild`), `Widgets.EndScrollingTable` (a table with ScrollY) and
+  `Combos.End` (a drop-down's long list, drawn before `EndCombo` while its popup is the current window);
+  a scrolling area ended any other way keeps ImGui's own bar. A horizontal bar only where a window asks for one
+  (`HorizontalScrollbar`). **Only a bar ImGui really made is looked up**: `igGetWindowScrollbarRect` asserts that it's
+  there ("scrollbar_size > 0.0f"), and the first build, going by room to scroll, stopped the game at login (a window
+  that sizes itself has room and no bar). So the bar's size is read from the content region (`ShownBars`: ImGui takes
+  it off the region's right or bottom, past the padding the region's left edge shows, the scroll added back), and a
+  horizontal bar of less than three quarters of `ScrollbarSize` counts as none, the bottom padding being a guess; a
+  vertical one of 4 pixels or more counts, the sides being padded alike (a drop-down's list, padded by the frame's
+  padding, was missed at three quarters, `[combo]` in log.txt giving its sizes once). A child's bar is cut to where its parent could
+  draw as the child began (`Widgets.BeginChild` and a scrolling `BeginTable` note it, `EndChild` and
+  `EndScrollingTable` hand it over), as ImGui's own is: drawn with a clip of its own, one out past the window showed.
+  A window that scrolls but gets no game bar (none found, too small, or clipped away) is logged once with its sizes
+  (`[scrollbars]` in log.txt, `Scrollbars.LogSkip`): the Spellbook's list was reported with ImGui's bar though its
+  child ends in `Widgets.EndChild`, and why wasn't found from the code. Untested in the game when written.
 - **Settings pages** are built like the Hotbars page, from `Form` (`Ui/Form.cs`): a `Section` heading per group, forms
   of labels and lined-up controls (`BeginForm`, `Label`, `ControlWidth`), and rows of checkboxes and buttons that wrap
   (`Flow`, `FlowCheck`, `FlowSmallButton`). A tab whose content comes first keeps its settings folded under a
   **Settings** header (`Form.SettingsHeader`, closed to start), with a section per floating window
   (`FloatingWindow.RenderControls`: Enabled, Only when needed, Locked, Reset position, then Size and Background). A popup
-  opened from inside a form must be drawn inside it too: a table adds to the ID stack.
+  opened from inside a form must be drawn inside it too: a table adds to the ID stack. **What's under an open
+  header** (every `ImGui.CollapsingHeader`, Settings included) is set in, with a line in the header colour down its
+  left side to where it ends (`Form.Folded()`, `Ui/Fold.cs`, the user's call, November 2026), so it's plain what's
+  open: call it as `using var fold = Form.Folded();` straight after a header that said it's open, so the rest of the
+  block or method is the section. The line comes down from the point of the header's arrow (the header's item box,
+  plus the frame padding and half the font size, where ImGui draws it), the contents start half a font size past it,
+  and they're in a group: ImGui's separators run from the window's left edge, across the line, except in a group of
+  the window's, where they start at the indent. Tree nodes (Custom colours, loot folders, the tracker's quests) indent
+  as ImGui's own.
   Sections go two abreast with `Form.Columns` (the World, Target and Inventory tabs' Settings) when the tab is wide enough, one under another
   when not; `Flow` and `ControlWidth` keep to the column they're in.
 - Code comments explain why, in plain words; tooltips (`Widgets.Tip`) on every control say what it does and which command it

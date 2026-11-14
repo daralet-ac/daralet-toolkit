@@ -31,6 +31,15 @@ namespace DaraletPlayer.Ui {
         private int textPercent = 100;
         private bool textSliderActive;
 
+        /// <summary>Other key... picked: the next key pressed is the one tooltips need held.</summary>
+        private bool capturingTooltipKey;
+
+        /// <summary>The modifier keys, which Other key... takes on their own too.</summary>
+        private static readonly int[] Modifiers = { Keys.Alt, Keys.Control, Keys.Shift };
+
+        /// <summary>Modifiers already held as Other key... began, not taken until let go and pressed again.</summary>
+        private readonly HashSet<int> modifiersHeld = new HashSet<int>();
+
         /// <summary>The files From file found when it was pressed.</summary>
         private List<string> exportFiles = new List<string>();
 
@@ -81,12 +90,100 @@ namespace DaraletPlayer.Ui {
             RenderText();
             RenderTheme();
             RenderEscape();
+            RenderSnapping();
 
             ImGui.Spacing();
             clientUiOverride.Render();
             borderless.Render();
             hideGameUi.Render();
             launcher.Render();
+        }
+
+        /// <summary>
+        /// A tooltip shown whatever Tooltips only while holding says: the setting's own, or there'd be no telling what it
+        /// does with it on.
+        /// </summary>
+        private static void AlwaysTip(string text) {
+            if (!ImGui.IsItemHovered()) {
+                return;
+            }
+
+            Widgets.BeginTooltip(always: true);
+            ImGui.PushTextWrapPos(ImGui.GetFontSize() * 28);
+            ImGui.TextUnformatted(text);
+            ImGui.PopTextWrapPos();
+            ImGui.EndTooltip();
+        }
+
+        /// <summary>The key tooltips need held: Alt, Ctrl or Shift from the menu, or any key after Other key...</summary>
+        private void RenderTooltipKey() {
+            var data = settings.Data;
+            var key = data.TooltipKey != 0 ? data.TooltipKey : Keys.Alt;
+            ImGui.SetNextItemWidth(Widgets.Scaled(110));
+
+            if (Combos.Begin("##config-tooltip-key", capturingTooltipKey ? "Press a key..." : TooltipKeyName(key))) {
+                foreach (var choice in new[] { Keys.Alt, Keys.Control, Keys.Shift }) {
+                    if (Combos.Item(TooltipKeyName(choice), key == choice)) {
+                        data.TooltipKey = choice;
+                        capturingTooltipKey = false;
+                        settings.Changed();
+                    }
+                }
+
+                if (Combos.Item("Other key...", capturingTooltipKey)) {
+                    capturingTooltipKey = true;
+                    modifiersHeld.Clear();
+
+                    foreach (var modifier in Modifiers) {
+                        if (Hotkeys.IsDown(modifier)) {
+                            modifiersHeld.Add(modifier);
+                        }
+                    }
+                }
+
+                Combos.End();
+            }
+
+            AlwaysTip("The key to hold for tooltips. Ctrl also moves windows when held over them and Shift places them "
+                + "freely, so Alt suits most. Other key... takes the next key you press; Escape cancels.");
+
+            if (!capturingTooltipKey || !Hotkeys.GameInFront()) {
+                return;
+            }
+
+            // Alt, Ctrl or Shift on its own: the key list Hotkeys.Pressed reads (the hotbars' keys) leaves them out, so
+            // Other key... ignored them. One that goes down since the capture began is the key.
+            foreach (var modifier in Modifiers) {
+                var down = Hotkeys.IsDown(modifier);
+
+                if (down && !modifiersHeld.Contains(modifier)) {
+                    data.TooltipKey = modifier;
+                    capturingTooltipKey = false;
+                    settings.Changed();
+                    return;
+                }
+
+                if (!down) {
+                    modifiersHeld.Remove(modifier);
+                }
+            }
+
+            foreach (var pressed in Hotkeys.Pressed()) {
+                if (pressed != Keys.Escape) {
+                    data.TooltipKey = pressed;
+                    settings.Changed();
+                }
+                else {
+                    EscapeCloses.Taken();
+                }
+
+                capturingTooltipKey = false;
+                break;
+            }
+        }
+
+        private static string TooltipKeyName(int key) {
+            return key == Keys.Alt ? "Alt" : key == Keys.Control ? "Ctrl" : key == Keys.Shift ? "Shift" : Keys.Name(key);
         }
 
         private void RenderText() {
@@ -109,7 +206,7 @@ namespace DaraletPlayer.Ui {
             var reset = ImGui.CalcTextSize("Reset").X + style.FramePadding.X * 2 + style.ItemSpacing.X;
             ImGui.SetNextItemWidth(Math.Max(ImGui.GetFontSize() * 4, Math.Min(Form.ControlWidth,
                 ImGui.GetContentRegionAvail().X - reset)));
-            ImGui.SliderInt("##config-text-size", ref textPercent, (int)(SettingsData.MinTextScale * 100),
+            Sliders.SliderInt("##config-text-size", ref textPercent, (int)(SettingsData.MinTextScale * 100),
                 (int)(SettingsData.MaxTextScale * 100), "%d%%");
             textSliderActive = ImGui.IsItemActive();
 
@@ -124,6 +221,17 @@ namespace DaraletPlayer.Ui {
                 SetTextScale(1);
             }
             Widgets.Tip("Puts the text size back to 100%.");
+
+            Form.Label("Tooltips", "When the boxes that show as you hover over something appear.");
+
+            if (ImGui.Checkbox("Only while holding##config-tooltips-alt", ref settings.Data.TooltipsNeedAlt)) {
+                settings.Changed();
+            }
+
+            AlwaysTip("Every tooltip of the plugin's (help on its controls, items' details) shows only while the key "
+                + "beside this is held.");
+            ImGui.SameLine();
+            RenderTooltipKey();
 
             ImGui.EndTable();
         }
@@ -141,9 +249,9 @@ namespace DaraletPlayer.Ui {
             var current = UiThemes.Find(settings.Data.Theme);
             ImGui.SetNextItemWidth(Form.ControlWidth);
 
-            if (ImGui.BeginCombo("##config-theme", current.Name)) {
+            if (Combos.Begin("##config-theme", current.Name)) {
                 foreach (var theme in UiThemes.All) {
-                    if (ImGui.Selectable($"{theme.Name}##config-theme-{theme.Name}", theme == current)) {
+                    if (Combos.Item($"{theme.Name}##config-theme-{theme.Name}", theme == current)) {
                         SetTheme(theme);
                     }
                     Widgets.Tip(theme.Tip);
@@ -154,7 +262,7 @@ namespace DaraletPlayer.Ui {
                     }
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
             Widgets.Tip($"{current.Tip} Pick another to see it at once.");
 
@@ -218,6 +326,64 @@ namespace DaraletPlayer.Ui {
             ImGui.EndTable();
         }
 
+        /// <summary>Window snapping (WindowSnap, FloatingWindow.SnapWhileDragged): edges, the grid and its drawing.</summary>
+        private void RenderSnapping() {
+            Form.Section("Window snapping");
+
+            if (!Form.BeginForm("config-snapping")) {
+                return;
+            }
+
+            var data = settings.Data;
+            Form.Label("Snap", "How the plugin's windows line up as you drag them.");
+
+            if (Form.Check("Snap windows", ref data.SnapWindows, "A window you drag snaps to the screen's edges and to the "
+                + "edges of the plugin's other windows when one comes near, so they line up. Hold Shift while dragging "
+                + "to place one freely.")) {
+                settings.Changed();
+            }
+
+            if (Form.Check("Snap when resizing", ref data.SnapResize, "The edge of a window you resize (one you size "
+                + "yourself) snaps the same way: to the screen's edges, the edges of the plugin's other windows beside it, "
+                + "and the grid. Hold Shift to size one freely.")) {
+                settings.Changed();
+            }
+
+            Form.Label("Snap distance", "How near, in pixels, an edge has to come before the window snaps to it.");
+
+            if (Form.Slider("##config-snap-distance", ref data.SnapDistance, 2, 40, "%d px")) {
+                settings.Changed();
+            }
+
+            Form.Label("Grid", "A grid the windows snap to as well, where no edge is near.");
+
+            if (Form.Check("Snap to a grid", ref data.SnapGrid, "With no edge near, a window you drag snaps its top left "
+                + "corner to the nearest point of a grid. Its middle snaps to the screen's middle, thirds and quarters "
+                + "too.")) {
+                settings.Changed();
+            }
+
+            if (Form.Check("Snap resizing to the grid", ref data.SnapResizeGrid, "With no edge near, the edge of a "
+                + "window you resize, by its edge or by a bar's grip (the XP bar, Vitals, Power bar, Spell bar), snaps to "
+                + "the grid's lines and to the screen's middle, thirds and quarters. Needs Snap when resizing.")) {
+                settings.Changed();
+            }
+
+            if (Form.Check("Show the grid", ref data.SnapGridShown, "Draws the grid faintly over the screen while a window "
+                + "is dragged, with thicker lines at the middle, thirds and quarters; the one a window is centred on "
+                + "lights up.")) {
+                settings.Changed();
+            }
+
+            Form.Label("Grid size", "How far apart the grid's lines are, in pixels.");
+
+            if (Form.Slider("##config-snap-grid", ref data.SnapGridSize, 4, 100, "%d px")) {
+                settings.Changed();
+            }
+
+            ImGui.EndTable();
+        }
+
         private void SetTextScale(float scale) {
             scale = Math.Max(SettingsData.MinTextScale, Math.Min(SettingsData.MaxTextScale, scale));
 
@@ -233,14 +399,14 @@ namespace DaraletPlayer.Ui {
         private void RenderPicker() {
             ImGui.SetNextItemWidth(Form.ControlWidth);
 
-            if (ImGui.BeginCombo("##config-profile", settings.Profile)) {
+            if (Combos.Begin("##config-profile", settings.Profile)) {
                 foreach (var name in settings.Profiles()) {
-                    if (ImGui.Selectable($"{name}##profile-{name}", name == settings.Profile)) {
+                    if (Combos.Item($"{name}##profile-{name}", name == settings.Profile)) {
                         Pick(name);
                     }
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
             Widgets.Tip(ProfileTip);
         }

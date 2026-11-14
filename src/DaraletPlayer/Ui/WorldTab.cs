@@ -72,6 +72,9 @@ namespace DaraletPlayer.Ui {
 
             dungeonWindow = new DungeonWindow(settings);
 
+            // the Map window shows the dungeon map itself while it embeds it: the Dungeon window stays away meanwhile
+            dungeonWindow.Window.Suppressed = () => DungeonEmbedded;
+
             CoreManager.Current.RenderFrame += Core_RenderFrame;
         }
 
@@ -175,7 +178,8 @@ namespace DaraletPlayer.Ui {
             };
         }
 
-        /// <summary>The tab's map in a window of its own, sized however you like. What it shows is set in the tab.</summary>
+        /// <summary>The tab's map in a window of its own, sized however you like. Its Show... is the tab's, with the names'
+        /// size and the Arrow and Dungeon windows too.</summary>
         private void RenderMapWindow() {
             ApplyWorldData();
 
@@ -191,6 +195,16 @@ namespace DaraletPlayer.Ui {
 
             RenderMapButtons(windowMap, hasSelf, x, y, small: true, settings.Data.MapWindowFollow, SetWindowFollow);
 
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Show...##map-window")) {
+                ImGui.OpenPopup("world-filters");
+            }
+            Widgets.Tip("Which kinds of places are on the map, names, fellows and their size, and the Arrow and Dungeon "
+                + "windows: the same as the World tab's Show..., for both maps.");
+            RenderFilters();
+
+            RenderSharedButtons();
+
             var destination = CurrentDestination();
 
             if (destination != null) {
@@ -198,7 +212,65 @@ namespace DaraletPlayer.Ui {
                 Widgets.TextDisabled(destination.Name);
             }
 
+            if (DungeonEmbedded && DungeonWindow.IsIndoors) {
+                RenderEmbeddedDungeon();
+            }
+
             windowMap.Render(ImGui.GetContentRegionAvail(), Scene(hasSelf, x, y));
+        }
+
+        /// <summary>
+        /// The Map window shows the dungeon map in itself (MapEmbedDungeon), which it does only while it's one of the
+        /// shared window's and on screen; the Dungeon window is hidden meanwhile (FloatingWindow.Suppressed).
+        /// </summary>
+        private bool DungeonEmbedded => settings.Data.MapEmbedDungeon && mapWindow.SharesNow?.Invoke() == true
+            && mapWindow.Shown;
+
+        /// <summary>
+        /// While the Map window shares the shared window: Pop out, taking it into a window of its own, and Dungeon map,
+        /// the dungeon map at its top (the user's call, November 2026).
+        /// </summary>
+        private void RenderSharedButtons() {
+            if (mapWindow.SharesNow?.Invoke() != true) {
+                return;
+            }
+
+            // after the row's other buttons, onto a line of their own when the window's too narrow (the first build ran
+            // them off its right edge, out of sight)
+            var first = false;
+
+            if (Form.FlowSmallButton(ref first, "Pop out##map-window", "Takes the Map window out of the shared window, "
+                + "into a window of its own just where it is. Share with the other panels in its right-click menu puts it "
+                + "back.") && mapWindow.PopOut != null) {
+                mapWindow.PopOut();
+            }
+
+            var embed = settings.Data.MapEmbedDungeon;
+            Form.Flow(ref first, Form.CheckWidth("Dungeon map"));
+
+            if (ImGui.Checkbox("Dungeon map##map-window-embed", ref embed)) {
+                settings.Data.MapEmbedDungeon = embed;
+                settings.Changed();
+            }
+
+            Widgets.Tip("Shows the dungeon map at the top of this window while you're indoors, the world map under it "
+                + "(drag the line between them), in place of the Dungeon window.");
+        }
+
+        /// <summary>The dungeon map in the window's top part, the line under it dragged to share the room.</summary>
+        private void RenderEmbeddedDungeon() {
+            var avail = ImGui.GetContentRegionAvail().Y;
+            var em = ImGui.GetFontSize();
+            var least = em * 6;
+            var height = Panes.Size("map-dungeon", avail / 2, avail, least, least);
+
+            if (Widgets.BeginChild("map-dungeon", new Vector2(0, height), false)) {
+                dungeonWindow.RenderEmbedded();
+            }
+
+            Widgets.EndChild();
+            Panes.Divider("map-dungeon", false, height, avail, least, least,
+                "Drag to share the window between the dungeon map and the world map.");
         }
 
         /// <summary>Me, Whole map and Follow me, for one of the maps.</summary>
@@ -241,7 +313,8 @@ namespace DaraletPlayer.Ui {
             if (ImGui.Button("Show...")) {
                 ImGui.OpenPopup("world-filters");
             }
-            Widgets.Tip("Which kinds of places are on the map, and whether names and fellows are.");
+            Widgets.Tip("Which kinds of places are on the map, whether names and fellows are and the names' size, and the "
+                + "Arrow and Dungeon windows. The Map window has the same.");
 
             ImGui.SameLine();
             var dungeon = dungeonWindow.Window.Visible;
@@ -322,6 +395,33 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Writes town names on the map, and other places' names once you zoom in, as many as fit without "
                 + "covering one another: the kinds higher in the list above first.");
 
+            ImGui.SetNextItemWidth(ImGui.GetFontSize() * 8);
+            var textPercent = (int)Math.Round(data.MapTextScale * 100);
+
+            if (Sliders.SliderInt("Text size##map-filters-text", ref textPercent, 50, 250, "%d%%")) {
+                data.MapTextScale = textPercent / 100f;
+                settings.Changed();
+            }
+            Widgets.Tip("How big the names on the map are drawn: towns, places and your fellows, on both maps. Ctrl+click to "
+                + "type a size.");
+
+            ImGui.Separator();
+            Widgets.TextDisabled("Windows");
+
+            var arrow = arrowWindow.Visible;
+            if (ImGui.Checkbox("Arrow window", ref arrow)) {
+                arrowWindow.Visible = arrow;
+            }
+            Widgets.Tip("Shows the Destination window: an arrow pointing to your destination from the way you're facing, "
+                + "and how far it is. Its settings are under the World tab's Settings.");
+
+            var dungeon = dungeonWindow.Window.Visible;
+            if (ImGui.Checkbox("Dungeon map##filters", ref dungeon)) {
+                dungeonWindow.Window.Visible = dungeon;
+            }
+            Widgets.Tip("Shows the Dungeon window: a map of the dungeon you're in, which this map can't show. Its settings "
+                + "are under the World tab's Settings.");
+
             ImGui.EndPopup();
         }
 
@@ -379,6 +479,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             Form.Columns("world-settings-grid", RenderMapSettings, RenderWorldDataStatus, RenderMapWindowSettings,
                 RenderArrowSettings, RenderDungeonWindowSettings);
             ImGui.Spacing();
@@ -406,7 +508,7 @@ namespace DaraletPlayer.Ui {
         private void RenderMapWindowSettings() {
             Form.Section("Map window");
             mapWindow.RenderControls("The map in a window of its own, to keep on screen alongside the rest of the plugin. "
-                + "Drag its corner to size it. What it shows is set here (Show..., Text size).");
+                + "Drag its corner to size it. What it shows is set by Show..., here or on the window itself.");
         }
 
         private void RenderArrowSettings() {
@@ -455,7 +557,7 @@ namespace DaraletPlayer.Ui {
             var height = Math.Min(results.Count, 6) * ImGui.GetTextLineHeightWithSpacing() + 6;
 
             if (!Widgets.BeginChild("world-search-results", new Vector2(0, height), true)) {
-                ImGui.EndChild();
+                Widgets.EndChild();
                 return;
             }
 
@@ -472,7 +574,7 @@ namespace DaraletPlayer.Ui {
                 Widgets.TextDisabled($"{MapView.TypeName(location.Type)}  {MapProjection.Format(location.X, location.Y)}  {location.Notes}");
             }
 
-            ImGui.EndChild();
+            Widgets.EndChild();
         }
 
         /// <summary>The right-click menu on the search result just drawn.</summary>

@@ -98,7 +98,7 @@ namespace DaraletPlayer.Ui {
             if (index == 0 || window.PoppedOut) {
                 var size = draggingSize ?? window.ClampedFontSize;
                 ImGui.SetNextItemWidth(Form.ControlWidth);
-                ImGui.SliderInt("##chat-font-size", ref size, ChatWindowSettings.MinFontSize, ChatWindowSettings.MaxFontSize,
+                Sliders.SliderInt("##chat-font-size", ref size, ChatWindowSettings.MinFontSize, ChatWindowSettings.MaxFontSize,
                     "%d px");
 
                 // applied once let go: each size is a font of its own, and every step of a drag would make one

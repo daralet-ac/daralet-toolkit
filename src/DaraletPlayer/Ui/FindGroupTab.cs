@@ -78,6 +78,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             Form.Section("LFG chat");
 
             if (Form.Check("Join and Invite links", ref settings.Data.LfgChatLinks, "Puts a link on each /lfgroup and /lfmore "
@@ -188,18 +190,18 @@ namespace DaraletPlayer.Ui {
             var capstones = lfg.Capstones ?? new List<LfgCapstoneInfo>();
             var chosen = capstones.FirstOrDefault(c => c.Short == choice.Capstone);
 
-            if (ImGui.BeginCombo("##lfg-capstone", chosen == null ? "Any capstone" : Label(chosen))) {
-                if (ImGui.Selectable("Any capstone", chosen == null)) {
+            if (Combos.Begin("##lfg-capstone", chosen == null ? "Any capstone" : Label(chosen))) {
+                if (Combos.Item("Any capstone", chosen == null)) {
                     choice.Capstone = "";
                 }
 
                 foreach (var capstone in capstones.OrderBy(c => c.Level).ThenBy(c => c.Name)) {
-                    if (ImGui.Selectable(Label(capstone), capstone == chosen)) {
+                    if (Combos.Item(Label(capstone), capstone == chosen)) {
                         choice.Capstone = capstone.Short;
                     }
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
 
             if (chosen == null) {

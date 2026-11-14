@@ -43,6 +43,7 @@ namespace DaraletPlayer.Ui {
         // the vendor window's tabs (a UIElement_Panel, element type 8), its Selling tab, and the Selling page's list of
         // 32-pixel slots, in its layout 0x21000012
         public const uint VendorTabs = 0x100000B8;
+        public const uint VendorBuyingTab = 0x100000BA;
         public const uint VendorSellingTab = 0x100000BB;
         public const uint VendorSellingList = 0x100000CE;
 
@@ -55,6 +56,7 @@ namespace DaraletPlayer.Ui {
             0x10000505, 0x1000050E, 0x1000050F, 0x10000510, // floating chat windows
             0x100005F7, // examination (the selected object's bar)
             0x100005FA, // vitals
+            0x100006D5, // vitals in a row (the bars side by side)
             Environment,
             PanelFrame,
             0x10000601, // main chat
@@ -465,6 +467,54 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
+        /// The id of the game's panel open now (the ids the toolbar's buttons carry in their property 0x10000029: 7 the
+        /// inventory, 0xA options, 0xB attributes and skills, 0xC social, 0xD the spellbook, 0x10 the map, 0x19 contracts),
+        /// or 0 when none is or it can't be told.
+        /// </summary>
+        public static unsafe uint OpenGamePanel() {
+            if (broken) {
+                return 0;
+            }
+
+            try {
+                var frame = (byte*)FindElement(PanelFrame);
+
+                if (frame == null || !IsVisible(frame)
+                    || ((delegate* unmanaged[Thiscall]<void*, uint, void*>)(*(void***)frame)[0x94 / 4])(frame,
+                        PanelUiType) != frame) {
+                    return 0;
+                }
+
+                return OpenPanelId(frame + PanelNoticeOffset);
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's panels can't be reached, so the plugin's lookups are off until it next starts: " + ex);
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Opens or closes one of the game's panels, as its toolbar button does: CM_UI::SendNotice_SetPanelVisibility (static,
+        /// 0x47A4A0). False when the call fails.
+        /// </summary>
+        public static unsafe bool SetGamePanel(uint id, bool open) {
+            if (broken) {
+                return false;
+            }
+
+            try {
+                ((delegate* unmanaged[Cdecl]<uint, byte, byte>)0x47A4A0)(id, (byte)(open ? 1 : 0));
+                return true;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's panels can't be reached, so the plugin's lookups are off until it next starts: " + ex);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// The id of the panel open in gmPanelUI (its notice handler, as gmPanelUI::RecvNotice_SetPanelVisibility reads
         /// it: the panels as (element, id) pairs, a SmartArray at +0x4 with its count at +0xC, and the open one at +0x10),
         /// or 0.
@@ -593,6 +643,26 @@ namespace DaraletPlayer.Ui {
                 broken = true;
                 PluginCore.Log("The game's UI can't be changed, so the plugin's lookups are off until it next starts: " + ex);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// The state the element is drawn in now (UIElement.m_state, +0x400, which UIElement::SetState, 0x464FA0, sets:
+        /// the indicators' lit, dim and link states), or null when there's no such element or it can't be read.
+        /// </summary>
+        public static unsafe uint? GetState(uint id) {
+            if (broken) {
+                return null;
+            }
+
+            try {
+                var element = (byte*)FindElement(id);
+                return element == null ? (uint?)null : *(uint*)(element + 0x400);
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be found, so the plugin's lookups are off until it next starts: " + ex);
+                return null;
             }
         }
 

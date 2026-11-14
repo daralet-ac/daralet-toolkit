@@ -144,7 +144,8 @@ namespace DaraletPlayer.Ui {
             return DrawArt(drawList, name, at, new Vector2(size, size));
         }
 
-        public bool DrawArt(ImDrawListPtr drawList, string name, Vector2 at, Vector2 size) {
+        /// <param name="tint">Multiplies the picture: white for itself, less alpha for fainter.</param>
+        public bool DrawArt(ImDrawListPtr drawList, string name, Vector2 at, Vector2 size, uint tint = 0xFFFFFFFF) {
             if (disposed) {
                 return false;
             }
@@ -155,7 +156,7 @@ namespace DaraletPlayer.Ui {
                 art[name] = texture;
             }
 
-            AddImage(drawList, texture, at, at + size);
+            AddImage(drawList, texture, at, at + size, tint);
             return texture != null;
         }
 

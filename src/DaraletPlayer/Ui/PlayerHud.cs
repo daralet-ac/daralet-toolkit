@@ -30,7 +30,11 @@ namespace DaraletPlayer.Ui {
         private readonly LootTab lootTab;
         private readonly LeaderboardsTab leaderboardsTab;
         private readonly SharedWindow sharedWindow;
+
+        /// <summary>The item, creature and spell appraisal windows, sharing one window.</summary>
+        private AppraisalGroup appraisalGroup;
         private readonly GameHotbar gameHotbar;
+        private readonly GamePanels gamePanels;
         private readonly ToolbarButtons toolbarButtons;
         private readonly HideGameUi hideGameUi;
         private readonly EscapeCloses escapeCloses;
@@ -53,7 +57,9 @@ namespace DaraletPlayer.Ui {
             ItemUser.Icons = icons;
 
             socialTab = new SocialTab(feed, settings, icons);
-            combatTab = new CombatTab(feed, settings, icons);
+            // before the Combat tab, whose Bars has their settings
+            gamePanels = new GamePanels(settings, icons, feed);
+            combatTab = new CombatTab(feed, settings, icons, gamePanels);
             // after the combat tab, whose combat log keeps lines out of chat: the chat windows read chat after it has
             chatWindows = new ChatWindows(feed, settings, icons);
             chatTab = new ChatTab(chatWindows, settings);
@@ -70,21 +76,56 @@ namespace DaraletPlayer.Ui {
             gameHotbar = new GameHotbar(settings);
             borderless = new BorderlessWindow(settings);
             sharedWindow = new SharedWindow(settings, inventoryTab.CarriedWindow, worldTab.MapWindow, socialTab.Window,
-                questsTab.Window, characterTab.Window);
-            configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow, sharedWindow),
-                hideGameUi, launcher, borderless);
+                questsTab.Window, characterTab.Window,
+                ("attributes", "Attributes", gamePanels.Get<AttributesPanel>().Window),
+                ("spellbook", "Spellbook", gamePanels.Get<SpellbookPanel>().Window),
+                ("options", "Options", gamePanels.Get<OptionsPanel>().Window),
+                ("buffs", "Buffs", gamePanels.Get("buffs").Window),
+                ("debuffs", "Debuffs", gamePanels.Get("debuffs").Window),
+                ("vitae", "Vitae", gamePanels.Get("vitae").Window));
+            configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow, sharedWindow,
+                gamePanels), hideGameUi, launcher, borderless);
             leaderboardsTab = new LeaderboardsTab(feed, api);
             toolbarButtons = new ToolbarButtons(settings, icons, inventoryTab.CarriedWindow, questsTab.Window,
                 worldTab.MapWindow, characterTab.Window, socialTab.Window);
+            // its buttons open these where Client UI Override's toolbar buttons say so, so it comes after them
+            var attributes = gamePanels.Get<AttributesPanel>();
+            var spellbook = gamePanels.Get<SpellbookPanel>();
+            var options = gamePanels.Get<OptionsPanel>();
+            gamePanels.Add(new ToolbarPanel(settings, feed, new Dictionary<string, (Func<bool>, FloatingWindow)> {
+                ["inventory"] = (() => settings.Data.ToolbarInventory, inventoryTab.CarriedWindow),
+                ["quests"] = (() => settings.Data.ToolbarQuests, questsTab.Window),
+                ["social"] = (() => settings.Data.ToolbarSocial, socialTab.Window),
+                ["map"] = (() => settings.Data.ToolbarMap, worldTab.MapWindow),
+                ["attributes"] = (() => attributes.Options.Replace, attributes.Window),
+                ["spellbook"] = (() => spellbook.Options.Replace, spellbook.Window),
+                ["options"] = (() => options.Options.Replace, options.Window),
+            }));
+
+            // Attach to toolbar goes on the plugin's Toolbar window while it stands in for the game's
+            var toolbarPanel = gamePanels.Get<ToolbarPanel>();
+            sharedWindow.PluginToolbar = () => toolbarPanel.Options.Replace ? toolbarPanel.Window : null;
+            // each indicator opens its window where it takes the game's panel's place
+            gamePanels.Add(new IndicatorsPanel(settings, new Dictionary<string, (Func<bool>, FloatingWindow)> {
+                [IndicatorOptions.Burden] = (() => settings.Data.ToolbarCharacter, characterTab.Window),
+                [IndicatorOptions.Buffs] = (() => gamePanels.Get("buffs").Options.Replace, gamePanels.Get("buffs").Window),
+                [IndicatorOptions.Debuffs] = (() => gamePanels.Get("debuffs").Options.Replace,
+                    gamePanels.Get("debuffs").Window),
+                [IndicatorOptions.Vitae] = (() => gamePanels.Get("vitae").Options.Replace, gamePanels.Get("vitae").Window),
+            }));
             // the hud is made below: these read the field when called
             escapeCloses = new EscapeCloses(settings, () => hud.Visible, () => hud.Visible = false,
                 inventoryTab.CarriedWindow, inventoryTab.BankWindow, characterTab.Window, questsTab.Window);
 
             Appraisal.Start(feed, settings, icons);
+            appraisalGroup = new AppraisalGroup(settings, Appraisal.FirstWindow,
+                gamePanels.Get<CreatureAppraisalPanel>()?.Window, gamePanels.Get<SpellbookPanel>()?.Appraisal.Window);
             ItemTooltip.Scale = () => settings.Data.ClampedItemTextScale;
             Panes.Settings = settings;
             Widgets.RetailBars = () => settings.Data.RetailVitalBars;
             Widgets.BoldVitals = () => settings.Data.BoldVitalText;
+            Widgets.TooltipsHidden = () => settings.Data.TooltipsNeedAlt
+                && !Hotkeys.IsDown(settings.Data.TooltipKey != 0 ? settings.Data.TooltipKey : Keys.Alt);
 
             tabs = new List<(string, string, Action)> {
                 ("Config", "Settings profiles: every setting of the plugin's as a set each character picks from, saved to "
@@ -198,6 +239,9 @@ namespace DaraletPlayer.Ui {
 
                     ImGui.EndTabBar();
                 }
+
+                // the game's scroll bar over the window's own, if it has one
+                Scrollbars.Draw();
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
@@ -312,12 +356,14 @@ namespace DaraletPlayer.Ui {
                 GameDrag.Stop();
                 CursorKeeper.Stop();
                 KeyReleases.Stop();
+                appraisalGroup?.Dispose();
                 Appraisal.Stop();
                 ItemUser.Icons = null;
                 ItemTooltip.Scale = () => 1;
                 Panes.Settings = null;
                 Widgets.RetailBars = () => false;
                 Widgets.BoldVitals = () => false;
+                Widgets.TooltipsHidden = () => false;
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
@@ -325,7 +371,8 @@ namespace DaraletPlayer.Ui {
 
             // the game's UI back first, whatever fails after
             var pieces = new IDisposable[] {
-                hideGameUi, borderless, escapeCloses, launcher, hud, toolbarButtons, sharedWindow, gameHotbar, chatWindows, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
+                hideGameUi, borderless, escapeCloses, launcher, hud, toolbarButtons, sharedWindow, gameHotbar, gamePanels,
+                chatWindows, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
                 lootTab, api, icons,
             };
 

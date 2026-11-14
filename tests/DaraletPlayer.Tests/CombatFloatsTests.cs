@@ -191,15 +191,22 @@ namespace DaraletPlayer.Tests {
 
         [TestMethod]
         public void AWindowAsBigAsTheScreenGoesExactlyOverIt() {
-            Assert.AreEqual((0, 0), BorderlessPlacement.Place(8, 31, 1920, 1080, 0, 0, 1920, 1080));
-            Assert.AreEqual((1920, 0), BorderlessPlacement.Place(1928, 31, 1920, 1080, 1920, 0, 1920, 1080), "a second screen");
+            Assert.AreEqual((0, 0, 1920, 1080), BorderlessPlacement.Place(8, 31, 1920, 1080, 0, 0, 1920, 1080));
+            Assert.AreEqual((1920, 0, 1920, 1080), BorderlessPlacement.Place(1928, 31, 1920, 1080, 1920, 0, 1920, 1080),
+                "a second screen");
+        }
+
+        [TestMethod]
+        public void AWindowWindowsSqueezedFillsTheScreen() {
+            Assert.AreEqual((0, 0, 2560, 1440), BorderlessPlacement.Place(0, 9, 2560, 1431, 0, 0, 2560, 1440),
+                "kept shorter than the screen by its title bar");
         }
 
         [TestMethod]
         public void ASmallerWindowStaysPutButOnScreen() {
-            Assert.AreEqual((100, 200), BorderlessPlacement.Place(100, 200, 800, 600, 0, 0, 1920, 1080));
-            Assert.AreEqual((0, 0), BorderlessPlacement.Place(-50, -20, 800, 600, 0, 0, 1920, 1080));
-            Assert.AreEqual((1120, 480), BorderlessPlacement.Place(1500, 700, 800, 600, 0, 0, 1920, 1080));
+            Assert.AreEqual((100, 200, 800, 600), BorderlessPlacement.Place(100, 200, 800, 600, 0, 0, 1920, 1080));
+            Assert.AreEqual((0, 0, 800, 600), BorderlessPlacement.Place(-50, -20, 800, 600, 0, 0, 1920, 1080));
+            Assert.AreEqual((1120, 480, 800, 600), BorderlessPlacement.Place(1500, 700, 800, 600, 0, 0, 1920, 1080));
         }
 
         [TestMethod]

@@ -166,6 +166,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             if (banking) {
                 Form.Columns("inventory-settings-grid", RenderCarriedWindowSettings, RenderBankWindowSettings);
             }

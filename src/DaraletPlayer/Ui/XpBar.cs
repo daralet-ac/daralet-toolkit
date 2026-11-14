@@ -161,6 +161,7 @@ namespace DaraletPlayer.Ui {
 
             DrawBar(xp, total, rested, options.Compact);
             Widgets.Tip(string.Join("\n", Lines(xp, total, rested)));
+            RenderWidthGrips();
 
             // Compact is the bar alone: everything else is in its tooltip
             if (options.Compact) {

@@ -230,7 +230,7 @@ namespace DaraletPlayer.Ui {
                     }
                 }
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
 
             if (leftMarkedForSale > 0) {
                 Widgets.TextDisabled($"{Words.Count(leftMarkedForSale, "item")} marked for sale left alone.");

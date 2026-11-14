@@ -50,7 +50,7 @@ namespace DaraletPlayer.Ui {
                 RenderList();
             }
 
-            ImGui.EndChild();
+            Widgets.EndChild();
             ImGui.SameLine(0, 0);
             Panes.Divider("hotbar-list", true, listWidth, avail, em * 7, em * 20, "Drag to widen or narrow the list of bars.");
             ImGui.SameLine(0, 0);
@@ -59,7 +59,7 @@ namespace DaraletPlayer.Ui {
                 RenderSelected();
             }
 
-            ImGui.EndChild();
+            Widgets.EndChild();
         }
 
         // ---- the left: the bars, and arranging them ----
@@ -201,7 +201,8 @@ namespace DaraletPlayer.Ui {
             if (ImGui.Checkbox("Locked", ref locked)) {
                 window.Window.Locked = locked;
             }
-            Widgets.Tip("A locked bar has no title bar and can't be dragged around the screen. Its slots stay put either way, unless Move slots is on.");
+            Widgets.Tip("A locked bar has no title bar and can't be dragged around the screen, except with Ctrl held: "
+                + "hold Ctrl and drag it from any slot. Its slots stay put either way, unless Move slots is on.");
 
             var moreWidth = ImGui.CalcTextSize("More").X + ImGui.GetStyle().FramePadding.X * 2;
             ImGui.SameLine(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowContentRegionMax().X - moreWidth));

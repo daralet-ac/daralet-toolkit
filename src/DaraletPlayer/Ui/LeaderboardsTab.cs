@@ -43,7 +43,7 @@ namespace DaraletPlayer.Ui {
                     Widgets.Tip(Leaderboards.All[i].Tip);
                 }
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
 
             ImGui.SameLine(0, 0);
             Panes.Divider("leaderboard-list", true, width, avail, em * 6, em * 15,
@@ -53,7 +53,7 @@ namespace DaraletPlayer.Ui {
             if (Widgets.BeginChild("leaderboard-board", new Vector2(0, 0), false)) {
                 RenderBoard(Leaderboards.All[selected]);
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
         }
 
         private void RenderBoard(LeaderboardDefinition board) {
@@ -192,7 +192,7 @@ namespace DaraletPlayer.Ui {
                 }
             }
 
-            ImGui.EndTable();
+            Widgets.EndScrollingTable();
         }
 
         /// <summary>Whether a row has a name (a character's, or a creature's) with the search in it.</summary>

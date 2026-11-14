@@ -111,7 +111,7 @@ namespace DaraletPlayer.Ui {
         /// The backpack takes an item dropped on it into the main pack, as the game's does. Not a pack: packs only go in
         /// pack slots.
         /// </summary>
-        private static void PutInMainPack(int id) {
+        internal static void PutInMainPack(int id) {
             var item = CoreManager.Current.WorldFilter[id];
             var me = CoreManager.Current.CharacterFilter.Id;
 

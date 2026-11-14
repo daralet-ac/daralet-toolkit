@@ -218,7 +218,7 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Empties this window. Files already saved aren't touched.");
 
             if (!Widgets.BeginChild("combat-log-lines", Vector2.Zero, true)) {
-                ImGui.EndChild();
+                Widgets.EndChild();
                 return;
             }
 
@@ -248,7 +248,7 @@ namespace DaraletPlayer.Ui {
                 ImGui.SetScrollHereY(1);
             }
 
-            ImGui.EndChild();
+            Widgets.EndChild();
         }
 
         private bool Shows(CombatLine line) {

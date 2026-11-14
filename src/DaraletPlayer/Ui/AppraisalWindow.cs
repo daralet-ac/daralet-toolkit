@@ -68,6 +68,8 @@ namespace DaraletPlayer.Ui {
             window.Visible = true;
         }
 
+        public FloatingWindow Window => window;
+
         /// <summary>Whether it's showing an item: a window that isn't can take the next Appraise in new window.</summary>
         public bool InUse => guid != 0;
 
@@ -346,6 +348,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             if (equipped.Count == 0) {
                 Widgets.TextDisabled("You're wearing nothing where this goes.");
                 return;
@@ -386,14 +390,14 @@ namespace DaraletPlayer.Ui {
         private void RenderCompareChoice(List<uint> equipped) {
             ImGui.SetNextItemWidth(ImGui.GetFontSize() * 16);
 
-            if (ImGui.BeginCombo($"##compare-with-{guid}", WornName(compareWith))) {
+            if (Combos.Begin($"##compare-with-{guid}", WornName(compareWith))) {
                 foreach (var choice in equipped) {
-                    if (ImGui.Selectable($"{WornName(choice)}##worn-{choice}", choice == compareWith)) {
+                    if (Combos.Item($"{WornName(choice)}##worn-{choice}", choice == compareWith)) {
                         compareWith = choice;
                     }
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
             Widgets.Tip("This would replace more than one thing you're wearing: which to compare it with.");
         }

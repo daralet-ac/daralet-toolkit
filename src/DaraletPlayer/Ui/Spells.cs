@@ -23,6 +23,18 @@ namespace DaraletPlayer.Ui {
         /// <summary>What it's cast on (the game's ItemType bits); none for a spell with no target, a ring or a wall.</summary>
         public uint TargetType;
         public uint Mana;
+        /// <summary>The spell table's power, which its level goes by (SpellLevels.Level), and how long it lasts in seconds.</summary>
+        public uint Power;
+        public double Duration;
+        /// <summary>Its range in meters by the caster's skill in its school: RangeMod times it plus RangeConstant.</summary>
+        public float RangeConstant;
+        public float RangeMod;
+        /// <summary>The mana each fellow past the first adds (a fellowship spell), 0 for none.</summary>
+        public uint ManaMod;
+        /// <summary>Its components, by spell component table id (UBService.PortalDat.SpellComponentsTable).</summary>
+        public List<uint> Components = new List<uint>();
+
+        public int Level => SpellLevels.Level(Power, Components);
 
         public bool Untargeted => TargetType == 0;
         public bool SelfOnly => (Flags & SelfTargetedFlag) != 0;
@@ -66,6 +78,12 @@ namespace DaraletPlayer.Ui {
                     Flags = Get<uint>(entry, "Bitfield"),
                     TargetType = Get<uint>(entry, "NonComponentTargetType"),
                     Mana = Get<uint>(entry, "BaseMana"),
+                    Power = Get<uint>(entry, "Power"),
+                    Duration = Get<double>(entry, "Duration"),
+                    RangeConstant = Get<float>(entry, "BaseRangeConstant"),
+                    RangeMod = Get<float>(entry, "BaseRangeMod"),
+                    ManaMod = Get<uint>(entry, "ManaMod"),
+                    Components = (Get<IEnumerable>(entry, "Formula") ?? new uint[0]).OfType<uint>().Where(c => c != 0).ToList(),
                 };
 
                 infos[id] = info;

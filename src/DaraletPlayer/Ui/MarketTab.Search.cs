@@ -24,6 +24,7 @@ namespace DaraletPlayer.Ui {
             RenderSearchBar();
 
             if (ImGui.CollapsingHeader("Filters###market-filters")) {
+                using var fold = Form.Folded();
                 RenderFilters();
             }
 
@@ -191,7 +192,7 @@ namespace DaraletPlayer.Ui {
                 Widgets.TextDisabled(MarketSearch.ExpiresIn(listing.ExpiresAtUtc, now));
             }
 
-            ImGui.EndTable();
+            Widgets.EndScrollingTable();
         }
 
         private void RenderPager(int totalCount) {

@@ -203,7 +203,7 @@ namespace DaraletPlayer.Ui {
             Form.Label("Lines kept", "How many lines of chat are kept, every window together. The oldest go first.");
             var kept = draggingHistory ?? Data.ClampedHistory;
             ImGui.SetNextItemWidth(Form.ControlWidth);
-            ImGui.SliderInt("##chat-history", ref kept, ChatSettings.MinHistory, ChatSettings.MaxHistory, "%d lines");
+            Sliders.SliderInt("##chat-history", ref kept, ChatSettings.MinHistory, ChatSettings.MaxHistory, "%d lines");
 
             if (ImGui.IsItemActive()) {
                 draggingHistory = kept;
@@ -223,14 +223,14 @@ namespace DaraletPlayer.Ui {
             var current = string.IsNullOrEmpty(Data.Font) ? $"UtilityBelt's ({ub ?? "its own"})" : Data.Font;
             ImGui.SetNextItemWidth(Form.ControlWidth);
 
-            if (!ImGui.BeginCombo("##chat-font", current)) {
+            if (!Combos.Begin("##chat-font", current)) {
                 return;
             }
 
             ImGui.SetNextItemWidth(ImGui.GetFontSize() * 10);
             ImGui.InputTextWithHint("##chat-font-find", "Find...", ref fontFilter, 40);
 
-            if (ImGui.Selectable($"UtilityBelt's ({ub ?? "its own"})", string.IsNullOrEmpty(Data.Font))) {
+            if (Combos.Item($"UtilityBelt's ({ub ?? "its own"})", string.IsNullOrEmpty(Data.Font))) {
                 Data.Font = "";
                 settings.Changed();
             }
@@ -240,13 +240,13 @@ namespace DaraletPlayer.Ui {
                     continue;
                 }
 
-                if (ImGui.Selectable(family, string.Equals(family, Data.Font, StringComparison.OrdinalIgnoreCase))) {
+                if (Combos.Item(family, string.Equals(family, Data.Font, StringComparison.OrdinalIgnoreCase))) {
                     Data.Font = family;
                     settings.Changed();
                 }
             }
 
-            ImGui.EndCombo();
+            Combos.End();
         }
 
         private void RenderUnread() {

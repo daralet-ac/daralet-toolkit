@@ -21,8 +21,21 @@ namespace DaraletPlayer.Ui {
         /// <summary>Whether vital bars' numbers are drawn bold (SettingsData.BoldVitalText), set by PlayerHud.</summary>
         public static Func<bool> BoldVitals = () => false;
 
+        /// <summary>
+        /// Whether tooltips are kept out of sight now: set to show only while a key's held (SettingsData.TooltipsNeedAlt,
+        /// TooltipKey) and it isn't. Set by PlayerHud.
+        /// </summary>
+        public static Func<bool> TooltipsHidden = () => false;
+
         /// <summary>How far the second copy of bold text is drawn from the first.</summary>
         private static readonly Vector2 BoldShift = new Vector2(1, 0);
+
+        /// <summary>
+        /// Where each open child's (or scrolling table's) parent could draw as it began, innermost on top: the game's scroll
+        /// bar over the child's is cut to it (Scrollbars.Draw), as ImGui's own is, or one out past the window showed.
+        /// </summary>
+        private static readonly System.Collections.Generic.Stack<(Vector2 Min, Vector2 Max)> scrollClips =
+            new System.Collections.Generic.Stack<(Vector2 Min, Vector2 Max)>();
 
         // the numbers on a Retail bar: white, with a black outline (packed by hand: ImGui has no context yet here)
         private const uint BarText = 0xFFFFFFFF;
@@ -94,9 +107,17 @@ namespace DaraletPlayer.Ui {
         /// which ImGui draws at the font's own size, whatever the Text size or the window's size. extraScale goes on top (the
         /// Loot tab's Item details size, for item tooltips).
         /// </summary>
-        public static void BeginTooltip(float extraScale = 1) {
+        /// <param name="always">Shown whatever Tooltips only while holding says (that setting's own tooltip).</param>
+        public static void BeginTooltip(float extraScale = 1, bool always = false) {
             var font = ImGui.GetFont();
             var scale = ImGui.GetFontSize() / (font.FontSize * font.Scale * ImGui.GetIO().FontGlobalScale) * extraScale;
+
+            // Tooltips only with their key held (SettingsData.TooltipsNeedAlt): without it the tooltip is begun far off the
+            // screen, so it's never seen. It's still begun, since every caller draws into it and ends it itself.
+            if (!always && TooltipsHidden()) {
+                ImGui.SetNextWindowPos(new Vector2(-100000, -100000));
+            }
+
             ImGui.BeginTooltip();
             ImGui.SetWindowFontScale(scale);
         }
@@ -118,6 +139,7 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         public static bool BeginChild(string id, Vector2 size, bool border, ImGuiWindowFlags flags = ImGuiWindowFlags.None) {
             var parentSize = ImGui.GetFontSize();
+            PushScrollClip();
             var open = ImGui.BeginChild(id, size, border, flags);
 
             // the child is the current window even when it's clipped and BeginChild says false
@@ -126,15 +148,47 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
+        /// ImGui.EndChild, after the game's scroll bar over the child's (Scrollbars.Draw). Every child begun with BeginChild
+        /// ends here.
+        /// </summary>
+        public static void EndChild() {
+            Scrollbars.Draw(PopScrollClip());
+            ImGui.EndChild();
+        }
+
+        /// <summary>ImGui.EndTable for a table that scrolls (ScrollY), after the game's scroll bar over its own.</summary>
+        public static void EndScrollingTable() {
+            Scrollbars.Draw(PopScrollClip());
+            ImGui.EndTable();
+        }
+
+        /// <summary>Notes where the current window can draw, for the child about to begin in it.</summary>
+        private static void PushScrollClip() {
+            var drawList = ImGui.GetWindowDrawList();
+            scrollClips.Push((drawList.GetClipRectMin(), drawList.GetClipRectMax()));
+        }
+
+        /// <summary>Where the ending child's parent could draw, or null if it wasn't noted.</summary>
+        private static (Vector2 Min, Vector2 Max)? PopScrollClip() {
+            return scrollClips.Count > 0 ? scrollClips.Pop() : ((Vector2, Vector2)?)null;
+        }
+
+        /// <summary>
         /// ImGui.BeginTable, with the text as big as the window it's in: a table that scrolls is a child window of its own
         /// (see BeginChild). One that doesn't is drawn in the window itself, so nothing changes for it.
         /// </summary>
         public static bool BeginTable(string id, int columns, ImGuiTableFlags flags) {
             var parentSize = ImGui.GetFontSize();
+            var scrolls = (flags & (ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY)) != 0;
+            var drawList = ImGui.GetWindowDrawList();
+            var clip = (drawList.GetClipRectMin(), drawList.GetClipRectMax());
             var open = ImGui.BeginTable(id, columns, flags);
 
-            if (open && (flags & (ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY)) != 0) {
+            if (open && scrolls) {
                 MatchFontSize(parentSize);
+
+                // one that scrolls ends with EndScrollingTable, which takes this back
+                scrollClips.Push(clip);
             }
 
             return open;
@@ -300,17 +354,17 @@ namespace DaraletPlayer.Ui {
             var label = options.FirstOrDefault(o => Equals(o.Value, current)).Label ?? options[0].Label;
             var changed = false;
 
-            if (ImGui.BeginCombo(id, label)) {
+            if (Combos.Begin(id, label)) {
                 foreach (var option in options) {
                     var chosen = Equals(option.Value, current);
 
-                    if (ImGui.Selectable(option.Label, chosen)) {
+                    if (Combos.Item(option.Label, chosen)) {
                         changed = !chosen;
                         value = option.Value;
                     }
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
 
             return changed;
@@ -325,7 +379,7 @@ namespace DaraletPlayer.Ui {
             var labels = options.Where(o => ticked.Contains(o.Value)).Select(o => o.Label).ToList();
             var changed = false;
 
-            if (ImGui.BeginCombo(id, labels.Count == 0 ? "Any" : string.Join(", ", labels))) {
+            if (Combos.Begin(id, labels.Count == 0 ? "Any" : string.Join(", ", labels))) {
                 foreach (var option in options) {
                     var on = ticked.Contains(option.Value);
 
@@ -349,7 +403,7 @@ namespace DaraletPlayer.Ui {
                     }
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
 
             if (changed) {
@@ -432,7 +486,9 @@ namespace DaraletPlayer.Ui {
         /// A filled bar with text on it. In a vital's colour (Colors.Health, Stamina, Mana) with Retail bars on, it's drawn in
         /// the game's own art.
         /// </summary>
-        public static void Bar(float fraction, Vector4 color, string text, float width = BarWidth, float height = 0) {
+        /// <param name="retail">The game's art (true) or the plain bar (false) whatever Retail bars says; null follows it.</param>
+        public static void Bar(float fraction, Vector4 color, string text, float width = BarWidth, float height = 0,
+            bool? retail = null) {
             // never shorter than its text: a bigger font (the game's resolution, a font size setting) than the bar's height
             // was chosen for wrote each bar's numbers over the next
             if (height > 0) {
@@ -442,7 +498,7 @@ namespace DaraletPlayer.Ui {
             var vital = color == Colors.Health ? "health" : color == Colors.Stamina ? "stamina" : color == Colors.Mana ? "mana"
                 : null;
 
-            if (vital != null && RetailBars() && RetailBar(vital, fraction, text, width, height)) {
+            if (vital != null && (retail ?? RetailBars()) && RetailBar(vital, fraction, text, width, height)) {
                 return;
             }
 

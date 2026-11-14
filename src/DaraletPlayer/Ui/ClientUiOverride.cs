@@ -15,9 +15,12 @@ namespace DaraletPlayer.Ui {
         private readonly PlayerFeed feed;
         private readonly FloatingWindow corpseWindow;
         private readonly SharedWindow sharedWindow;
+        private readonly GamePanels gamePanels;
 
-        public ClientUiOverride(Settings settings, PlayerFeed feed, FloatingWindow corpseWindow, SharedWindow sharedWindow) {
+        public ClientUiOverride(Settings settings, PlayerFeed feed, FloatingWindow corpseWindow, SharedWindow sharedWindow,
+            GamePanels gamePanels) {
             this.sharedWindow = sharedWindow;
+            this.gamePanels = gamePanels;
             this.settings = settings;
             this.feed = feed;
             this.corpseWindow = corpseWindow;
@@ -29,11 +32,13 @@ namespace DaraletPlayer.Ui {
                 + "the game's, and clicking it opens the plugin's window instead of the game's panel; the game's own keys "
                 + "for those panels still open the game's. Bank window and Loot window have the server leave out the "
                 + "game's bank and corpse windows, so the plugin's open instead. Chat hides the game's chat windows for "
-                + "the plugin's (the Chat tab).");
+                + "the plugin's (the Chat tab). Vitals and the other game panels hide the game's own panel for a window "
+                + "of the plugin's, in the game's art or the plugin's theme (their settings: the Combat tab's Vitals and "
+                + "Combat Bars, and Game panels below).");
 
             RenderAllButtons();
 
-            // all nine in one row, wrapping only when the tab is too narrow
+            // all in one row, wrapping only when the tab is too narrow
             var first = true;
             ToolbarButtons.RenderToggles(ref first, settings);
             GameHotbar.RenderCheckbox(ref first, settings);
@@ -42,10 +47,17 @@ namespace DaraletPlayer.Ui {
             RenderBankWindow();
             Form.Flow(ref first, Form.CheckWidth("Loot window"));
             RenderLootWindow();
+            gamePanels.RenderToggles(ref first);
+
+            // on a row of its own, set apart by a line from the checkboxes above: the windows that share one place, as
+            // the game's panels do
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+            sharedWindow.RenderSettings();
             ImGui.Spacing();
 
-            // on a row of its own: the windows that share one place, as the game's panels do
-            sharedWindow.RenderSettings();
+            gamePanels.RenderSettings();
             ImGui.Spacing();
         }
 

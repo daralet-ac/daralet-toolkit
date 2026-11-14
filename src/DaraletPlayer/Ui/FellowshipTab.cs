@@ -188,6 +188,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             Form.Section("Fellowship window");
             window.RenderControls("A small window with each member's health, stamina and mana that stays on screen while "
                 + "you play. Click a name in it to select that member.");

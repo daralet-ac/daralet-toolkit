@@ -20,13 +20,25 @@ namespace DaraletPlayer.Feed {
         }
 
         /// <summary>
-        /// Where the window goes with its border off. The picture stays the same size, so the game has nothing to rebuild.
-        /// One as big as the screen goes exactly over it, which is what most people want this for; any other stays where
-        /// its picture was, kept on screen where it fits, since it's lost its title bar to drag it back by.
+        /// How much smaller than the screen a picture can be and still be taken for a game set to the screen's resolution:
+        /// Windows keeps a window with a border from being taller than the screen, so a 2560x1440 game's picture was
+        /// 2560x1431, and placed as it was it left a strip at the top and its picture, squeezed, ran short.
         /// </summary>
-        public static (int X, int Y) Place(int x, int y, int width, int height, int screenX, int screenY, int screenWidth,
-            int screenHeight) {
-            return (Along(x, width, screenX, screenWidth), Along(y, height, screenY, screenHeight));
+        public const int ScreenSlack = 64;
+
+        /// <summary>
+        /// Where the window goes with its border off, and its size. One as big as the screen, or nearly (ScreenSlack), goes
+        /// exactly over it, which is what most people want this for; any other keeps its picture's size, so the game has
+        /// nothing to rebuild, and stays where its picture was, kept on screen where it fits, since it's lost its title bar
+        /// to drag it back by.
+        /// </summary>
+        public static (int X, int Y, int Width, int Height) Place(int x, int y, int width, int height, int screenX,
+            int screenY, int screenWidth, int screenHeight) {
+            if (width >= screenWidth - ScreenSlack && height >= screenHeight - ScreenSlack) {
+                return (screenX, screenY, screenWidth, screenHeight);
+            }
+
+            return (Along(x, width, screenX, screenWidth), Along(y, height, screenY, screenHeight), width, height);
         }
 
         /// <summary>Where a window of this size is centred on the screen.</summary>

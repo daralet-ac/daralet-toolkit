@@ -77,10 +77,8 @@ namespace DaraletPlayer.Ui {
             oldStyle = style;
             oldExtendedStyle = extendedStyle;
 
-            var width = picture.Right - picture.Left;
-            var height = picture.Bottom - picture.Top;
-            var (x, y) = BorderlessPlacement.Place(picture.Left, picture.Top, width, height, screen.Left, screen.Top,
-                screen.Right - screen.Left, screen.Bottom - screen.Top);
+            var (x, y, width, height) = BorderlessPlacement.Place(picture.Left, picture.Top, picture.Right - picture.Left,
+                picture.Bottom - picture.Top, screen.Left, screen.Top, screen.Right - screen.Left, screen.Bottom - screen.Top);
 
             SetWindowLong(window, GWL_STYLE, (int)BorderlessPlacement.WithoutBorder(style));
             SetWindowLong(window, GWL_EXSTYLE, (int)BorderlessPlacement.WithoutEdges(extendedStyle));

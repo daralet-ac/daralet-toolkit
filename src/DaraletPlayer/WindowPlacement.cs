@@ -14,8 +14,14 @@ namespace DaraletPlayer {
         [DataMember(Name = "width")] public float? Width;
         [DataMember(Name = "height")] public float? Height;
         [DataMember(Name = "visible")] public bool Visible;
-        /// <summary>No title bar, and can't be dragged.</summary>
+        /// <summary>Can't be dragged by its top edge or sized, only moved with Ctrl held.</summary>
         [DataMember(Name = "locked")] public bool Locked;
+
+        /// <summary>
+        /// Placed since windows lost their title bars (FloatingWindow.UpgradeFromTitleBar): false in settings from before,
+        /// where an unlocked window's place and height counted one.
+        /// </summary>
+        [DataMember(Name = "noTitleBar")] public bool NoTitleBar;
         /// <summary>How big the window's text and bars are drawn: 1 is normal size.</summary>
         [DataMember(Name = "scale")] public float Scale;
         /// <summary>Shown only while it has something to show (Only when needed).</summary>

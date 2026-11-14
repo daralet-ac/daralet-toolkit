@@ -62,7 +62,7 @@ namespace DaraletPlayer.Ui {
 
             splitAmount = Math.Max(1, Math.Min(stack - 1, splitAmount));
             ImGui.SetNextItemWidth(Math.Max(200, ImGui.CalcTextSize("0000000").X * 3));
-            ImGui.SliderInt("##split-amount", ref splitAmount, 1, stack - 1);
+            Sliders.SliderInt("##split-amount", ref splitAmount, 1, stack - 1);
             Widgets.Tip("How many to take off. Ctrl+click to type a number.");
             PlaceOverMouse();
 

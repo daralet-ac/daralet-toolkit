@@ -48,7 +48,7 @@ namespace DaraletPlayer.Ui {
         private void RenderLines(Vector2 size) {
             // NoMove: a drag over the lines, with nothing there to take it, would move the whole window
             if (!Widgets.BeginChild($"chat-lines-{index}", size, false, ImGuiWindowFlags.NoMove)) {
-                ImGui.EndChild();
+                Widgets.EndChild();
                 return;
             }
 
@@ -57,7 +57,7 @@ namespace DaraletPlayer.Ui {
                 RenderLineMenu();
             }
             finally {
-                ImGui.EndChild();
+                Widgets.EndChild();
             }
         }
 

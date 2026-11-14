@@ -62,6 +62,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             Form.Columns("character-settings-grid", RenderCharacterWindowSettings, xpBar.RenderControls);
             ImGui.Spacing();
         }
@@ -75,7 +77,7 @@ namespace DaraletPlayer.Ui {
         /// <summary>What the game's Character Information panel says, then the stats: the tab's and the window's.</summary>
         private void RenderContents() {
             if (!Widgets.BeginChild("character-contents", Vector2.Zero, false)) {
-                ImGui.EndChild();
+                Widgets.EndChild();
                 return;
             }
 
@@ -89,7 +91,7 @@ namespace DaraletPlayer.Ui {
             ImGui.Spacing();
             RenderStats();
 
-            ImGui.EndChild();
+            Widgets.EndChild();
         }
 
         private void RenderRetail() {

@@ -42,7 +42,7 @@ namespace DaraletPlayer.Ui {
                 RenderMembers(members, fellowship, selected, barSize);
             }
 
-            ImGui.EndChild();
+            Widgets.EndChild();
         }
 
         /// <summary>Tabs of Page size members each; a tab with someone badly hurt on it is red.</summary>

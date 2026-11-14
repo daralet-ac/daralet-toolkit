@@ -70,7 +70,7 @@ namespace DaraletPlayer.Ui {
             var width = data.TargetBarWidth;
             ImGui.SetNextItemWidth(ImGui.GetFontSize() * 8);
 
-            if (ImGui.SliderInt($"Bar width##{id}-menu-bar-width", ref width, MinBarWidth, MaxBarWidth, "%d px")) {
+            if (Sliders.SliderInt($"Bar width##{id}-menu-bar-width", ref width, MinBarWidth, MaxBarWidth, "%d px")) {
                 data.TargetBarWidth = width;
                 changed = true;
             }
@@ -117,6 +117,7 @@ namespace DaraletPlayer.Ui {
                 ImGui.Spacing();
 
                 if (ImGui.CollapsingHeader($"Tracked: {TrackedName()}###tracked-header", ImGuiTreeNodeFlags.DefaultOpen)) {
+                    using var fold = Form.Folded();
                     RenderFull(tracker.Tracked);
                 }
             }
@@ -149,6 +150,8 @@ namespace DaraletPlayer.Ui {
                 + "background, and what they show.")) {
                 return;
             }
+
+            using var fold = Form.Folded();
 
             Form.Columns("target-settings-grid", RenderTargetWindowSettings, RenderTrackedWindowSettings,
                 RenderShownSettings);
@@ -405,7 +408,7 @@ namespace DaraletPlayer.Ui {
 
             if (tracker.Tracked == 0) {
                 Widgets.TextDisabled("Nothing tracked");
-                Widgets.Tip("Select a monster and press Track in the Target window or the Target tab.");
+                Widgets.Tip("Select a monster and press Track in the Target window or the Combat tab's Vitals.");
                 return;
             }
 

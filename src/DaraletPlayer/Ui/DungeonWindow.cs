@@ -42,6 +42,17 @@ namespace DaraletPlayer.Ui {
 
         public FloatingWindow Window => window;
 
+        /// <summary>Whether you're indoors, where there's a dungeon map to show (Only when needed's test).</summary>
+        public static bool IsIndoors => Indoors() != null;
+
+        /// <summary>
+        /// The dungeon map, its buttons and all, in whatever's being drawn now (the Map window's top, in a child of its
+        /// own): the same as the window's, filling the room it's given.
+        /// </summary>
+        public void RenderEmbedded() {
+            Render();
+        }
+
         private static bool LoggedIn => CoreManager.Current.CharacterFilter.LoginStatus == 3;
 
         private static string Character => CoreManager.Current.CharacterFilter.Name;

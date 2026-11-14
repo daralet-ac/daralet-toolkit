@@ -126,6 +126,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             Form.Section("Corpse window");
             corpseWindow.RenderControls("Whether the Corpse window opens at all. When on, it opens by itself when you open "
                 + "a corpse or chest it has something to show for (with Loot window on, every one) and goes when that "
@@ -158,7 +160,7 @@ namespace DaraletPlayer.Ui {
             var reset = ImGui.CalcTextSize("Reset").X + style.FramePadding.X * 2 + style.ItemSpacing.X;
             ImGui.SetNextItemWidth(Math.Max(ImGui.GetFontSize() * 4, Math.Min(Form.ControlWidth,
                 ImGui.GetContentRegionAvail().X - reset)));
-            ImGui.SliderInt("##loot-item-text-size", ref itemTextPercent, (int)(SettingsData.MinTextScale * 100),
+            Sliders.SliderInt("##loot-item-text-size", ref itemTextPercent, (int)(SettingsData.MinTextScale * 100),
                 (int)(SettingsData.MaxTextScale * 100), "%d%%");
             itemTextSliderActive = ImGui.IsItemActive();
 
@@ -183,16 +185,16 @@ namespace DaraletPlayer.Ui {
             var current = Modes.First(m => m.Mode == data.Mode);
             ImGui.SetNextItemWidth(220);
 
-            if (ImGui.BeginCombo("##loot-mode", current.Label)) {
+            if (Combos.Begin("##loot-mode", current.Label)) {
                 foreach (var (mode, label, tip) in Modes) {
-                    if (ImGui.Selectable(label, mode == data.Mode)) {
+                    if (Combos.Item(label, mode == data.Mode)) {
                         data.Mode = mode;
                         settings.Changed();
                     }
                     Widgets.Tip(tip);
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
             Widgets.Tip(current.Tip);
         }
@@ -230,16 +232,16 @@ namespace DaraletPlayer.Ui {
         private void RenderListPicker(LootData data, LootList active) {
             ImGui.SetNextItemWidth(Form.ControlWidth);
 
-            if (ImGui.BeginCombo("##loot-list", active.Name)) {
+            if (Combos.Begin("##loot-list", active.Name)) {
                 foreach (var list in data.Lists) {
-                    if (ImGui.Selectable($"{list.Name} ({list.Rules.Count})##list-{data.Lists.IndexOf(list)}", list == active)) {
+                    if (Combos.Item($"{list.Name} ({list.Rules.Count})##list-{data.Lists.IndexOf(list)}", list == active)) {
                         data.SetActive(Me, list);
                         settings.Changed();
                         selectedRule = 0;
                     }
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
             Widgets.Tip($"The loot profile {Me} uses: a named set of rules. Each character picks their own; swapping takes effect on the next corpse.");
         }
@@ -485,7 +487,7 @@ namespace DaraletPlayer.Ui {
                 Widgets.TextDisabled(decision.Rule?.Name ?? "");
             }
 
-            ImGui.EndTable();
+            Widgets.EndScrollingTable();
         }
 
         private void CheckMyPacks() {

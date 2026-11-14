@@ -38,6 +38,9 @@ namespace DaraletPlayer.Ui {
             windows.Add(new AppraisalWindow(feed, settings, icons, "appraisal", "Appraisal", FirstPosition));
         }
 
+        /// <summary>The first window, the one Appraise reuses (it shares the appraisals' window, AppraisalGroup).</summary>
+        public static FloatingWindow FirstWindow => windows.FirstOrDefault()?.Window;
+
         /// <summary>Closes every window, for the plugin shutting down: a right-click after this does nothing.</summary>
         public static void Stop() {
             foreach (var window in windows) {
@@ -113,13 +116,14 @@ namespace DaraletPlayer.Ui {
         /// The Appraise items of an item's right-click menu, inside a menu already begun (ImGui.BeginPopup...): Appraise, and
         /// Appraise in new window with Plugin appraisal on.
         /// </summary>
-        public static void MenuItems(uint guid, CorpseItemInfo described = null) {
+        /// <param name="slots">Where it's worn, for an item Decal can't say of (a vendor's): the compare goes by it.</param>
+        public static void MenuItems(uint guid, CorpseItemInfo described = null, int slots = 0) {
             if (ImGui.MenuItem("Appraise")) {
-                Show(guid, described);
+                Show(guid, described, slots: slots);
             }
 
             if (InPlugin && ImGui.MenuItem("Appraise in new window")) {
-                Show(guid, described, newWindow: true);
+                Show(guid, described, newWindow: true, slots: slots);
             }
         }
     }

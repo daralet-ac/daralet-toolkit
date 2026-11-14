@@ -51,6 +51,14 @@ namespace DaraletPlayer.Ui {
             return open;
         }
 
+        /// <summary>
+        /// Sets what follows an open header in, with a line down its left side, until disposed (Fold): call it straight
+        /// after a CollapsingHeader that said it's open, as <c>using var fold = Form.Folded();</c>.
+        /// </summary>
+        public static Fold Folded() {
+            return Fold.Begin();
+        }
+
         public static void Section(string title) {
             ImGui.Spacing();
             Widgets.TextColored(Colors.Info, title);
@@ -141,7 +149,7 @@ namespace DaraletPlayer.Ui {
         /// <summary>A slider as wide as a form's controls. True when it changed.</summary>
         public static bool Slider(string id, ref int value, int min, int max, string format) {
             ImGui.SetNextItemWidth(ControlWidth);
-            var changed = ImGui.SliderInt(id, ref value, min, max, format);
+            var changed = Sliders.SliderInt(id, ref value, min, max, format);
             Widgets.Tip("Ctrl+click to type a number.");
             return changed;
         }

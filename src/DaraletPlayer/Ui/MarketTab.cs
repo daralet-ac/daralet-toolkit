@@ -84,14 +84,17 @@ namespace DaraletPlayer.Ui {
             var since = (DateTime.UtcNow - feed.MarketUpdatedAt).TotalSeconds;
 
             if (ImGui.CollapsingHeader($"Listed ({listings.Count})###listed", ImGuiTreeNodeFlags.DefaultOpen)) {
+                using var fold = Form.Folded();
                 RenderListings(listings, near, since);
             }
 
             if (ImGui.CollapsingHeader($"Sold, last 30 days ({sales.Count})###sold", ImGuiTreeNodeFlags.DefaultOpen)) {
+                using var fold = Form.Folded();
                 RenderSales(sales, since);
             }
 
             if (ImGui.CollapsingHeader($"Expired ({expired.Count})###expired", ImGuiTreeNodeFlags.DefaultOpen)) {
+                using var fold = Form.Folded();
                 RenderExpired(expired, since);
             }
 
@@ -122,17 +125,17 @@ namespace DaraletPlayer.Ui {
             Widgets.Text("List an item");
 
             ImGui.SetNextItemWidth(260);
-            if (ImGui.BeginCombo("##market-list-item", listItem == 0 ? "Choose one of your items" : listItemName)) {
+            if (Combos.Begin("##market-list-item", listItem == 0 ? "Choose one of your items" : listItemName)) {
                 foreach (var item in Sellable()) {
                     icons.Draw(item.Icon);
 
-                    if (ImGui.Selectable($"{item.Name}##sell-{item.Id}", item.Id == listItem)) {
+                    if (Combos.Item($"{item.Name}##sell-{item.Id}", item.Id == listItem)) {
                         listItem = item.Id;
                         listItemName = item.Name;
                     }
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
             Widgets.Tip("Something you carry (not wearing). The broker says if it can't be sold: attuned, bound and unstable items can't.");
 

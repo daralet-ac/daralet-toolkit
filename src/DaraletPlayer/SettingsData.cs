@@ -21,6 +21,15 @@ namespace DaraletPlayer {
         [DataMember(Name = "windows")] public Dictionary<string, WindowPlacement> Windows;
         /// <summary>How big the plugin's text is drawn in every window: 1 is normal. A window's own size multiplies it.</summary>
         [DataMember(Name = "textScale")] public float TextScale;
+
+        /// <summary>
+        /// Tooltips (help on controls, items' details) show only while TooltipKey is held (the name's from when it was
+        /// always Alt). On to start, with Alt.
+        /// </summary>
+        [DataMember(Name = "tooltipsNeedAlt")] public bool TooltipsNeedAlt;
+
+        /// <summary>The key TooltipsNeedAlt has held, a Windows virtual key code: Alt (0x12) to start.</summary>
+        [DataMember(Name = "tooltipKey")] public int TooltipKey;
         /// <summary>
         /// The look of the plugin's windows, a UiThemes name; null (or one no longer there) for Daralet, the default.
         /// </summary>
@@ -105,6 +114,12 @@ namespace DaraletPlayer {
         [DataMember(Name = "mapFollow")] public bool MapFollow;
         /// <summary>The map window (the World tab's map on its own) keeps centred on you.</summary>
         [DataMember(Name = "mapWindowFollow")] public bool MapWindowFollow;
+
+        /// <summary>
+        /// The Map window, while it's one of the shared window's, shows the dungeon map (the Dungeon window's) at its top
+        /// when you're indoors, the world map under it; the Dungeon window itself stays hidden meanwhile. Off to start.
+        /// </summary>
+        [DataMember(Name = "mapEmbedDungeon")] public bool MapEmbedDungeon;
         /// <summary>
         /// The arrow window shows the destination's name, distance and direction beside the arrow, not the arrow alone.
         /// </summary>
@@ -135,6 +150,12 @@ namespace DaraletPlayer {
         /// Right-clicking an item shows the plugin's Appraisal window; off, it selects the item for the game's own appraisal.
         /// </summary>
         [DataMember(Name = "appraiseInPlugin")] public bool AppraiseInPlugin;
+
+        /// <summary>
+        /// Creature Appraisal shows the creature's model, drawn by the game's own examination panel cut down to it
+        /// (Ui/CreatureModelView.cs). On to start.
+        /// </summary>
+        [DataMember(Name = "creatureAppraisalModel")] public bool CreatureAppraisalModel;
 
         // The Inventory tab was the Bank tab: its settings keep their old names in the file, so they carry over.
 
@@ -191,6 +212,9 @@ namespace DaraletPlayer {
         /// <summary>The Carried and Bank views mark items the way the active loot list's rules do (LootMarks).</summary>
         [DataMember(Name = "bankLootMarks")] public bool InventoryLootMarks;
 
+        /// <summary>The Vendor window marks the items the way the active loot list's rules do (LootMarks).</summary>
+        [DataMember(Name = "vendorLootMarks")] public bool VendorLootMarks;
+
         /// <summary>The Carried views mark the items on a hotbar that's showing, as the game's pack marks its shortcuts.</summary>
         [DataMember(Name = "inventoryHotbarMarks")] public bool InventoryHotbarMarks;
 
@@ -218,13 +242,23 @@ namespace DaraletPlayer {
         [DataMember(Name = "toolbarSocial")] public bool ToolbarSocial;
 
         /// <summary>
-        /// The Inventory, Map, Social, Quests and Character windows ticked in SharedWindowMembers share one place on screen,
-        /// as the game's panels do: opening one closes the others (SharedWindow). Its place is the window "shared".
+        /// The Inventory, Map, Social, Quests, Character and game panel windows share one place on screen, as the game's
+        /// panels do: opening one closes the others (SharedWindow), all but those in SharedWindowSeparate. Its place is the
+        /// window "shared". On for everyone (SharedWindow switches it on once, when SharedWindowSeparate is new).
         /// </summary>
         [DataMember(Name = "sharedWindow")] public bool SharedWindow;
 
-        /// <summary>The windows that share it, by window id (carried, map, social, quests, character).</summary>
+        /// <summary>
+        /// Before the windows chose for themselves: the ones ticked to share it. Only read once, to work out
+        /// SharedWindowSeparate from it.
+        /// </summary>
         [DataMember(Name = "sharedWindowMembers")] public List<string> SharedWindowMembers;
+
+        /// <summary>
+        /// The windows kept out of the shared window, by window id: each one's Share with the other panels (its right-click
+        /// menu) or the Separate button on the shared window's tabs. Null until SharedWindow first works it out.
+        /// </summary>
+        [DataMember(Name = "sharedWindowSeparate")] public List<string> SharedWindowSeparate;
 
         /// <summary>A row of tabs at the top of the shared window, one for each window in it.</summary>
         [DataMember(Name = "sharedWindowTabs")] public bool SharedWindowTabs;
@@ -258,6 +292,30 @@ namespace DaraletPlayer {
         /// <summary>Escape closes the /dap, Inventory, Bank, Character and Quests windows (EscapeCloses).</summary>
         [DataMember(Name = "escapeClosesWindows")] public bool EscapeClosesWindows;
 
+        /// <summary>A window being dragged snaps to the screen's and other windows' edges (WindowSnap).</summary>
+        [DataMember(Name = "snapWindows")] public bool SnapWindows;
+
+        /// <summary>The edge of a window being resized snaps as a dragged window does (WindowSnap.SnapEdge).</summary>
+        [DataMember(Name = "snapResize")] public bool SnapResize;
+
+        /// <summary>How near an edge must be to snap to it, in pixels.</summary>
+        [DataMember(Name = "snapDistance")] public int SnapDistance;
+
+        /// <summary>A window being dragged snaps to a grid too, where no edge is in reach.</summary>
+        [DataMember(Name = "snapGrid")] public bool SnapGrid;
+
+        /// <summary>
+        /// The edge of a window being resized, or dragged out by a width grip, snaps to the grid and its guide lines too,
+        /// whether or not moving does (SnapGrid). On to start.
+        /// </summary>
+        [DataMember(Name = "snapResizeGrid")] public bool SnapResizeGrid;
+
+        /// <summary>The grid's spacing, in pixels.</summary>
+        [DataMember(Name = "snapGridSize")] public int SnapGridSize;
+
+        /// <summary>The grid is drawn faintly over the screen while a window is dragged.</summary>
+        [DataMember(Name = "snapGridShown")] public bool SnapGridShown;
+
         /// <summary>The game's window has no title bar or border (BorderlessWindow).</summary>
         [DataMember(Name = "borderlessWindow")] public bool BorderlessWindow;
 
@@ -288,6 +346,33 @@ namespace DaraletPlayer {
         [DataMember(Name = "chat")] public ChatSettings Chat;
         /// <summary>How the XP bar looks and what it shows (the Character tab's Settings).</summary>
         [DataMember(Name = "xpBar")] public XpBarOptions XpBar;
+
+        /// <summary>
+        /// The game's panels a plugin window can take the place of (Client UI Override's Game panels), by GamePanel key; one
+        /// that isn't here isn't replaced and has the Retail look.
+        /// </summary>
+        [DataMember(Name = "gamePanels")] public Dictionary<string, GamePanelOptions> GamePanels;
+
+        /// <summary>The Vitals window's bars (VitalsPanel).</summary>
+        [DataMember(Name = "vitals")] public VitalsOptions Vitals;
+
+        /// <summary>The Power bar window (PowerBarPanel).</summary>
+        [DataMember(Name = "powerBar")] public PowerBarOptions PowerBar;
+
+        /// <summary>The Spell bar window (SpellBarPanel).</summary>
+        [DataMember(Name = "spellBar")] public SpellBarOptions SpellBar;
+
+        /// <summary>The Toolbar window (ToolbarPanel).</summary>
+        [DataMember(Name = "toolbar")] public ToolbarOptions Toolbar;
+
+        /// <summary>The Indicators window (IndicatorsPanel).</summary>
+        [DataMember(Name = "indicators")] public IndicatorOptions Indicators;
+
+        /// <summary>The Attributes window (AttributesPanel).</summary>
+        [DataMember(Name = "attributes")] public AttributesOptions Attributes;
+
+        /// <summary>The Spellbook window (SpellbookPanel).</summary>
+        [DataMember(Name = "spellbook")] public SpellbookOptions Spellbook;
 
         /// <summary>The hotbars (the Combat tab's Hotbars): their layout, looks and hotkeys, and each character's items.</summary>
         [DataMember(Name = "hotbars")] public HotbarData Hotbars;
@@ -333,6 +418,18 @@ namespace DaraletPlayer {
             }
         }
 
+        /// <summary>A game panel's choices, made (not replaced, Retail) when asked for the first time.</summary>
+        public GamePanelOptions GamePanel(string key) {
+            GamePanels = GamePanels ?? new Dictionary<string, GamePanelOptions>();
+
+            if (!GamePanels.TryGetValue(key, out var options) || options == null) {
+                options = new GamePanelOptions();
+                GamePanels[key] = options;
+            }
+
+            return options;
+        }
+
         [OnDeserializing]
         private void OnDeserializing(StreamingContext context) {
             SetDefaults();
@@ -374,6 +471,8 @@ namespace DaraletPlayer {
         private void SetDefaults() {
             Windows = new Dictionary<string, WindowPlacement>();
             TextScale = 1;
+            TooltipsNeedAlt = true;
+            TooltipKey = Keys.Alt;
             FellowshipShowStamina = true;
             FellowshipShowMana = true;
             FellowVitals = new Dictionary<string, FellowVitals>(StringComparer.OrdinalIgnoreCase);
@@ -421,21 +520,39 @@ namespace DaraletPlayer {
             DungeonVisits = new DungeonVisits();
             DungeonMarkers = new Dictionary<string, bool>();
             AppraiseInPlugin = true;
+            CreatureAppraisalModel = true;
             InventoryShowWorn = true;
             CarriedRetail = true;
             Loot = new LootData();
             Chat = new ChatSettings();
             XpBar = new XpBarOptions();
+            GamePanels = new Dictionary<string, GamePanelOptions>();
+            Vitals = new VitalsOptions();
+            PowerBar = new PowerBarOptions();
+            SpellBar = new SpellBarOptions();
+            Toolbar = new ToolbarOptions();
+            Indicators = new IndicatorOptions();
+            Attributes = new AttributesOptions();
+            Spellbook = new SpellbookOptions();
             Hotbars = new HotbarData();
             PaneSizes = new Dictionary<string, float>();
             QuestTrackerOpen = new List<uint>();
             QuestTrackerHidden = new List<uint>();
-            SharedWindowMembers = new List<string> { "carried", "map", "social", "quests", "character" };
+            SharedWindowMembers = new List<string> {
+                "carried", "map", "social", "quests", "character", "attributes", "spellbook", "options", "buffs", "debuffs",
+                "vitae",
+            };
             SharedWindowTabs = true;
             OneClickHeal = true;
             InventoryHotbarMarks = true;
             LfgChatLinks = true;
             EscapeClosesWindows = true;
+            SnapWindows = true;
+            SnapResize = true;
+            SnapResizeGrid = true;
+            SnapDistance = 10;
+            SnapGridSize = 20;
+            SnapGridShown = true;
             // F1: the game ignores Ctrl and Shift on its own keys (Ctrl+Shift+F12 opened the inventory, any S stopped running)
             HideUiKey = new HotkeyBinding(0x70);
         }

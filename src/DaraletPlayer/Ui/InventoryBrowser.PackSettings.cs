@@ -167,7 +167,7 @@ namespace DaraletPlayer.Ui {
             // four columns wide, not as narrow as the box
             ImGui.SetNextWindowSizeConstraints(new Vector2(font * 33, 0), new Vector2(float.MaxValue, font * 30));
 
-            if (!ImGui.BeginCombo("##bank-tag-list", preview, ImGuiComboFlags.HeightLarge)) {
+            if (!Combos.Begin("##bank-tag-list", preview, ImGuiComboFlags.HeightLarge)) {
                 Widgets.Tip($"What this pack collects, for deposits, withdrawals and sorts. Tick the words in the list: each tick tags the pack at once ({BankCommands.Inscribe(holder.PackNumber, "...", PackId(holder))})." + CarriedNote(holder));
                 return;
             }
@@ -191,7 +191,7 @@ namespace DaraletPlayer.Ui {
             }
 
             TagSection(holder, "Tiers (alone: any gear of that tier; with AND, \"swords t6\": tier 6 swords)", BankCommands.Tiers);
-            ImGui.EndCombo();
+            Combos.End();
         }
 
         /// <summary>
@@ -254,18 +254,18 @@ namespace DaraletPlayer.Ui {
 
             var preview = tagGroup < groups.Count ? groups[tagGroup] : "(new group)";
 
-            if (ImGui.BeginCombo("##tag-group", preview)) {
+            if (Combos.Begin("##tag-group", preview)) {
                 for (var i = 0; i < groups.Count; i++) {
-                    if (ImGui.Selectable($"{groups[i]}##tag-group-{i}", i == tagGroup)) {
+                    if (Combos.Item($"{groups[i]}##tag-group-{i}", i == tagGroup)) {
                         tagGroup = i;
                     }
                 }
 
-                if (ImGui.Selectable("(new group)", tagGroup >= groups.Count)) {
+                if (Combos.Item("(new group)", tagGroup >= groups.Count)) {
                     tagGroup = groups.Count;
                 }
 
-                ImGui.EndCombo();
+                Combos.End();
             }
             Widgets.Tip("The group ticked words join. (new group) starts another, which the pack takes as well as the others.");
 
@@ -327,7 +327,7 @@ namespace DaraletPlayer.Ui {
             ImGui.SetNextItemWidth(ImGui.CalcTextSize("Icon").X + ImGui.GetFrameHeight() + style.FramePadding.X * 2);
             ImGui.SetNextWindowSizeConstraints(new Vector2(font * 30, 0), new Vector2(float.MaxValue, font * 30));
 
-            if (!ImGui.BeginCombo("##bank-icon-list", "Icon", ImGuiComboFlags.HeightLarge)) {
+            if (!Combos.Begin("##bank-icon-list", "Icon", ImGuiComboFlags.HeightLarge, false)) {
                 Widgets.Tip($"Changes this pack's icon to a pack, sack or pouch in a color ({BankCommands.Icon(holder.PackNumber, "<style>", "<color>", PackId(holder))}). Only the icon changes." + CarriedNote(holder));
                 return;
             }
@@ -371,7 +371,7 @@ namespace DaraletPlayer.Ui {
                 }
             }
 
-            ImGui.EndCombo();
+            Combos.End();
         }
 
         /// <summary>Roughly the color each icon is, for its square in the Icon list.</summary>

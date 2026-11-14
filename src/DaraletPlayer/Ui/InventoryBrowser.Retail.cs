@@ -64,7 +64,7 @@ namespace DaraletPlayer.Ui {
                 retailWidthShort = dollWidth + style.WindowPadding.X * 2 + RetailDollMargin * 2 - ImGui.GetWindowWidth();
                 retailDrawnFrame = ImGui.GetFrameCount();
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
 
             ImGui.SameLine();
 
@@ -76,7 +76,7 @@ namespace DaraletPlayer.Ui {
                 packsHeight = ImGui.GetCursorPosY() - start - ImGui.GetStyle().ItemSpacing.Y;
                 ImGui.PopStyleVar();
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
 
             // a thin edge so the grid sits close to the scrollbar (padding is read as the child begins)
             ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(3, 3));
@@ -86,7 +86,7 @@ namespace DaraletPlayer.Ui {
             if (itemsShown) {
                 RenderRetailItems();
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
 
             DropTarget(selected, intoItems: true);
         }

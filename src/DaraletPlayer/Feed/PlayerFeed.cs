@@ -21,6 +21,9 @@ namespace DaraletPlayer.Feed {
 
         /// <summary>The server's /bank inscribe and /bank icon take a pack's id ("#8000ABCD").</summary>
         public const string FeaturePackId = "packid";
+
+        /// <summary>The server's describe takes what the vendor you last opened sells.</summary>
+        public const string FeatureVendorDescribe = "vendordescribe";
         public const string KindFellowship = "fellowship";
         public const string KindTargets = "targets";
         public const string KindPosition = "position";

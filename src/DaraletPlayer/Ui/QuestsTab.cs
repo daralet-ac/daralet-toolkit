@@ -70,6 +70,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            using var fold = Form.Folded();
+
             Form.Columns("quests-settings-grid", RenderWindowSettings, RenderTrackerSettings);
             ImGui.Spacing();
         }
@@ -127,7 +129,7 @@ namespace DaraletPlayer.Ui {
             if (Widgets.BeginChild("quests-list", new Vector2(0, listHeight), false)) {
                 RenderList(quests);
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
 
             Panes.Divider("quests-list", false, listHeight, avail, least, least,
                 "Drag to make the list of quests taller or shorter.");
@@ -135,7 +137,7 @@ namespace DaraletPlayer.Ui {
             if (Widgets.BeginChild("quest-details", Vector2.Zero, false)) {
                 RenderDetails(quests.First(q => q.Id == selected));
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
         }
 
         private void RenderFilters(List<QuestInfo> all) {
@@ -229,7 +231,7 @@ namespace DaraletPlayer.Ui {
                 RenderTrackCheckbox(quest);
             }
 
-            ImGui.EndTable();
+            Widgets.EndScrollingTable();
         }
 
         /// <summary>

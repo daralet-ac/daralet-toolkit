@@ -22,7 +22,7 @@ namespace DaraletPlayer.Ui {
         internal const string DragType = "DAP_ITEM";
 
         /// <summary>The main pack, dragged: no drop spot takes it, only a vendor's window (MainPackDragSource).</summary>
-        private const string MainPackDragType = "DAP_MAIN_PACK";
+        internal const string MainPackDragType = "DAP_MAIN_PACK";
 
         /// <summary>The item held in the last drag from any list, for drop spots outside the lists (the hotbars).</summary>
         internal static int DraggedItem { get; private set; }
@@ -149,7 +149,7 @@ namespace DaraletPlayer.Ui {
             if (Widgets.BeginChild("bank-packs", new Vector2(packsWidth, 0), true)) {
                 RenderHolders();
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
 
             ImGui.SameLine(0, 0);
             Panes.Divider("inventory-packs", true, packsWidth, room, em * 6, em * 8,
@@ -159,7 +159,7 @@ namespace DaraletPlayer.Ui {
             if (Widgets.BeginChild("bank-items", new Vector2(wornWidth > 0 ? -panelWidth : 0, 0), true)) {
                 RenderItems();
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
 
             // dropped anywhere on the items, an item goes into that pack
             DropTarget(selected, intoItems: true);
@@ -170,7 +170,7 @@ namespace DaraletPlayer.Ui {
                 if (Widgets.BeginChild("bank-worn", new Vector2(wornWidth, 0), true)) {
                     RenderWorn();
                 }
-                ImGui.EndChild();
+                Widgets.EndChild();
             }
         }
 
@@ -340,7 +340,7 @@ namespace DaraletPlayer.Ui {
                 ImGui.SetCursorPos(start + new Vector2(0, (squares + columns - 1) / columns * cell));
                 ImGui.Dummy(Vector2.Zero);
             }
-            ImGui.EndChild();
+            Widgets.EndChild();
         }
 
         private void RenderGridItem(Item item, ImDrawListPtr drawList, int selection) {
@@ -455,7 +455,7 @@ namespace DaraletPlayer.Ui {
                 }
             }
 
-            ImGui.EndTable();
+            Widgets.EndScrollingTable();
         }
 
         /// <summary>

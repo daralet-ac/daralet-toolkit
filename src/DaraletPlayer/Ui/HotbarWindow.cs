@@ -206,6 +206,10 @@ namespace DaraletPlayer.Ui {
         }
 
         private void Clicks(HotbarSlot slot, WorldObject item, (int Page, int Row, int Col) spot) {
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) {
+                LogClick(slot, item, spot);
+            }
+
             // a tool waiting for a target: this slot's item is the target
             if (ItemUser.Targeting) {
                 if (item != null) {
@@ -237,6 +241,20 @@ namespace DaraletPlayer.Ui {
             if (!owner.EditMode) {
                 Use(slot, item, spot);
             }
+        }
+
+        /// <summary>
+        /// A [hotbar] line in log.txt for each left click on a slot: what's in it, the item it found, and what the click
+        /// does instead of a use when it does (a tool's target, Bind keys, a slot being moved, Edit mode), to tell why a
+        /// click did nothing.
+        /// </summary>
+        private void LogClick(HotbarSlot slot, WorldObject item, (int Page, int Row, int Col) spot) {
+            var what = ItemUser.Targeting ? "a tool's target" : owner.BindMode ? "Bind keys: nothing"
+                : owner.Moving ? "a slot being moved put here" : owner.EditMode ? "Edit mode: no use"
+                : slot == null ? "empty" : slot.IsSpell ? "cast" : item == null ? "none of it carried" : "used";
+            PluginCore.LogFile($"[hotbar] {Bar.Id} page {spot.Page} {spot.Row},{spot.Col}: {slot?.Name ?? "-"}"
+                + (item != null ? $" (0x{item.Id:X8}, {(HotbarItems.IsWorn(item) ? "worn" : "carried")})" : "")
+                + $": {what}");
         }
 
         /// <summary>Uses what's in a place on the page showing: its hotkey.</summary>
@@ -325,6 +343,18 @@ namespace DaraletPlayer.Ui {
 
                 if (itemPayload.IsDelivery() && allowed) {
                     Put(character, spot, CoreManager.Current.WorldFilter[id]);
+                }
+            }
+
+            // a spell from the plugin's Spellbook window
+            var spellPayload = ImGui.AcceptDragDropPayload(SpellPayload.Type, flags);
+
+            if (spellPayload.NativePtr != null && SpellPayload.Spell != 0) {
+                dropPreview = (true, Spells.Icon(SpellPayload.Spell));
+
+                if (spellPayload.IsDelivery()) {
+                    Bar.Put(character, spot.Page, spot.Row, spot.Col, Spells.SlotFor(SpellPayload.Spell));
+                    settings.Changed();
                 }
             }
 
