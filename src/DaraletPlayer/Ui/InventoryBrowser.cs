@@ -549,6 +549,12 @@ namespace DaraletPlayer.Ui {
 
             Appraisal.MenuItems(item.Guid);
             ChatWindows.ShareMenuItem(item.Guid);
+
+            // /style only switches what you carry or wear
+            if (!inBank) {
+                ItemStyleMenu.MenuItem(feed, item.Guid);
+            }
+
             ImGui.Separator();
 
             SplitMenuItem(item);
