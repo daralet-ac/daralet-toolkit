@@ -118,7 +118,7 @@ namespace DaraletPlayer.Ui {
             gamePanels.Add(radar);
             worldTab.RadarSettings = radar.RenderSettings;
             // the hud is made below: these read the field when called
-            escapeCloses = new EscapeCloses(settings, () => hud.Visible, () => hud.Visible = false,
+            escapeCloses = new EscapeCloses(settings, () => hud.Visible, () => hud.Visible = false, options,
                 inventoryTab.CarriedWindow, inventoryTab.BankWindow, characterTab.Window, questsTab.Window);
 
             Appraisal.Start(feed, settings, icons);

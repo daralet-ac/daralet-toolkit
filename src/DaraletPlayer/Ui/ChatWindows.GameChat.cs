@@ -21,6 +21,9 @@ namespace DaraletPlayer.Ui {
         private bool gameChatHidden;
         private DateTime gameChatCheckAt;
         private bool chatBarWasActive;
+
+        /// <summary>Whether the chat bar has been looked at since login (or since taking it was turned on).</summary>
+        private bool chatBarSeen;
         private bool enterLogged;
         private bool otherBoxLogged;
 
@@ -42,6 +45,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 chatBarWasActive = false;
+                chatBarSeen = false;
                 return;
             }
 
@@ -118,6 +122,25 @@ namespace DaraletPlayer.Ui {
                 if (!otherBoxLogged) {
                     otherBoxLogged = true;
                     PluginCore.LogFile("[chat] a game text box outside the chat windows has the keyboard: left to it");
+                }
+            }
+
+            // The game's chat bar has the keyboard already when the world comes up, so Enter never made it start taking
+            // it, and nothing was taken until a click elsewhere cleared it. So the first look clears it as that click
+            // would, without opening the plugin's box: the next Enter opens the chat bar, which is then taken as ever.
+            if (!take) {
+                chatBarSeen = false;
+            }
+            else if (!chatBarSeen) {
+                chatBarSeen = true;
+
+                if (active && ClientElements.FocusIsIn(GameChatElements()) != false) {
+                    var cleared = ClientElements.ClearFocus();
+                    active = CoreManager.Current.Actions.ChatState;
+                    PluginCore.LogFile($"[chat] the chat bar had the keyboard at the start ({(cleared ? "cleared" : "nothing "
+                        + "to clear")}), chat state now {active}");
+                    chatBarWasActive = active;
+                    return;
                 }
             }
 

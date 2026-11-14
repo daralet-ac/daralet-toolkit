@@ -1306,7 +1306,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   RenderFrame like Hide game UI's key, and acted on a frame later, once an ImGui frame has run: what uses Escape itself (a
   tool up, the hotbars' key capture, Bind keys and Move, Hide game UI's key capture) reads it in that frame, in whatever
   order the windows draw, and calls `EscapeCloses.Taken`. A press with the chat bar, a text box or a popup menu active on
-  that frame or the one before does nothing, as Escape's job there is leaving it.
+  that frame or the one before does nothing, as Escape's job there is leaving it. With none of those windows open and
+  the Options panel's Replace on, Escape opens the Options window at Gameplay Options (`OptionsPanel.OpenMenu`), and
+  pressed again while that page shows, asks Exit Game's question (`AskExitGame`), as the game's menu does (the user's
+  call, November 2026). Untested in the game when written.
 - **Toolkit button and key** (`Ui/Launcher.cs`, the Config tab's section of that name): a button that opens and closes
   the /dap window, like UtilityBelt's bar button, in a `FloatingWindow` of its own (`launcher`, hidden to start) that can
   go anywhere and be any Size, and a key for the same (`SettingsData.ToolkitKey`, none to start), read from Windows on
@@ -1365,6 +1368,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `UIElementManager::SetFocusElement(null)`) and the plugin's box focused instead (with Enter types here too). But
   `ChatState` is true for any of the game's text boxes, and the stack bar's number box lost every key typed in it, so
   only a focus inside one of the chat windows is taken (`ClientElements.FocusIsIn`, climbing `UIRegion.m_parent`).
+  It's taken as `ChatState` turns true, and at login the chat bar already has the keyboard, so Enter did nothing until a
+  click had cleared it (log.txt never said "took the chat bar"): the first look after login clears it, as that click
+  would, without opening the plugin's box (`chatBarSeen`). Untested in the game when written.
   **Links:** a click on one is handed to Decal's `ChatNameClicked` as the game's chat would (CoreManager's private
   `myHooks_ChatClickIntercept`, by reflection), so every plugin's links work here, the plugin's own included; a name no
   plugin takes starts a tell. **Item links** (`ChatWindows.Links.cs`, `Feed/ChatItemLink.cs`,

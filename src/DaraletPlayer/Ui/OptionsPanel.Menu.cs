@@ -30,8 +30,8 @@ namespace DaraletPlayer.Ui {
                 + "game's button does. It asks first.", () => Confirm("Exit to character selection?",
                 ClientMenu.ExitToCharacterSelection));
             ImGui.Dummy(new Vector2(0, gap));
-            MenuButton("Exit Game", buttonSize, retail, "Closes the game, as the game's button does. It asks first.",
-                () => Confirm("Exit the game?", ClientMenu.ExitGame));
+            MenuButton("Exit Game", buttonSize, retail, "Closes the game, as the game's button does. It asks first. "
+                + "Escape on this page asks too.", AskExitGame);
             ImGui.Dummy(new Vector2(0, group));
 
             MenuButton("Configure Keyboard", buttonSize, retail, "Opens the game's keyboard settings, as the game's button "
@@ -82,7 +82,21 @@ namespace DaraletPlayer.Ui {
         private void Confirm(string question, Func<bool> act) {
             confirming = (question, act);
             openConfirm = true;
+        }
 
+        /// <summary>The window is showing its Gameplay Options menu (EscapeCloses: Escape there asks to exit).</summary>
+        public bool ShowingMenu => Window.Shown && tab == MenuTab;
+
+        /// <summary>Shows the window at its Gameplay Options menu, as Escape with nothing to close does.</summary>
+        public void OpenMenu() {
+            tab = MenuTab;
+            Window.Visible = true;
+            Window.BringToFront();
+        }
+
+        /// <summary>Exit Game's question, as its button asks it.</summary>
+        public void AskExitGame() {
+            Confirm("Exit the game?", ClientMenu.ExitGame);
         }
 
         /// <summary>The exits' question: they can't be taken back.</summary>

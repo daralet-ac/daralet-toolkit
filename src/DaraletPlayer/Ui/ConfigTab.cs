@@ -319,7 +319,9 @@ namespace DaraletPlayer.Ui {
                 + "the Inventory, Bank, Character and Quests windows (closing the Bank window closes the bank). The Target, "
                 + "Fellowship, Loot, hotbar, map and other windows that follow what you're doing stay. Escape does only its "
                 + "other job while you're typing in chat or a text box, have a menu open, are using a tool on something or "
-                + "are setting a key. The game hears Escape too.")) {
+                + "are setting a key. With none of them open and Options replacing the game's panel, Escape opens the "
+                + "Options window at Gameplay Options, and pressed again there asks to exit the game. The game hears "
+                + "Escape too.")) {
                 settings.Changed();
             }
 

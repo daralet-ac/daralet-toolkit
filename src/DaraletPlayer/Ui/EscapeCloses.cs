@@ -9,6 +9,8 @@ namespace DaraletPlayer.Ui {
     /// Escape closes the plugin's panels (the /dap window, Inventory, Bank, Character, Quests) when nothing else wanted it:
     /// not while typing in chat or a text box, with a menu open, a tool up or a key being set. The windows that follow what
     /// you're doing (target, fellowship, loot, hotbars, map) stay. SettingsData.EscapeClosesWindows turns it off.
+    /// With none of those open, and the Options window replacing the game's panel, Escape opens it at Gameplay Options, as
+    /// the game's own menu; pressed again there, it asks to exit the game (the user's call, November 2026).
     /// The key is read from Windows on Decal's RenderFrame, like HideGameUi's, and acted on only once an ImGui frame has run
     /// since the press: what uses Escape (ItemUser, the hotbars' key capture, HideGameUi's) reads it in that frame, in
     /// whatever order the windows draw, and says so with Taken.
@@ -20,6 +22,7 @@ namespace DaraletPlayer.Ui {
         private readonly Func<bool> mainVisible;
         private readonly Action hideMain;
         private readonly FloatingWindow[] windows;
+        private readonly OptionsPanel options;
 
         private bool wasDown;
 
@@ -32,8 +35,11 @@ namespace DaraletPlayer.Ui {
         private bool disposed;
 
         /// <param name="mainVisible">Whether the /dap window is shown, and below, hiding it.</param>
-        public EscapeCloses(Settings settings, Func<bool> mainVisible, Action hideMain, params FloatingWindow[] windows) {
+        /// <param name="options">The Options window Escape opens with nothing to close, or null.</param>
+        public EscapeCloses(Settings settings, Func<bool> mainVisible, Action hideMain, OptionsPanel options,
+            params FloatingWindow[] windows) {
             this.settings = settings;
+            this.options = options;
             this.mainVisible = mainVisible;
             this.hideMain = hideMain;
             this.windows = windows;
@@ -47,11 +53,14 @@ namespace DaraletPlayer.Ui {
 
         private bool AnyOpen => mainVisible() || windows.Any(w => w.Shown);
 
+        /// <summary>Escape with nothing to close opens the Options menu: only while that window stands in for the game's.</summary>
+        private bool OpensMenu => options != null && options.Options.Replace;
+
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
                 // GetFrameCount needs ImGui's context, which UtilityBelt makes once the game's graphics device is up
                 if (disposed || !settings.Data.EscapeClosesWindows || CoreManager.Current.CharacterFilter.LoginStatus != 3
-                    || ImGui.GetCurrentContext() == IntPtr.Zero || !AnyOpen) {
+                    || ImGui.GetCurrentContext() == IntPtr.Zero || (!AnyOpen && !OpensMenu)) {
                     wasDown = false;
                     wasFree = false;
                     pressedFrame = -1;
@@ -77,8 +86,18 @@ namespace DaraletPlayer.Ui {
                 var taken = takenFrame >= pressedFrame - 1;
                 pressedFrame = -1;
 
-                if (!taken) {
+                if (taken) {
+                    return;
+                }
+
+                if (AnyOpen) {
                     CloseAll();
+                }
+                else if (options.ShowingMenu) {
+                    options.AskExitGame();
+                }
+                else {
+                    options.OpenMenu();
                 }
             }
             catch (Exception ex) {
