@@ -543,5 +543,94 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual("Salvage weapons", Loot.Decide(list, withWorkmanship).Rule.Name);
             Assert.AreEqual("Keep weapons", Loot.Decide(list, without).Rule.Name, "left to the rules after it");
         }
+
+        private static CorpseItemInfo Made(string name, string material) {
+            return new CorpseItemInfo {
+                Guid = 9, Name = name, Value = 500, Salvageable = true, Material = material, Workmanship = 5,
+                Item = new MarketListing { ItemName = name, ItemCategory = "Weapon", WeaponClass = "Martial", ItemTier = 3 },
+            };
+        }
+
+        [TestMethod]
+        public void NameHasTakesAlternativesAfterCommas() {
+            Assert.IsTrue(Loot.NameHas("Iron Dagger", "iron, steel"));
+            Assert.IsTrue(Loot.NameHas("Steel Long Sword", "iron, steel sword"));
+            Assert.IsFalse(Loot.NameHas("Steel Dagger", "iron, steel sword"), "each alternative's words all have to be there");
+            Assert.IsFalse(Loot.NameHas("Granite Mace", "iron, steel"));
+            Assert.IsTrue(Loot.NameHas("Granite Mace", " , "), "nothing but commas is no name filter");
+            Assert.IsTrue(Loot.NameHas("Granite Mace", ""));
+        }
+
+        [TestMethod]
+        public void NameHasSeesTheMaterialEvenWhenTheNameLeavesItOut() {
+            var rule = new LootRule { NameContains = "green garnet" };
+            Assert.IsTrue(Loot.Matches(rule, Made("Dagger", "GreenGarnet")), "as the tooltip titles it: Green Garnet Dagger");
+            Assert.IsTrue(Loot.Matches(rule, Made("Green Garnet Dagger", "GreenGarnet")), "not doubled");
+            Assert.IsFalse(Loot.Matches(rule, Made("Dagger", "Iron")));
+        }
+
+        [TestMethod]
+        public void ASalvageRuleNarrowedByNameLeavesOtherNamesToTheRulesAfterIt() {
+            var list = new LootList {
+                Rules = {
+                    new LootRule { Name = "Salvage iron and steel", Outcome = LootOutcome.Salvage, NameContains = "Iron, Steel" },
+                    new LootRule { Name = "Keep the rest", Outcome = LootOutcome.Keep },
+                },
+            };
+
+            Assert.AreEqual("Salvage iron and steel", Loot.Decide(list, Made("Iron Dagger", "Iron")).Rule.Name);
+            Assert.AreEqual("Salvage iron and steel", Loot.Decide(list, Made("Steel Axe", "Steel")).Rule.Name);
+            Assert.AreEqual("Keep the rest", Loot.Decide(list, Made("Granite Mace", "Granite")).Rule.Name);
+        }
+
+        [TestMethod]
+        public void MaterialIsTheSalvageRulesAndTakesSeveral() {
+            var material = MarketSearch.Filters.Single(f => f.Key == Key(null, "material"));
+            Assert.AreEqual(FilterKind.Multi, material.Kind);
+            Assert.IsTrue(material.LootOnly, "the Market API has no such parameter");
+
+            foreach (var category in new[] { "", "Weapon", "Armor", "Jewelry", "Salvage", "Misc" }) {
+                Assert.IsTrue(Loot.Shows(new LootRule { Category = category, Outcome = LootOutcome.Salvage }, material), category);
+                Assert.IsFalse(Loot.Shows(new LootRule { Category = category, Outcome = LootOutcome.Keep }, material), category);
+            }
+
+            var rule = new LootRule { Outcome = LootOutcome.Salvage, Values = { [material.Key] = "Iron,GreenGarnet" } };
+            Assert.IsTrue(Loot.Matches(rule, Made("Iron Dagger", "Iron")));
+            Assert.IsTrue(Loot.Matches(rule, Made("Green Garnet Dagger", "GreenGarnet")));
+            Assert.IsFalse(Loot.Matches(rule, Made("Granite Mace", "Granite")));
+            Assert.IsFalse(Loot.Matches(rule, Made("Mace", null)), "no material, no match");
+
+            // nothing ticked takes every material, and none
+            var all = new LootRule { Outcome = LootOutcome.Salvage };
+            Assert.IsTrue(Loot.Matches(all, Made("Granite Mace", "Granite")));
+            Assert.IsTrue(Loot.Matches(all, Made("Mace", null)));
+
+            // switched to Keep, what was ticked no longer counts
+            rule.Outcome = LootOutcome.Keep;
+            Assert.IsTrue(Loot.Matches(rule, Made("Granite Mace", "Granite")));
+
+            // a salvage bag from a server that leaves the item's material out still has its description's
+            var bag = new CorpseItemInfo { Name = "Salvage", Item = new MarketListing { ItemCategory = "Salvage", SalvageMaterial = "Iron" } };
+            var bags = new LootRule { Category = "Salvage", Outcome = LootOutcome.Salvage, Values = { [material.Key] = "Iron" } };
+            Assert.IsTrue(Loot.Matches(bags, bag));
+
+            // every option is a MaterialType name, spaces gone
+            Assert.IsTrue(MarketSearch.ItemMaterials.All(o => o.Value.Length > 0 && !o.Value.Contains(" ")));
+            Assert.AreEqual(MarketSearch.ItemMaterials.Length, MarketSearch.ItemMaterials.Select(o => o.Value).Distinct().Count());
+        }
+
+        [TestMethod]
+        public void SalvagesOwnMaterialFilterGivesWayToMaterialInSalvageRules() {
+            var old = MarketSearch.Filters.Single(f => f.Key == Key("Salvage", "salvageMaterial"));
+            Assert.IsFalse(Loot.Shows(new LootRule { Category = "Salvage", Outcome = LootOutcome.Salvage }, old),
+                "Material, which takes several, is shown instead");
+            Assert.IsTrue(Loot.Shows(new LootRule { Category = "Salvage", Outcome = LootOutcome.Keep }, old),
+                "a rule keeping salvage bags still picks their material");
+
+            var saved = new LootRule { Category = "Salvage", Outcome = LootOutcome.Salvage, Values = { [old.Key] = "Iron" } };
+            Assert.IsTrue(Loot.Shows(saved, old), "a rule saved with it keeps it");
+            var bag = new CorpseItemInfo { Name = "Salvage", Item = new MarketListing { ItemCategory = "Salvage", SalvageMaterial = "Steel" } };
+            Assert.IsFalse(Loot.Matches(saved, bag), "and it still counts");
+        }
     }
 }

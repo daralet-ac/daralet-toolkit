@@ -372,14 +372,16 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>
         /// A combo box of tick boxes over (value, label) choices, the ticked values kept comma-separated in the options' order,
-        /// showing "Any" with none ticked. Returns true when the ticks changed.
+        /// showing noneTicked ("Any") with none ticked. Returns true when the ticks changed.
         /// </summary>
-        public static bool MultiChoice(string id, (string Value, string Label)[] options, ref string value) {
+        /// <param name="noneTicked">What the field says with nothing ticked, which puts no condition on the item.</param>
+        public static bool MultiChoice(string id, (string Value, string Label)[] options, ref string value,
+            string noneTicked = "Any") {
             var ticked = (value ?? "").Split(',').Select(v => v.Trim()).Where(v => v.Length > 0).ToList();
             var labels = options.Where(o => ticked.Contains(o.Value)).Select(o => o.Label).ToList();
             var changed = false;
 
-            if (Combos.Begin(id, labels.Count == 0 ? "Any" : string.Join(", ", labels))) {
+            if (Combos.Begin(id, labels.Count == 0 ? noneTicked : string.Join(", ", labels))) {
                 foreach (var option in options) {
                     var on = ticked.Contains(option.Value);
 

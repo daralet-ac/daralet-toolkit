@@ -139,6 +139,26 @@ namespace DaraletPlayer.Feed {
         }.Concat(Gems).Distinct().ToArray();
 
         /// <summary>
+        /// An item's own material, for the loot rules' Material filter: the server's name for it (its MaterialType, as
+        /// CorpseItemInfo.Material has it), which is also the salvage it makes. By kind, the way the salvage panel groups
+        /// them; the generic Cloth, Gem, Metal and Stone are left out, as nothing that drops is made of them.
+        /// </summary>
+        public static readonly (string Value, string Label)[] ItemMaterials = Materials(
+            "Brass", "Bronze", "Copper", "Gold", "Iron", "Pyreal", "Silver", "Steel",
+            "Ebony", "Mahogany", "Oak", "Pine", "Teak", "Wood",
+            "Alabaster", "Granite", "Marble", "Obsidian", "Sandstone", "Serpentine",
+            "Ceramic", "Porcelain", "Ivory",
+            "Leather", "Armoredillo Hide", "Gromnie Hide", "Reed Shark Hide",
+            "Linen", "Satin", "Silk", "Velvet", "Wool")
+            .Concat(Materials(Gems.Where(g => g != "Serpentine").ToArray()))
+            .ToArray();
+
+        /// <summary>Material names as (MaterialType's name, as shown): "Green Garnet" is GreenGarnet.</summary>
+        private static IEnumerable<(string Value, string Label)> Materials(params string[] labels) {
+            return labels.Select(l => (l.Replace(" ", ""), l));
+        }
+
+        /// <summary>
         /// Every filter, in the order the tab shows them. The ones for all categories come first.
         /// </summary>
         public static readonly MarketFilter[] Filters = BuildFilters().ToArray();
@@ -157,6 +177,7 @@ namespace DaraletPlayer.Feed {
                 case "sigilEffect":
                 case "salvageTargetType":
                 case "salvageMaterial":
+                case "material":
                 case "consumableType":
                 case "miscType":
                 case "scrollSchool":
@@ -238,6 +259,11 @@ namespace DaraletPlayer.Feed {
             yield return F(null, "Max burden", "maxBurden", FilterKind.Number, "The highest burden: a stack's, for a stack.", lootOnly: true);
             yield return F(null, "Min value/burden", "minValuePerBurden", FilterKind.Number,
                 "The lowest vendor value for each unit of burden (value 5000 at burden 50 is 100): what's worth carrying. Burden 0 counts as 1.", lootOnly: true);
+            yield return F(null, "Material", "material", FilterKind.Multi,
+                "The materials to salvage: what the item is made of, which is also the salvage it makes. All, with none "
+                + "ticked, takes every item. Tick any number to salvage only items of one of them. Only Salvage rules "
+                + "have it.",
+                ItemMaterials, lootOnly: true);
 
             yield return F("Weapon", "Subtype", "weaponSubtype", FilterKind.Choice,
                 "Melee and thrown weapons, missile launchers or casters. Each has its own damage stat, and only the filters for it show.",

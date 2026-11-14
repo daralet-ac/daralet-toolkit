@@ -238,7 +238,8 @@ namespace DaraletPlayer.Feed {
                 return false;
             }
 
-            if (!NameHas(item.Name, rule.NameContains)) {
+            // the name as the tooltip titles it, with the material in front even where the server left it out
+            if (!NameHas(ItemLines.WithMaterial(item.Name, item.Material), rule.NameContains)) {
                 return false;
             }
 
@@ -335,6 +336,18 @@ namespace DaraletPlayer.Feed {
                 return false;
             }
 
+            // Material is the Salvage outcome's: which materials to salvage. Hidden on any other rule, it doesn't count
+            // there, though what's ticked is kept for when the outcome goes back to Salvage.
+            if (filter.Param == MaterialParam && rule.Outcome != LootOutcome.Salvage) {
+                return false;
+            }
+
+            // where Material shows, Salvage's own, which takes one, is only kept for a rule saved with it filled in, so
+            // it still holds and can be emptied; a rule keeping salvage bags still has it
+            if (filter.Key == SalvageMaterialKey && rule.Outcome == LootOutcome.Salvage && !HasValue(rule, filter.Key)) {
+                return false;
+            }
+
             return filter.ShownFor(Pick(rule, "Weapon", SubtypeKey), Pick(rule, "Weapon", WeaponTypeKey), KindOf(rule));
         }
 
@@ -361,12 +374,22 @@ namespace DaraletPlayer.Feed {
         public static readonly string WeaponTypeKey = MarketSearch.Filters.Single(f => f.Param == "weaponType").Key;
         public static readonly string WeightKey = MarketSearch.Filters.Single(f => f.Param == "armorWeightClass").Key;
         public static readonly string SlotKey = MarketSearch.Filters.Single(f => f.Param == "jewelrySlot").Key;
+        public const string MaterialParam = "material";
+        public static readonly string SalvageMaterialKey = MarketSearch.Filters.Single(f => f.Param == "salvageMaterial").Key;
+
+        private static bool HasValue(LootRule rule, string key) {
+            return rule.Values != null && rule.Values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value);
+        }
 
         private static bool FilterHolds(MarketFilter filter, string value, CorpseItemInfo item) {
             var param = filter.Param;
 
             if (param.Equals("coverage", StringComparison.OrdinalIgnoreCase)) {
                 return CoverageHolds(value, item);
+            }
+
+            if (param.Equals(MaterialParam, StringComparison.OrdinalIgnoreCase)) {
+                return MaterialHolds(value, item);
             }
 
             if (WordFilters.TryGetValue(param, out var words)) {
@@ -382,6 +405,16 @@ namespace DaraletPlayer.Feed {
 
             // a filter the loot rules can't check yet leaves the rule alone rather than blocking it
             return true;
+        }
+
+        /// <summary>
+        /// The item is made of one of the materials ticked (comma-separated MaterialType names). The server sends an item's
+        /// own; a salvage bag's description has it too, for a server that leaves the item's out.
+        /// </summary>
+        private static bool MaterialHolds(string value, CorpseItemInfo item) {
+            var material = Squash(string.IsNullOrEmpty(item.Material) ? item.Item?.SalvageMaterial : item.Material);
+            var wanted = SplitList(value);
+            return wanted.Count == 0 || (material.Length > 0 && wanted.Contains(material));
         }
 
         /// <summary>Every slot named (comma-separated) is one the item covers.</summary>
@@ -457,9 +490,19 @@ namespace DaraletPlayer.Feed {
             return KnowsScrollSpell?.Invoke(item.Guid) != true;
         }
 
-        private static bool NameHas(string name, string words) {
-            var wanted = (words ?? "").Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            return wanted.All(w => (name ?? "").IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0);
+        /// <summary>
+        /// Whether the name holds: commas part alternatives, any one of which will do, and each is words the name has to
+        /// have, all of them ("iron, steel sword" is anything iron, or a steel sword). Before commas counted, a comma was
+        /// part of the word, so "iron, steel" matched nothing and every item fell to the rules after it.
+        /// </summary>
+        public static bool NameHas(string name, string words) {
+            var alternatives = (words ?? "").Split(',')
+                .Select(a => a.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                .Where(a => a.Length > 0)
+                .ToList();
+
+            return alternatives.Count == 0
+                || alternatives.Any(a => a.All(w => (name ?? "").IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0));
         }
 
         private static string Squash(string text) {

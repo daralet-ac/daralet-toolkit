@@ -341,9 +341,12 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("The highest loot tier.");
             ImGui.EndDisabled();
 
-            Form.Label("Name has", "Words the item's name has to have, all of them.");
+            Form.Label("Name has", "Words the item's name has to have, all of them, its material among them (\"Iron "
+                + "Dagger\"). Commas part alternatives, any one of which will do: \"iron, steel sword\" is anything iron, or "
+                + "a steel sword. To pick materials, Material under Types is surer: a name can have a material's word in "
+                + "it by chance.");
             ImGui.SetNextItemWidth(Form.ControlWidth);
-            changed |= ImGui.InputTextWithHint("##rule-name-has", "any name", ref rule.NameContains, 60);
+            changed |= ImGui.InputTextWithHint("##rule-name-has", "any name", ref rule.NameContains, 200);
 
             Form.Label("Only", "Narrows the rule further.");
             var first = true;
@@ -471,7 +474,9 @@ namespace DaraletPlayer.Ui {
 
             switch (filter.Kind) {
                 case FilterKind.Multi:
-                    return Widgets.MultiChoice(id, filter.Options, ref value);
+                    // with no material ticked every material passes, which "All" says plainer than "Any"
+                    return Widgets.MultiChoice(id, filter.Options, ref value,
+                        filter.Param == Loot.MaterialParam ? "All" : "Any");
 
                 case FilterKind.Choice:
                     // with a subtype picked, Class and Type offer only that subtype's
