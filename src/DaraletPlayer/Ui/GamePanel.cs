@@ -44,16 +44,17 @@ namespace DaraletPlayer.Ui {
         /// <param name="onClose">What closing the window does instead of hiding it (FloatingWindow's).</param>
         /// <param name="minSize">For a window the player sizes, the smallest it may be (FloatingWindow's: 300 by 200 if
         /// not given).</param>
+        /// <param name="padding">The room round what's in the window, instead of the style's (FloatingWindow's).</param>
         protected GamePanel(string key, string name, Settings settings, uint[] elements, Vector2 defaultPosition,
             Func<object> inUse = null, Func<bool> hideWhen = null, TimeSpan? checkEvery = null,
             Func<uint, bool, bool> showAgain = null, Vector2? defaultSize = null, bool alwaysOnlyInUse = false,
-            Action onClose = null, Vector2? minSize = null) {
+            Action onClose = null, Vector2? minSize = null, Vector2? padding = null) {
             Key = key;
             Name = name;
             this.settings = settings;
             Window = new FloatingWindow(key, name, settings, defaultPosition, RenderWindow, visibleByDefault: false,
                 menuItems: RenderMenu, inUse: inUse, defaultSize: defaultSize, alwaysOnlyInUse: alwaysOnlyInUse,
-                onClose: onClose, minSize: minSize);
+                onClose: onClose, minSize: minSize, padding: padding);
             hider = new GameElementHider(name, elements, () => Options.Replace && (hideWhen?.Invoke() ?? true), checkEvery,
                 showAgain);
         }

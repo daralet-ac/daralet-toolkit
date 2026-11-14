@@ -267,6 +267,12 @@ namespace DaraletPlayer.Ui {
         /// <summary>Shown only while in use: always for some windows, by choice (Only when needed) for the rest.</summary>
         private bool OnlyInUse => inUse != null && (alwaysOnlyInUse || Placement.OnlyInUse);
 
+        /// <summary>
+        /// A window only ever shown while in use (the Book window) with nothing to show now: switching to it would show
+        /// nothing, so the shared window leaves its tab out.
+        /// </summary>
+        public bool NothingToShow => alwaysOnlyInUse && inUse?.Invoke() == null;
+
         /// <summary>Whether it's on screen now.</summary>
         public bool Shown => hud.Visible;
 
