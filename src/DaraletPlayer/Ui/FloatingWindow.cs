@@ -602,9 +602,10 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            // a Ctrl drag or a drag by the top edge moves Look itself, so the window follows it
-            if (!positioned || !ImGui.IsMouseDown(ImGuiMouseButton.Left) || ctrlGrab.HasValue || edgeGrab.HasValue
-                || Led) {
+            // a Ctrl drag or a drag by the top edge moves Look itself, so the window follows it. One that grows left or up
+            // is placed by its kept corner every frame instead (FloatingWindow.Grow.cs).
+            if (!SetNextGrowPlacement() && (!positioned || !ImGui.IsMouseDown(ImGuiMouseButton.Left) || ctrlGrab.HasValue
+                || edgeGrab.HasValue || Led)) {
                 ImGui.SetNextWindowPos(new Vector2(Look.X ?? defaultPosition.X, Look.Y ?? defaultPosition.Y), ImGuiCond.Always);
             }
 
@@ -731,6 +732,9 @@ namespace DaraletPlayer.Ui {
                 if (disposed) {
                     return;
                 }
+
+                // before anything moves it this frame: a window that grows left or up keeps that corner put
+                FollowGrowth();
 
                 ImGui.SetWindowFontScale(FontScale);
                 Widgets.TextScale = settings.Data.ClampedTextScale * (textScale?.Invoke() ?? 1);

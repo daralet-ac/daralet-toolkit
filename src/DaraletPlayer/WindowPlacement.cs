@@ -22,6 +22,10 @@ namespace DaraletPlayer {
         /// where an unlocked window's place and height counted one.
         /// </summary>
         [DataMember(Name = "noTitleBar")] public bool NoTitleBar;
+        /// <summary>A window that sizes itself keeps its right edge put, growing to the left (FloatingWindow.Grow.cs).</summary>
+        [DataMember(Name = "growLeft")] public bool GrowLeft;
+        /// <summary>A window that sizes itself keeps its bottom edge put, growing upwards.</summary>
+        [DataMember(Name = "growUp")] public bool GrowUp;
         /// <summary>How big the window's text and bars are drawn: 1 is normal size.</summary>
         [DataMember(Name = "scale")] public float Scale;
         /// <summary>Shown only while it has something to show (Only when needed).</summary>

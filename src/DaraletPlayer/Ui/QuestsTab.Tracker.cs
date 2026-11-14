@@ -66,22 +66,25 @@ namespace DaraletPlayer.Ui {
                 : "Ticked, but the Quest Tracker only lists quests you haven't started with its Not started too.");
         }
 
-        /// <summary>The tracker's right-click menu, over a quest's line: hide it.</summary>
+        /// <summary>
+        /// The tracker's right-click menu: over a quest's line, hide it; anywhere, which edges stay put as it grows.
+        /// </summary>
         private void RenderTrackerMenu() {
             var quest = feed.Quests?.Quests?.FirstOrDefault(q => q.Id == menuQuest);
 
-            if (quest == null) {
-                return;
+            if (quest != null) {
+                Widgets.TextDisabled(quest.Name ?? "");
+
+                if (ImGui.MenuItem("Hide from tracker")) {
+                    SetTracked(quest.Id, false);
+                    menuQuest = 0;
+                }
+                Widgets.Tip("Leaves this quest out of the tracker. Tick it under Track in the Quests tab to bring it back.");
+
+                ImGui.Separator();
             }
 
-            Widgets.TextDisabled(quest.Name ?? "");
-
-            if (ImGui.MenuItem("Hide from tracker")) {
-                SetTracked(quest.Id, false);
-                menuQuest = 0;
-            }
-            Widgets.Tip("Leaves this quest out of the tracker. Tick it under Track in the Quests tab to bring it back.");
-
+            tracker.RenderGrowMenuItems();
             ImGui.Separator();
         }
 
@@ -201,6 +204,22 @@ namespace DaraletPlayer.Ui {
             if (Form.FlowCheck(ref first, "Not started too##quest-tracker", ref data.QuestTrackerAvailable,
                 "Lists the quests you've been given but haven't started yet as well, under the started ones.")) {
                 settings.Changed();
+            }
+
+            var growLeft = tracker.GrowLeft;
+
+            if (Form.FlowCheck(ref first, "Right-aligned##quest-tracker", ref growLeft,
+                "Keeps the tracker's right edge where it is: it widens to the left, so it can sit against the screen's "
+                + "right edge without its lines running off it. Also in its right-click menu.")) {
+                tracker.GrowLeft = growLeft;
+            }
+
+            var growUp = tracker.GrowUp;
+
+            if (Form.FlowCheck(ref first, "Bottom-aligned##quest-tracker", ref growUp,
+                "Keeps the tracker's bottom edge where it is: the list builds upwards from it as quests open or are "
+                + "added, still in the same order. Also in its right-click menu.")) {
+                tracker.GrowUp = growUp;
             }
 
             if (Form.FlowSmallButton(ref first, "Open all##quest-tracker",

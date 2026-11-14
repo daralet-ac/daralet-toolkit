@@ -50,7 +50,8 @@ namespace DaraletPlayer.Ui {
                 foreach (var wo in landscape) {
                     var kind = KindOf(wo, ownCorpse);
 
-                    if (kind == null) {
+                    // nor what the server keeps off the game's radar (invisible creatures, guards set so)
+                    if (kind == null || ClientRadar.Behavior(wo.Id) == ClientRadar.ShowNever) {
                         continue;
                     }
 

@@ -30,6 +30,7 @@ namespace DaraletPlayer.Ui {
         private readonly HashSet<uint> fellows = new HashSet<uint>();
         private DateTime nextBlips;
         private readonly HashSet<int> loggedPortalIds = new HashSet<int>();
+        private readonly HashSet<int> loggedNeverIds = new HashSet<int>();
         private int loggedPortals;
 
         /// <summary>
@@ -60,6 +61,12 @@ namespace DaraletPlayer.Ui {
                     var behavior = wo.Values(LongValueKey.Behavior, 0);
 
                     if (RadarMath.Hidden(behavior)) {
+                        continue;
+                    }
+
+                    // what the server keeps off the game's radar (invisible creatures, spawners, pets) stays off this one
+                    if (ClientRadar.Behavior(wo.Id) == ClientRadar.ShowNever) {
+                        LogNeverShown(wo);
                         continue;
                     }
 
@@ -149,6 +156,16 @@ namespace DaraletPlayer.Ui {
         /// The first few portals of a session in log.txt, by their flags or by Decal's class or by name, with what each
         /// says, to check the radar's kinds against (Decal's ObjectClass once showed them as NPCs).
         /// </summary>
+        /// <summary>The first few objects a session left off for the server's Show never, in log.txt.</summary>
+        private void LogNeverShown(WorldObject wo) {
+            if (loggedNeverIds.Count >= 10 || !loggedNeverIds.Add(wo.Id)) {
+                return;
+            }
+
+            PluginCore.LogFile($"[radar] left off {wo.Name} 0x{wo.Id:X8} ({wo.ObjectClass}): the server says never "
+                + "show it");
+        }
+
         private void LogPortal(WorldObject wo, int behavior, int itemType, RadarKind? byFlags) {
             if (loggedPortals >= 5) {
                 return;

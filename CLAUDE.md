@@ -667,7 +667,11 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   row's Selectable has `AllowOverlap`, or it would take the box's clicks), or with Hide from tracker in the tracker's
   right-click menu, opened from the quest's line (`menuQuest`, `FloatingWindow.OpenMenu`); both are
   `QuestTrackerHidden`, and Show hidden under its settings clears it. Which are open is saved by contract id (`QuestTrackerOpen`); it asks for
-  `quests` on the same 5 seconds while shown, and Only when needed hides it with nothing to track.
+  `quests` on the same 5 seconds while shown, and Only when needed hides it with nothing to track. **Right-aligned** and
+  **Bottom-aligned** (its settings and right-click menu, `WindowPlacement.GrowLeft` / `GrowUp`, the user's call, November
+  2026) keep its right or bottom edge put as it changes size (`FloatingWindow.Grow.cs`: placed by that corner with
+  ImGui's pivot from last frame's size, the saved top left then following the new size, so drags and snapping are
+  unchanged; any window that sizes itself can use it). Untested in the game when written.
 
 - **Toolbar buttons** (`Ui/ToolbarButtons.cs`, `Ui/ToolbarButton.cs`, `Ui/ClientElements.cs`): the game toolbar's
   backpack, Contracts (quill), Social (two heads) and Map (compass) buttons, and the Character Information button in the
@@ -1274,7 +1278,11 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   objects' class, flags, type and server colour). The rest go by `ObjectClass`, a player's kind by
   `LongValueKey.Behavior`, the ObjectDescriptionFlag bits (PlayerKiller 0x20, PK Lite 0x2000000, Admin 0x100000 unless
   HiddenAdmin 0x40; UiHidden 0x80 is left off as the game does), fellows by the server's `fellowship` reply (asked every
-  5 seconds while Fellows are shown). Each kind shown and coloured on its own; the colours to start are the client's
+  5 seconds while Fellows are shown). Anything the server sends as RadarBehavior Show never (PropertyInt 133,
+  `ShowableOnRadar`: invisible creatures, spawners, pets, town guards set so) is left off, as the game's radar leaves
+  it off, and off the Dungeon window's markers too: the client keeps it at `+0x108` of the ACCWeenieObject, after the
+  blip colour (`ClientRadar.Behavior`; Decal doesn't pass it on; the first ten a session in log.txt). The first build
+  showed them all. Show while moving and Show while attacking (2, 3) are still shown always. Each kind shown and coloured on its own; the colours to start are the client's
   RadarColor table (`gmRadarUI::GetBlipColor`, `0x4D8350`, the table at `0x81C69C`) where one fits, by eye otherwise,
   since its colours by flags are set up at run time. **Server's colours** (`RadarOptions.ServerColors`, on to start):
   the game's radar colours an object by the RadarBlipColor the server gave it before anything else (a Portal Device's
