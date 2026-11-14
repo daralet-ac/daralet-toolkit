@@ -687,7 +687,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   **Shared window** (`Ui/SharedWindow.cs`, a row of its own in Client UI Override, under a line that sets it apart
   from the panels' checkboxes; `SettingsData.SharedWindow`, on for
   everyone, the user's call, November 2026): the Inventory, Map, Social, Quests, Character, Attributes, Spellbook,
-  Options, Buffs, Debuffs and Vitae windows share one place on screen, as the game's panels do, all but those kept
+  Options, Buffs, Debuffs, Vitae, Link Status and Book windows share one place on screen, as the game's panels do, all but those kept
   separate (`SharedWindowSeparate`, by window id). Each window says so for itself, not the Config tab: **Separate** at
   the end of the shared window's tabs takes the one showing out, and **Share with the other panels**, ticked while it
   shares, at the top of its right-click menu's window items (`FloatingWindow.SharedMenu`), takes it out or puts it back.
@@ -1122,6 +1122,31 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   with Keep measuring, goes on with it closed. The client keeps link averages of its own (`ClientNet.m_LinkStatusAverages`,
   `LinkStatusHolder.GetPacketLossPercentage`, from the packet layer's echoes), not read: their places in memory weren't
   checked against acclient.exe. `[link]` lines in log.txt (spikes and losses, 200 a session). Untested in the game when
+  written.
+  **Book** (`Ui/BookPanel*.cs`, `Ui/BookReader.cs`, `Feed/Book*.cs`; key `book`, its settings under Client UI
+  Override's Game panels): the game's book window (gmBookUI, element type `0x10000019`, layout `0x21000019`, 300x362,
+  panel 2 in the panel frame), for books, notes and anything else with writing, by `GamePanelInterceptor`. The words
+  are the server's: using a book sends BookDataResponse (game event `0x00B4`, daralet-ACE's
+  `GameEventBookDataResponse`: the book, its most pages twice, its most letters a page, each page (author id, name and
+  account, the flags `0xFFFF0002`, words included, anyone may change it, the words), the inscription, the scribe), every
+  page's words in it, so the client never asks for a page (`0x00AE`, "unused?" in the server); BookPageDataResponse
+  (`0x00B8`) is read too. `BookMessages` reads them off `EchoFilter.ServerDispatch`. Closing the game's panel calls
+  gmBookUI's `CloseBook`, which sends nothing for a book only read. The window only shows while a book's open
+  (`alwaysOnlyInUse`), titled with the item's name, a page at a time; a new book opens at its first page, the same one
+  again where it was left, as `gmBookUI::OpenBook` does. Retail is the game's art (`book-*.png`): the title bar
+  `06001279` and close `0600126C`/`6D` (24x30, the game's "—"), the parchment (template `0x10000116`: top `06001273`,
+  bottom `06001270`, sides `06001271`/`72` stretched, the middle `0600126F` repeated), the words at 22,26 in dark ink,
+  the page-turning corners (back `0x100002D7`, 54x33, `06001269`, pressed `6A`, nowhere to go `6B`; next `0x100002D8`,
+  65x32, `06001266`/`67`/`68`), the edge `0600126E` and the page drop-down (`0x10000471` in `0x21000043`: gold field
+  `06001276`, picked row `0600127A`, arrow `06001274`/`75`, `ComboLook.Book`), the foot `06001265`; no window padding
+  (`GamePanel`'s `padding`). The words have a size of their own (`BookOptions.FontSize`, 17 px to start, times the
+  window's Size; a slider in its settings and its right-click menu; "the text is too small" at first), a font
+  made at exactly that size (`ChatFonts`, as the chat windows', `ChatFonts.MakeWanted` called from its RenderFrame too). Writing is the game's: Write in the right-click menu, for a book you could write in
+  (`BookData.WritableBy`: room for a page, or a page yours or anyone's, the server's checks), uses the book again
+  (`Actions.UseItem`) with `GamePanelInterceptor.LetNextOpen`, so the game's window opens and is left alone till it
+  closes. It can be one of the shared window's (`book`, ticked for new settings and, being new, for old ones too),
+  its tab left out while no book is open (`FloatingWindow.NothingToShow`, since it would show nothing); a book
+  opening makes it the one showing, as any window opening does. `[book]` lines in log.txt. Untested in the game when
   written.
   **Vendor** (`Ui/VendorPanel*.cs`, `Ui/ClientVendor.cs`, `Feed/VendorPrices.cs`, `Ui/PrivateInts.cs`): the game's vendor
   window (gmVendorUI, element type `0x10000017`, layout `0x21000012`, 800x110 in ENVP) with its three tabs, starting on
@@ -1943,7 +1968,9 @@ checks (greying out market buttons away from a broker, say) are only there to be
   (`SetNextWindowSizeConstraints` before `BeginCombo`, which takes them over and clears them when it doesn't open; as
   tall as ImGui's row count for the height flag, in rows of the field's height, `ListHeight`), its scroll bar inside
   rather than out past the arrow; the icon grids pass `listAsWide: false`, being laid out by their own widths. Rows that aren't a plain name (the icon grids, tick boxes) keep
-  ImGui's own items on those colours. Plain ImGui before the art can be drawn. Untested in the game when written.
+  ImGui's own items on those colours. Plain ImGui before the art can be drawn. Another of the game's menus is a
+  `ComboLook` passed to `Begin` and `Item` (`ComboLook.Book`: the book window's gold page menu, its words dark).
+  Untested in the game when written.
 - **Scroll bars** are the game's (`Ui/Scrollbars.cs`, the user's call, November 2026): layout `0x2100003E`'s vertical
   `0x10000367` (16 wide: chain track `06004C5F`, thumb top/middle/bottom `06004C60`/`63`/`66`, arrows up `06004C6C` and
   down `06004C69`: the template's decrement button, property 0x77, is `0x10000072`, though `0x10000071` sits at 0,0,

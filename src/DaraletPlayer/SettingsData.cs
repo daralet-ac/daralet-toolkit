@@ -371,6 +371,9 @@ namespace DaraletPlayer {
         /// <summary>The Link Status window (LinkPanel).</summary>
         [DataMember(Name = "link")] public LinkOptions Link;
 
+        /// <summary>The Book window (BookPanel).</summary>
+        [DataMember(Name = "book")] public BookOptions Book;
+
         /// <summary>The Radar window (RadarPanel).</summary>
         [DataMember(Name = "radar")] public RadarOptions Radar;
 
@@ -539,6 +542,7 @@ namespace DaraletPlayer {
             Toolbar = new ToolbarOptions();
             Indicators = new IndicatorOptions();
             Link = new LinkOptions();
+            Book = new BookOptions();
             Radar = new RadarOptions();
             Attributes = new AttributesOptions();
             Spellbook = new SpellbookOptions();
@@ -548,7 +552,7 @@ namespace DaraletPlayer {
             QuestTrackerHidden = new List<uint>();
             SharedWindowMembers = new List<string> {
                 "carried", "map", "social", "quests", "character", "attributes", "spellbook", "options", "buffs", "debuffs",
-                "vitae", "link",
+                "vitae", "link", "book",
             };
             SharedWindowTabs = true;
             OneClickHeal = true;

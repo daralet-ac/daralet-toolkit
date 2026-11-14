@@ -40,6 +40,19 @@ namespace DaraletPlayer.Ui {
             PluginCore.LogFile($"[game-panels] {name}: the game's panel opened from the plugin's window");
         }
 
+        /// <summary>
+        /// Leaves the game's own panel alone the next time it opens (the game opening it itself, after a Use of a book),
+        /// and until it's closed, as LetOpen does; given up on if it hasn't opened within a few seconds.
+        /// </summary>
+        public void LetNextOpen() {
+            letOpen = true;
+            seenOpenAt = Environment.TickCount + 3000;
+            PluginCore.LogFile($"[game-panels] {name}: the game's panel left alone the next time it opens");
+        }
+
+        /// <summary>The game's own panel is being left alone (LetOpen, LetNextOpen).</summary>
+        public bool LettingOpen => letOpen;
+
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
                 if (CoreManager.Current.CharacterFilter.LoginStatus != 3 || !wanted() || HideGameUi.On) {

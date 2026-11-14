@@ -17,11 +17,6 @@ namespace DaraletPlayer.Ui {
     internal static class Combos {
         private const float Cap = 4;
 
-        // the art's own colours, for what ImGui draws in the list: the field's inside, its bevel, the picked row's green
-        private static readonly Vector4 ListBg = new Vector4(0x0A / 255f, 0x14 / 255f, 0x04 / 255f, 0.97f);
-        private static readonly Vector4 ListBorder = new Vector4(0x5D / 255f, 0x69 / 255f, 0x57 / 255f, 1);
-        private static readonly Vector4 Picked = new Vector4(0x34 / 255f, 0x67 / 255f, 0x15 / 255f, 1);
-        private static readonly Vector4 PickedHover = new Vector4(0x3C / 255f, 0x6E / 255f, 0x1B / 255f, 1);
         private static readonly Vector4 Clear = Vector4.Zero;
 
         /// <summary>How many colours each open combo pushed for its list, popped in End.</summary>
@@ -36,8 +31,11 @@ namespace DaraletPlayer.Ui {
         /// <param name="listAsWide">
         /// The open list as wide as the field (the game's way). False for a list laid out by its own widths (icon grids).
         /// </param>
+        /// <param name="look">Which of the game's menus it looks like: the vendor's kind menu (ComboLook.Game) if null.</param>
         public static bool Begin(string id, string preview, ImGuiComboFlags flags = ImGuiComboFlags.None,
-            bool listAsWide = true) {
+            bool listAsWide = true, ComboLook look = null) {
+            look = look ?? ComboLook.Game;
+
             if (!ItemIcons.CanDrawArt) {
                 return Plain(id, preview, flags);
             }
@@ -47,20 +45,26 @@ namespace DaraletPlayer.Ui {
             var min = ImGui.GetCursorScreenPos();
             var height = ImGui.GetFrameHeight();
             var max = min + new Vector2(Math.Max(height * 2, ImGui.CalcItemWidth()), height);
-            var arrowWidth = (float)Math.Round(height * 17 / 19);
-            var art = Field(drawList, "combo", min, max);
+            var arrowWidth = (float)Math.Round(height * look.ArrowAspect);
+            var art = Field(drawList, look.Field, min, max);
 
             if (!art) {
                 return Plain(id, preview, flags);
             }
 
             // the list's colours, read as its popup begins inside BeginCombo and while its rows draw
-            ImGui.PushStyleColor(ImGuiCol.PopupBg, ListBg);
-            ImGui.PushStyleColor(ImGuiCol.Border, ListBorder);
-            ImGui.PushStyleColor(ImGuiCol.Header, Picked);
-            ImGui.PushStyleColor(ImGuiCol.HeaderHovered, PickedHover);
-            ImGui.PushStyleColor(ImGuiCol.HeaderActive, PickedHover);
-            const int listColours = 5;
+            ImGui.PushStyleColor(ImGuiCol.PopupBg, look.ListBg);
+            ImGui.PushStyleColor(ImGuiCol.Border, look.ListBorder);
+            ImGui.PushStyleColor(ImGuiCol.Header, look.Picked);
+            ImGui.PushStyleColor(ImGuiCol.HeaderHovered, look.PickedHover);
+            ImGui.PushStyleColor(ImGuiCol.HeaderActive, look.PickedHover);
+            var listColours = 5;
+
+            // the words, on the field and down the list, where the art wants its own colour (the book's dark ink)
+            if (look.Text.HasValue) {
+                ImGui.PushStyleColor(ImGuiCol.Text, look.Text.Value);
+                listColours++;
+            }
 
             // ImGui's frame and arrow see-through, the text left on the art; its arrow is the game's, below
             ImGui.PushStyleColor(ImGuiCol.FrameBg, Clear);
@@ -85,7 +89,7 @@ namespace DaraletPlayer.Ui {
 
             // over the end of a long name, as the game's arrow sits over its field
             var arrowMin = new Vector2(max.X - arrowWidth, min.Y);
-            ItemIcons.DrawArtBox(drawList, open ? "combo-arrow-open" : "combo-arrow", arrowMin, max);
+            ItemIcons.DrawArtBox(drawList, open ? look.ArrowOpen : look.Arrow, arrowMin, max);
 
             if (!open) {
                 ImGui.PopStyleColor(listColours);
@@ -151,7 +155,11 @@ namespace DaraletPlayer.Ui {
         /// A row of the open list, as the game's: the field's art, bright green while picked or under the mouse, the name on
         /// it, no gap between rows. True when it was clicked.
         /// </summary>
-        public static bool Item(string label, bool selected, ImGuiSelectableFlags flags = ImGuiSelectableFlags.None) {
+        /// <param name="look">The same look its Begin was given (ComboLook.Game if null).</param>
+        public static bool Item(string label, bool selected, ImGuiSelectableFlags flags = ImGuiSelectableFlags.None,
+            ComboLook look = null) {
+            look = look ?? ComboLook.Game;
+
             if (!ItemIcons.CanDrawArt) {
                 return ImGui.Selectable(label, selected, flags);
             }
@@ -163,7 +171,7 @@ namespace DaraletPlayer.Ui {
 
             // known before the row's drawn, so its art can go under its text
             var lit = selected || ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(min, max);
-            Field(drawList, lit ? "combo-row-selected" : "combo", min, max);
+            Field(drawList, lit ? look.PickedRow : look.Field, min, max);
 
             ImGui.PushStyleColor(ImGuiCol.Header, Clear);
             ImGui.PushStyleColor(ImGuiCol.HeaderHovered, Clear);

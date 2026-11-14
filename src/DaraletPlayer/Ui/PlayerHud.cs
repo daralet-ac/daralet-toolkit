@@ -83,7 +83,8 @@ namespace DaraletPlayer.Ui {
                 ("buffs", "Buffs", gamePanels.Get("buffs").Window),
                 ("debuffs", "Debuffs", gamePanels.Get("debuffs").Window),
                 ("vitae", "Vitae", gamePanels.Get("vitae").Window),
-                ("link", "Link", gamePanels.Get<LinkPanel>().Window));
+                ("link", "Link", gamePanels.Get<LinkPanel>().Window),
+                ("book", "Book", gamePanels.Get<BookPanel>().Window));
             configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow, sharedWindow,
                 gamePanels), hideGameUi, launcher, borderless);
             leaderboardsTab = new LeaderboardsTab(feed, api);

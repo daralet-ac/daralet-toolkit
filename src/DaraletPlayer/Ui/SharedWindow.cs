@@ -400,7 +400,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            var sharing = windows.Where(w => Shares(w.Id)).ToList();
+            // a window with nothing to show (the Book window, no book open) has no tab: it would show an empty window
+            var sharing = windows.Where(w => Shares(w.Id) && (w.Id == showing || !w.Window.NothingToShow)).ToList();
 
             if (sharing.Count < 2) {
                 return;
