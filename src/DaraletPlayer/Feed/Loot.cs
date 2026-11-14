@@ -336,9 +336,15 @@ namespace DaraletPlayer.Feed {
                 return false;
             }
 
-            // the Material filter every rule has takes several; Salvage's own, which takes one, is only kept for a rule
-            // saved with it filled in, so it still holds and can be emptied
-            if (filter.Key == SalvageMaterialKey && !HasValue(rule, filter.Key)) {
+            // Material is the Salvage outcome's: which materials to salvage. Hidden on any other rule, it doesn't count
+            // there, though what's ticked is kept for when the outcome goes back to Salvage.
+            if (filter.Param == MaterialParam && rule.Outcome != LootOutcome.Salvage) {
+                return false;
+            }
+
+            // where Material shows, Salvage's own, which takes one, is only kept for a rule saved with it filled in, so
+            // it still holds and can be emptied; a rule keeping salvage bags still has it
+            if (filter.Key == SalvageMaterialKey && rule.Outcome == LootOutcome.Salvage && !HasValue(rule, filter.Key)) {
                 return false;
             }
 

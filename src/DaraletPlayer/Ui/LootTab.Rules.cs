@@ -474,7 +474,9 @@ namespace DaraletPlayer.Ui {
 
             switch (filter.Kind) {
                 case FilterKind.Multi:
-                    return Widgets.MultiChoice(id, filter.Options, ref value);
+                    // with no material ticked every material passes, which "All" says plainer than "Any"
+                    return Widgets.MultiChoice(id, filter.Options, ref value,
+                        filter.Param == Loot.MaterialParam ? "All" : "Any");
 
                 case FilterKind.Choice:
                     // with a subtype picked, Class and Type offer only that subtype's

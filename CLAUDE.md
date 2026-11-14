@@ -382,11 +382,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`Loot.NameHas`: "iron, steel sword" is anything iron, or a steel sword), checked against the name as the tooltip
   titles it (`ItemLines.WithMaterial`, the material in front even if the name lacks it). Before that a comma was part of the word, so
   a Salvage rule naming "Iron, Steel" matched nothing and every item fell to the rules below it: a catch-all Salvage rule
-  under it salvaged everything: likely the report of names not narrowing a rule (not confirmed). **Material** (`material`, every
-  category, under Types, `MarketSearch.ItemMaterials`) is a multi-choice of what the item is made of, by its
-  MaterialType name (`CorpseItemInfo.Material`, else a bag's `SalvageMaterial`), which is also what it salvages into; an
-  item with none doesn't match. Salvage's own single Material (`salvageMaterial`, the market search's) is hidden in the
-  rules unless a rule was saved with it filled in, which still counts.
+  under it salvaged everything: likely the report of names not narrowing a rule (not confirmed). **Material** (`material`, Salvage
+  rules only, by their outcome, every category, under Types, `MarketSearch.ItemMaterials`; the user's call, November 2026) is a multi-choice of what the item is made of, by its
+  MaterialType name (`CorpseItemInfo.Material`, else a bag's `SalvageMaterial`), which is also what it salvages into; with
+  none ticked it says All and takes every item (`Widgets.MultiChoice`'s `noneTicked`), and with some an item of none
+  doesn't match. Salvage's own single Material (`salvageMaterial`, the market search's) is hidden in
+  Salvage rules unless saved filled in, which still counts; a Keep rule for salvage bags still has it.
   The Mods heading has an **OR** box (`LootRule.ModsAny`): on, any one Mods filter filled in that holds is enough, while
   every other filter still has to.
   **Max speed** (`maxWeaponTime`) is the weapon's own Speed, its WeaponTime, lower being faster; the Market API only filters

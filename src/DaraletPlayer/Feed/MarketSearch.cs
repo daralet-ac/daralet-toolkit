@@ -260,8 +260,9 @@ namespace DaraletPlayer.Feed {
             yield return F(null, "Min value/burden", "minValuePerBurden", FilterKind.Number,
                 "The lowest vendor value for each unit of burden (value 5000 at burden 50 is 100): what's worth carrying. Burden 0 counts as 1.", lootOnly: true);
             yield return F(null, "Material", "material", FilterKind.Multi,
-                "What the item is made of, which is also the salvage it makes. Tick any number: an item of any one of them "
-                + "matches, and one with no material doesn't. With Salvage as the outcome, it's the materials to salvage.",
+                "The materials to salvage: what the item is made of, which is also the salvage it makes. All, with none "
+                + "ticked, takes every item. Tick any number to salvage only items of one of them. Only Salvage rules "
+                + "have it.",
                 ItemMaterials, lootOnly: true);
 
             yield return F("Weapon", "Subtype", "weaponSubtype", FilterKind.Choice,
