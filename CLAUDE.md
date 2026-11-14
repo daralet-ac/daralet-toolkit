@@ -378,6 +378,15 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`MarketFilter.Group`, set by `MarketSearch.GroupOf` from the parameter), leaving out a heading with nothing shown.
   **Spell** and **Scroll spell** take several names, comma-separated, any one matching (part of a name, case and spaces
   ignored, `Loot.WordsHold`); the Market API takes one, so the search sends the first (`MarketSearch.FirstSpell`).
+  **Name has** takes alternatives after commas, any one of which will do, each words the name has to have, all of them
+  (`Loot.NameHas`: "iron, steel sword" is anything iron, or a steel sword), checked against the name as the tooltip
+  titles it (`ItemLines.WithMaterial`, the material in front even if the name lacks it). Before that a comma was part of the word, so
+  a Salvage rule naming "Iron, Steel" matched nothing and every item fell to the rules below it: a catch-all Salvage rule
+  under it salvaged everything: likely the report of names not narrowing a rule (not confirmed). **Material** (`material`, every
+  category, under Types, `MarketSearch.ItemMaterials`) is a multi-choice of what the item is made of, by its
+  MaterialType name (`CorpseItemInfo.Material`, else a bag's `SalvageMaterial`), which is also what it salvages into; an
+  item with none doesn't match. Salvage's own single Material (`salvageMaterial`, the market search's) is hidden in the
+  rules unless a rule was saved with it filled in, which still counts.
   The Mods heading has an **OR** box (`LootRule.ModsAny`): on, any one Mods filter filled in that holds is enough, while
   every other filter still has to.
   **Max speed** (`maxWeaponTime`) is the weapon's own Speed, its WeaponTime, lower being faster; the Market API only filters
