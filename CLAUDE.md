@@ -361,7 +361,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   in its folder, so on a folder's first rule at its top; on a folder itself: at its end, framed while held there; below the list: the end, out of any folder). Folded folders are
   `LootList.ClosedFolders`. Held near the list's top or bottom
   edge, a drag scrolls the list (`ScrollWhileDragging`). Right-click Duplicate copies a rule (or every picked one) just below itself, or a folder and its rules
-  just below it as "Name copy" (`LootFolders.Duplicate`, `DuplicateFolder`). **Add folder** makes an empty one at the top
+  just below it as "Name copy" (`LootFolders.Duplicate`, `DuplicateFolder`). **Copy to profile** (the same menus) copies
+  them into another loot profile, at the end of its list, in folders of the same names (`LootFolders.CopyTo`,
+  `CopyFolderTo`): a player couldn't take the example's Pyreals rule into their own profile, and their copy by hand
+  missed its Max burden 0, so it kept every Misc "Other" item. **Add folder** makes an empty one at the top
   (`LootList.EmptyFolders`, since a folder is otherwise only a name on its rules); a rule dropped in goes to the top of the
   list, and the folder leaves `EmptyFolders` once it has one (`LootFolders.Tidy`, after every change to the list). The list's changes wait until it's drawn (`pendingRuleMove`). `Loot.Matches` compares each filter
   with the same field the API's SQL does, per armor slot where the API is (ward level, armor and clothing mods), with
@@ -456,7 +459,11 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   server sends sellable with each item it describes (MarketBroker.IsSellable: not attuned, character-bound or
   unstable, and of a kind the market takes). An older server sends none, and then every item counts as sellable. Misc's
   **Type** Gems takes only a gem with a material (Loot.MiscTypeOf): the description calls anything of the game's Gem
-  kind a gem, and those without one count as Other. The market search still goes by the Market API's word. New
+  kind a gem, and those without one count as Other. The market search still goes by the Market API's word. **Pyreals**
+  (`MarketSearch.PyrealsType`) is a Type of the loot rules' alone: the item named Pyreal (`Loot.IsPyreal`, ACE's own
+  test for coins), which still counts as Other too (`Loot.MiscTypesOf`), so older rules (Other with Max burden 0, the
+  example's before) still take coins. The market search neither offers nor sends it (`MarketFilter.SearchOptions`,
+  `MarketSearch.IsLootOnlyChoice`). The example profiles' Pyreals rule uses it. Untested in the game when written. New
   settings get the
   **Example Loot Profile** (`Feed/ExampleLoot.cs`, read from `Resources/example-loot-profile.json`, a profile as
   To file saves one: to change it, save one and copy it over) after "My loot", then **Example Loot Profile (colorless)**
@@ -1582,7 +1589,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   Worn is turned on and shrinks when it's off, once per window (`wornShownAs`, by host), and the Worn checkbox is above the
   packs, where it can't be squeezed out. Its items have the list's hover and right-click; dragging one onto a pack or onto
   the items takes it off into that pack, and dropping an item on a square wears it (`Actions.UseItem`, the game's own
-  use).
+  use). A one-handed melee weapon (EquipableSlots exactly MeleeWeapon, `UseRules.CanOffHand`) also goes on the Shield
+  square, into the off hand: the server takes one there though its slots don't name it ("allow dual wielding" in
+  `HandleActionGetAndWieldItem`), and the game's auto-wield only ever uses the main hand, so the place is sent
+  (`UseRules.PlaceFor`). A worn item dropped on a square it isn't worn in moves there (a sword to the other hand).
 
 - **Use** (`Ui/ItemUser.cs`, `Feed/UseRules.cs`): double-clicking an item you carry or wear in the Inventory tab's lists,
   or Use in its right-click menu, does what a double-click in the game's inventory does. A double-click is every
@@ -1703,8 +1713,29 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   appraisal explains each property in a "Property Descriptions:" block atop the long description (`~ Name: text`
   lines, from AppraiseInfo's `_additionalPropertiesLongDescriptionsText`), which `Feed/PropertyDescriptions.cs` splits
   off, so hovering a line that names a property ("Biting Strike: +3%", "Mighty Thews II, Fire Rending") shows its
-  description; any no line names stay in the Description. Off, right-click just selects the item, for the
-  game's appraise key.
+  description; any no line names stay in the Description. Off, Appraise opens the game's own appraisal panel
+  (`ClientToolbar.Examine`, the magnifier's notice), and only if that can't be called selects the item for the game's
+  appraise key. `Appraisal.Object(id)` appraises anything by id as the Toolbar window's magnifier does: an item in the
+  Appraisal window, a creature, NPC or player in Creature Appraisal while it Replaces the game's
+  (`ClientExamine.TryTakeOver`), else the game's panel.
+  **Right-click appraises** (`Ui/RightClick.cs`, `SettingsData.RightClickAppraises`, on to start, and `MenuKey`, Alt to
+  start, the Config tab's Text section beside the tooltips' key; `Ui/KeyChoice.cs` is both keys' drop-down; the user's
+  call, November 2026): a right-click on a game object in the plugin's windows appraises it at once, and its menu
+  opens only while the menu key is held. Objects are items in the inventory lists, the paperdoll, the Corpse window, the
+  Vendor window and hotbar slots (`RightClick.BeginItemMenu`, in place of `BeginPopupContextItem`, opening on the
+  release as it does), and radar blips, fellows (not one too far away to say), dungeon markers, the Target and Tracked
+  Target windows' creature and their threat rows (`RightClick.Appraised`, where the code already took the right-click).
+  A spell or empty hotbar slot, the radar off a blip and the dungeon map off a marker still open their menus.
+  **In the 3D world** (`Ui/WorldAppraise.cs`, the same setting): a quick right-click (under 350ms, moved 5 pixels at
+  most, since holding it turns the camera) is caught on Decal's RenderFrame from Windows (`GetAsyncKeyState`,
+  `GetCursorPos`; ImGui only runs while a plugin window draws), then asked of the game as `WorldDrop` asks it: the
+  selection cleared and a left click posted on the spot, whatever's selected within 300ms appraised, the old selection
+  put back if nothing is. Left alone over a plugin window (`WantCaptureMouse`), over any of the game's UI that's showing
+  (`ClientElements.GameUiPieces`, where the posted click would press a button), with the menu key held, and within a
+  double-click's time of the left button going down (the posted click would make a double-click, which uses the thing).
+  The client's own pick (`UIElement_SmartBoxWrapper::FindObject`, `SmartBox::find_object` / `get_found_object_id` in
+  AcClient's names) answers on a later render and wasn't read, so isn't used. Other plugins' Decal views aren't known
+  to it. `[world-appraise]` lines in log.txt. Untested in the game when written.
 
 - **Dungeon window** (`Ui/DungeonWindow.cs`, `Map/Dungeon*.cs`, `dungeon`, hidden to start, its switch beside the
   World tab's Show... and its settings under the tab's Settings): a map of the landblock you're in while indoors, drawn

@@ -45,6 +45,9 @@ namespace DaraletPlayer.Feed {
         public FilterGroup Group;
         public (string Value, string Label)[] Options;
         public string Tip;
+        /// <summary>Options as the market search offers them: without the ones only the loot rules have.</summary>
+        public (string Value, string Label)[] SearchOptions =>
+            Options?.Where(o => !MarketSearch.IsLootOnlyChoice(Param, o.Value)).ToArray();
         /// <summary>Only the loot rules have it: the Market API has no such parameter, so the search leaves it out.</summary>
         public bool LootOnly;
         /// <summary>The weapon subtypes it's shown for (MarketSearch.WeaponSubtypes), or null for every one.</summary>

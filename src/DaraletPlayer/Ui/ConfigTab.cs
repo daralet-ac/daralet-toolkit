@@ -31,14 +31,9 @@ namespace DaraletPlayer.Ui {
         private int textPercent = 100;
         private bool textSliderActive;
 
-        /// <summary>Other key... picked: the next key pressed is the one tooltips need held.</summary>
-        private bool capturingTooltipKey;
-
-        /// <summary>The modifier keys, which Other key... takes on their own too.</summary>
-        private static readonly int[] Modifiers = { Keys.Alt, Keys.Control, Keys.Shift };
-
-        /// <summary>Modifiers already held as Other key... began, not taken until let go and pressed again.</summary>
-        private readonly HashSet<int> modifiersHeld = new HashSet<int>();
+        /// <summary>The key Tooltips only while holding needs, and the one right-click menus need.</summary>
+        private readonly KeyChoice tooltipKey = new KeyChoice();
+        private readonly KeyChoice menuKey = new KeyChoice();
 
         /// <summary>The files From file found when it was pressed.</summary>
         private List<string> exportFiles = new List<string>();
@@ -117,73 +112,37 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The key tooltips need held: Alt, Ctrl or Shift from the menu, or any key after Other key...</summary>
         private void RenderTooltipKey() {
-            var data = settings.Data;
-            var key = data.TooltipKey != 0 ? data.TooltipKey : Keys.Alt;
-            ImGui.SetNextItemWidth(Widgets.Scaled(110));
-
-            if (Combos.Begin("##config-tooltip-key", capturingTooltipKey ? "Press a key..." : TooltipKeyName(key))) {
-                foreach (var choice in new[] { Keys.Alt, Keys.Control, Keys.Shift }) {
-                    if (Combos.Item(TooltipKeyName(choice), key == choice)) {
-                        data.TooltipKey = choice;
-                        capturingTooltipKey = false;
-                        settings.Changed();
-                    }
-                }
-
-                if (Combos.Item("Other key...", capturingTooltipKey)) {
-                    capturingTooltipKey = true;
-                    modifiersHeld.Clear();
-
-                    foreach (var modifier in Modifiers) {
-                        if (Hotkeys.IsDown(modifier)) {
-                            modifiersHeld.Add(modifier);
-                        }
-                    }
-                }
-
-                Combos.End();
+            if (tooltipKey.Render("##config-tooltip-key", ref settings.Data.TooltipKey)) {
+                settings.Changed();
             }
 
             AlwaysTip("The key to hold for tooltips. Ctrl also moves windows when held over them and Shift places them "
                 + "freely, so Alt suits most. Other key... takes the next key you press; Escape cancels.");
-
-            if (!capturingTooltipKey || !Hotkeys.GameInFront()) {
-                return;
-            }
-
-            // Alt, Ctrl or Shift on its own: the key list Hotkeys.Pressed reads (the hotbars' keys) leaves them out, so
-            // Other key... ignored them. One that goes down since the capture began is the key.
-            foreach (var modifier in Modifiers) {
-                var down = Hotkeys.IsDown(modifier);
-
-                if (down && !modifiersHeld.Contains(modifier)) {
-                    data.TooltipKey = modifier;
-                    capturingTooltipKey = false;
-                    settings.Changed();
-                    return;
-                }
-
-                if (!down) {
-                    modifiersHeld.Remove(modifier);
-                }
-            }
-
-            foreach (var pressed in Hotkeys.Pressed()) {
-                if (pressed != Keys.Escape) {
-                    data.TooltipKey = pressed;
-                    settings.Changed();
-                }
-                else {
-                    EscapeCloses.Taken();
-                }
-
-                capturingTooltipKey = false;
-                break;
-            }
         }
 
-        private static string TooltipKeyName(int key) {
-            return key == Keys.Alt ? "Alt" : key == Keys.Control ? "Ctrl" : key == Keys.Shift ? "Shift" : Keys.Name(key);
+        /// <summary>
+        /// Right-clicking a game object appraises it, its menu only with a key held (SettingsData.RightClickAppraises,
+        /// MenuKey; RightClick).
+        /// </summary>
+        private void RenderRightClick() {
+            Form.Label("Right-click", "What right-clicking an item, creature, NPC or player does, in the plugin's windows "
+                + "and in the game world.");
+
+            if (ImGui.Checkbox("Appraises; menu only while holding##config-right-click",
+                ref settings.Data.RightClickAppraises)) {
+                settings.Changed();
+            }
+            Widgets.Tip("On, right-clicking an item, creature, NPC or player (in your packs, the bank, a corpse, a "
+                + "vendor, a hotbar, the radar, the fellowship, the dungeon map, or out in the game world) appraises it "
+                + "at once, and its menu opens only while the key beside this is held (in the world, holding it leaves "
+                + "the click to the game). Off, a right-click opens the menu, as before.");
+            ImGui.SameLine();
+
+            if (menuKey.Render("##config-menu-key", ref settings.Data.MenuKey)) {
+                settings.Changed();
+            }
+            Widgets.Tip("The key to hold while right-clicking for an item's or creature's menu. Other key... takes the "
+                + "next key you press; Escape cancels.");
         }
 
         private void RenderText() {
@@ -232,6 +191,7 @@ namespace DaraletPlayer.Ui {
                 + "beside this is held.");
             ImGui.SameLine();
             RenderTooltipKey();
+            RenderRightClick();
 
             ImGui.EndTable();
         }

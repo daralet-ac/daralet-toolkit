@@ -38,6 +38,7 @@ namespace DaraletPlayer.Ui {
         private readonly ToolbarButtons toolbarButtons;
         private readonly HideGameUi hideGameUi;
         private readonly EscapeCloses escapeCloses;
+        private readonly WorldAppraise worldAppraise;
         private readonly Launcher launcher;
         private readonly BorderlessWindow borderless;
         private readonly MarketApi api = new MarketApi();
@@ -124,6 +125,7 @@ namespace DaraletPlayer.Ui {
             // the hud is made below: these read the field when called
             escapeCloses = new EscapeCloses(settings, () => hud.Visible, () => hud.Visible = false, options,
                 inventoryTab.CarriedWindow, inventoryTab.BankWindow, characterTab.Window, questsTab.Window);
+            worldAppraise = new WorldAppraise(settings);
 
             Appraisal.Start(feed, settings, icons);
             appraisalGroup = new AppraisalGroup(settings, Appraisal.FirstWindow,
@@ -134,6 +136,8 @@ namespace DaraletPlayer.Ui {
             Widgets.BoldVitals = () => settings.Data.BoldVitalText;
             Widgets.TooltipsHidden = () => settings.Data.TooltipsNeedAlt
                 && !Hotkeys.IsDown(settings.Data.TooltipKey != 0 ? settings.Data.TooltipKey : Keys.Alt);
+            RightClick.AppraisesNow = () => settings.Data.RightClickAppraises
+                && !Hotkeys.IsDown(settings.Data.MenuKey != 0 ? settings.Data.MenuKey : Keys.Alt);
 
             tabs = new List<(string, string, Action)> {
                 ("Config", "Settings profiles: every setting of the plugin's as a set each character picks from, saved to "
@@ -379,7 +383,7 @@ namespace DaraletPlayer.Ui {
 
             // the game's UI back first, whatever fails after
             var pieces = new IDisposable[] {
-                hideGameUi, borderless, escapeCloses, launcher, hud, toolbarButtons, sharedWindow, gameHotbar, gamePanels,
+                hideGameUi, borderless, escapeCloses, worldAppraise, launcher, hud, toolbarButtons, sharedWindow, gameHotbar, gamePanels,
                 chatWindows, socialTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
                 lootTab, api, icons,
             };

@@ -11,7 +11,12 @@ namespace DaraletPlayer.Ui {
     internal partial class HotbarWindow {
         private void SlotMenu(string character, HotbarSlot slot, WorldObject item, (int Page, int Row, int Col) spot) {
             // the right-click that puts a tool down, cancels a move or clears a key isn't one for the menu
-            if (ItemUser.TakesClicks || owner.TakesRightClick || !ImGui.BeginPopupContextItem($"slot-menu-{spot.Row}-{spot.Col}")) {
+            // an item's slot appraises it on a right-click (RightClick); a spell's or an empty one's has only its menu
+            var itemId = slot != null && !slot.IsSpell && item != null ? unchecked((uint)item.Id) : 0;
+            var appraise = itemId != 0 ? () => Appraisal.Show(itemId) : (Action)null;
+
+            if (ItemUser.TakesClicks || owner.TakesRightClick
+                || !RightClick.BeginItemMenu($"slot-menu-{spot.Row}-{spot.Col}", appraise)) {
                 return;
             }
 

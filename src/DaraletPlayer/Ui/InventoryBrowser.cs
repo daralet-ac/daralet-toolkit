@@ -524,7 +524,8 @@ namespace DaraletPlayer.Ui {
         /// <summary>Right-clicking an item: use it, appraise it, split it or move it.</summary>
         private void ItemMenu(Item item) {
             // a right-click that puts a tool down isn't one for the menu
-            if (ItemUser.TakesClicks || !ImGui.BeginPopupContextItem($"item-menu-{item.Id}")) {
+            if (ItemUser.TakesClicks
+                || !RightClick.BeginItemMenu($"item-menu-{item.Id}", () => Appraisal.Show(item.Guid))) {
                 return;
             }
 

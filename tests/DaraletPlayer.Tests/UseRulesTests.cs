@@ -92,6 +92,25 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void AOneHandedMeleeWeaponGoesInTheHandItWasDroppedOn() {
+            var weaponSquare = EquipSlots.MeleeWeapon | EquipSlots.MissileWeapon | EquipSlots.Held | EquipSlots.TwoHanded;
+            var sword = Worn(1, EquipSlots.MeleeWeapon);
+            var shield = Worn(2, EquipSlots.Shield);
+
+            Assert.AreEqual(EquipSlots.Shield, UseRules.PlaceFor(EquipSlots.MeleeWeapon, EquipSlots.Shield, new[] { sword }));
+            Assert.AreEqual(EquipSlots.MeleeWeapon, UseRules.PlaceFor(EquipSlots.MeleeWeapon, weaponSquare, new WornItem[0]));
+            Assert.AreEqual(0u, UseRules.PlaceFor(EquipSlots.MeleeWeapon, 0, new[] { sword }));
+            Assert.AreEqual(0u, UseRules.PlaceFor(EquipSlots.TwoHanded, weaponSquare, new WornItem[0]));
+            Assert.IsFalse(UseRules.CanOffHand(EquipSlots.TwoHanded));
+
+            // into the off hand, the shield comes off and the main-hand sword stays
+            CollectionAssert.AreEqual(new[] { 2 }, UseRules.ToTakeOff(EquipSlots.Shield, false, new[] { sword, shield }));
+            // but not beside a two-hander
+            var twoHander = new WornItem { Id = 3, Slots = EquipSlots.TwoHanded, BothHands = true };
+            CollectionAssert.AreEqual(new[] { 3 }, UseRules.ToTakeOff(EquipSlots.Shield, false, new[] { twoHander }));
+        }
+
+        [TestMethod]
         public void ARingGoesOnAFreeHandOrSwapsTheLeftOne() {
             var ring = EquipSlots.FingerWearLeft | EquipSlots.FingerWearRight;
 

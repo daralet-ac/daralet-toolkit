@@ -25,7 +25,8 @@ namespace DaraletPlayer.Map {
         public event Action RouteCleared;
 
         /// <summary>
-        /// A left click that didn't drag the map selects the marker under it; a right click opens the menu.
+        /// A left click that didn't drag the map selects the marker under it; a right click appraises it, or opens the
+        /// menu (off a marker, or with the menu key held).
         /// </summary>
         private void HandleClicks(bool hovered, DungeonScene scene, DungeonMarker hoverMarker) {
             var io = ImGui.GetIO();
@@ -44,6 +45,13 @@ namespace DaraletPlayer.Map {
             }
 
             if (!hovered || !ImGui.IsMouseClicked(ImGuiMouseButton.Right)) {
+                return;
+            }
+
+            // a right-click on a marker appraises it (RightClick); with the menu key held, or off one, it's the menu
+            var markerId = hoverMarker?.Id ?? 0;
+
+            if (markerId != 0 && RightClick.Appraised(() => Appraisal.Object(markerId))) {
                 return;
             }
 
@@ -107,7 +115,8 @@ namespace DaraletPlayer.Map {
                 Widgets.BeginTooltip();
                 Widgets.Text(marker.Name);
                 Widgets.TextDisabled(Style(marker.Kind).Label.TrimEnd('s'));
-                Widgets.TextDisabled("Click to select it. Right-click for the way there.");
+                Widgets.TextDisabled("Click to select it. Right-click to appraise it, or with the menu key held for the "
+                    + "way there.");
                 ImGui.EndTooltip();
                 return;
             }

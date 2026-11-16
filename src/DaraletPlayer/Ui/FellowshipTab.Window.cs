@@ -140,7 +140,8 @@ namespace DaraletPlayer.Ui {
                 Select(member);
             }
 
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Right)) {
+            // a right-click appraises them (RightClick); with the menu key held it opens their menu
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Right) && !RightClick.Appraised(AppraiseMember(member))) {
                 menuMember = member.Name;
                 window.OpenMenu();
             }

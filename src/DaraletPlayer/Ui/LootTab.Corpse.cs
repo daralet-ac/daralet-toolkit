@@ -315,7 +315,8 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>Right-clicking an item in the Corpse window: appraise it, or loot it.</summary>
         private void ItemMenu(LootDecision decision) {
-            if (!ImGui.BeginPopupContextItem($"loot-item-menu-{decision.Item.Guid}")) {
+            if (!RightClick.BeginItemMenu($"loot-item-menu-{decision.Item.Guid}",
+                () => Appraisal.Show(decision.Item.Guid, decision.Item))) {
                 return;
             }
 

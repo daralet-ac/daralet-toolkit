@@ -93,7 +93,7 @@ namespace DaraletPlayer.Ui {
                 var value = filterValues.TryGetValue(filter.Key, out var current) ? current : "";
 
                 if (filter.Kind == FilterKind.Choice) {
-                    if (Widgets.Choice($"##{filter.Key}", filter.Options, ref value)) {
+                    if (Widgets.Choice($"##{filter.Key}", filter.SearchOptions, ref value)) {
                         filterValues[filter.Key] = value;
                     }
                 }

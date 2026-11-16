@@ -41,6 +41,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>How many of the stack go (StackSplit), taken before the click clears the selection; 0 for all of it.</summary>
         private static int amount;
 
+        /// <summary>An item let go in the world is waiting for the game to say what was under it.</summary>
+        public static bool Waiting => item != 0;
+
         [DllImport("user32.dll")]
         private static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 

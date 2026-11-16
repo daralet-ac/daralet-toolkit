@@ -298,13 +298,17 @@ namespace DaraletPlayer.Ui {
             var slotMask = slot.Mask;
             var held = dragged == 0 ? null : CoreManager.Current.WorldFilter[dragged];
             var equipable = held == null ? 0 : unchecked((uint)held.Values(LongValueKey.EquipableSlots, 0));
-            var allowed = EquipSlots.Fits(slot, equipable);
+            // a one-handed melee weapon goes on the shield square too: the off hand
+            var allowed = EquipSlots.Fits(slot, equipable)
+                || (slotMask == EquipSlots.Shield && UseRules.CanOffHand(equipable));
 
             if (Accepted(allowed, $"paperdoll square 0x{slotMask:X8}") && dragged != 0) {
                 var item = CoreManager.Current.WorldFilter[dragged];
+                var wornIn = unchecked((uint)(item?.Values(LongValueKey.EquippedSlots, 0) ?? 0));
 
-                // one already worn stays where it is
-                if (item != null && item.Values(LongValueKey.EquippedSlots, 0) == 0) {
+                // one already worn there stays where it is; one worn elsewhere moves (a weapon to the other hand, a ring
+                // to the other finger)
+                if (item != null && (wornIn & slotMask) == 0) {
                     ItemUser.Wield(dragged, slotMask);
                     SnapshotSoon();
                 }

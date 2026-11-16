@@ -159,6 +159,17 @@ namespace DaraletPlayer.Feed {
         }
 
         /// <summary>
+        /// Misc's Type for coins: a loot rule choice only (Loot.MiscTypesOf), since the Market API has no such type and
+        /// nobody lists pyreals. The search neither offers it (MarketFilter.SearchOptions) nor sends it (Query).
+        /// </summary>
+        public const string PyrealsType = "Pyreals";
+
+        /// <summary>A choice the market search doesn't offer or send, by the filter's parameter and the choice's value.</summary>
+        public static bool IsLootOnlyChoice(string param, string value) {
+            return param == "miscType" && value == PyrealsType;
+        }
+
+        /// <summary>
         /// Every filter, in the order the tab shows them. The ones for all categories come first.
         /// </summary>
         public static readonly MarketFilter[] Filters = BuildFilters().ToArray();
@@ -403,8 +414,10 @@ namespace DaraletPlayer.Feed {
             yield return F("Consumable", "Type", "consumableType", FilterKind.Choice, "Food, potions or healing kits.",
                 Choices("Food", "Food", "Potion", "Potions", "HealingKit", "Healing Kits"));
 
-            yield return F("Misc", "Type", "miscType", FilterKind.Choice, "Scrolls, gems, trophies or anything else.",
-                Choices("Scroll", "Scrolls", "Gem", "Gems", "Trophy", "Trophies", "Other", "Other"));
+            yield return F("Misc", "Type", "miscType", FilterKind.Choice,
+                "Scrolls, gems, trophies, pyreals or anything else. Pyreals are the loot rules' alone (the market has "
+                + "none), and count as Other too.",
+                Choices("Scroll", "Scrolls", "Gem", "Gems", "Trophy", "Trophies", PyrealsType, "Pyreals", "Other", "Other"));
             yield return F("Misc", "Scroll school", "scrollSchool", FilterKind.Choice, "For scrolls: the school of magic.",
                 Choices("WarMagic", "War Magic", "LifeMagic", "Life Magic", "PortalMagic", "Portal Magic", "CreatureEnchantment", "Creature Enchantment", "VoidMagic", "Void Magic"));
             yield return F("Misc", "Scroll spell", "scrollSpellName", FilterKind.Text,
@@ -458,6 +471,10 @@ namespace DaraletPlayer.Feed {
                 }
 
                 var value = Convert(filter, raw);
+
+                if (value != null && IsLootOnlyChoice(filter.Param, value)) {
+                    continue;
+                }
 
                 if (value != null && filter.Param == "maxWeaponTime") {
                     AddSpeed(Add, value);

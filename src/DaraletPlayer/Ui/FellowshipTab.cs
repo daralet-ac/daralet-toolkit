@@ -360,7 +360,7 @@ namespace DaraletPlayer.Ui {
 
             MemberTip(member);
 
-            if (ImGui.BeginPopupContextItem($"member-menu-{member.Guid}")) {
+            if (RightClick.BeginItemMenu($"member-menu-{member.Guid}", AppraiseMember(member))) {
                 Widgets.TextDisabled($"{member.Name}'s bars in the fellowship window");
                 RenderVitalChoices(member.Name);
                 RenderPinChoice(member.Name);
@@ -377,7 +377,21 @@ namespace DaraletPlayer.Ui {
                 ? $"Click to select {member.Name}, {Display.Distance(member.Distance)} away."
                 : $"{member.Name} is too far away to select. {member.Location}";
 
-            Widgets.Tip(where + " Right-click to choose which of their vitals the fellowship window shows.");
+            Widgets.Tip(where + " Right-click to appraise them, or with the menu key held (Alt to start) to choose which "
+                + "of their vitals the fellowship window shows.");
+        }
+
+        /// <summary>
+        /// A right-click's appraisal of a fellow (RightClick), or null for one too far away to say, whom the game couldn't
+        /// appraise: their right-click opens the menu instead.
+        /// </summary>
+        private static Action AppraiseMember(FellowInfo member) {
+            if (!member.Distance.HasValue || member.Guid == 0) {
+                return null;
+            }
+
+            var id = unchecked((int)member.Guid);
+            return () => Appraisal.Object(id);
         }
 
         private static void Select(FellowInfo member) {

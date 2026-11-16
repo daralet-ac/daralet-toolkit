@@ -143,38 +143,9 @@ namespace DaraletPlayer.Ui {
             ClientToolbar.Use(selection);
         }
 
-        /// <summary>
-        /// The magnifier, in the plugin's appraisal window for what's selected: an item in the Appraisal window while
-        /// Plugin appraisal is on; a creature, NPC or player in Creature Appraisal while it Replaces the game's
-        /// (ClientExamine.TakeOver, which the game's own appraisals go through, but which a call straight to the game's
-        /// notice, as this makes, skips: the first build's opened the game's panel for them); anything else in the
-        /// game's own appraisal panel.
-        /// </summary>
+        /// <summary>The magnifier: what's selected, in whichever appraisal window takes it (Appraisal.Object).</summary>
         private void Appraise(WorldObject selected, int selection) {
-            if (settings.Data.AppraiseInPlugin && selected != null && IsItem(selected)) {
-                Appraisal.Show((uint)selection);
-            }
-            else if (!ClientExamine.TryTakeOver(selection)) {
-                ClientToolbar.Examine(selection);
-            }
-        }
-
-        private static bool IsItem(WorldObject item) {
-            switch (item.ObjectClass) {
-                case ObjectClass.Monster:
-                case ObjectClass.Player:
-                case ObjectClass.Npc:
-                case ObjectClass.Vendor:
-                case ObjectClass.Door:
-                case ObjectClass.Portal:
-                case ObjectClass.Lifestone:
-                case ObjectClass.Corpse:
-                case ObjectClass.Housing:
-                case ObjectClass.Unknown:
-                    return false;
-                default:
-                    return true;
-            }
+            Appraisal.Object(selection);
         }
 
         // ---- the game's layout ----

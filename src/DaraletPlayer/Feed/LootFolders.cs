@@ -122,6 +122,28 @@ namespace DaraletPlayer.Feed {
             }
         }
 
+        /// <summary>
+        /// Copies rules into another profile, at the end of its list in the order they're in, each in its folder still: a
+        /// folder the other profile has already takes them in at its end (Gather), and one it hasn't is made there.
+        /// </summary>
+        public static void CopyTo(LootList target, IEnumerable<LootRule> these) {
+            target.Rules.AddRange(these.Select(r => r.Copy()));
+            Gather(target.Rules);
+            Tidy(target);
+        }
+
+        /// <summary>Copies a folder and its rules into another profile (CopyTo); an empty folder goes in empty, at the top.</summary>
+        public static void CopyFolderTo(LootList from, string folder, LootList target) {
+            var rules = from.Rules.Where(r => r.Folder == folder).ToList();
+
+            if (rules.Count > 0) {
+                CopyTo(target, rules);
+            }
+            else if (!target.EmptyFolders.Contains(folder) && !target.Rules.Any(r => r.Folder == folder)) {
+                target.EmptyFolders.Insert(0, folder);
+            }
+        }
+
         /// <summary>Takes every rule out of a folder, leaving them where they are.</summary>
         public static void Ungroup(LootList list, string folder) {
             foreach (var rule in list.Rules.Where(r => r.Folder == folder)) {

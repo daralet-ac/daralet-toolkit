@@ -226,7 +226,8 @@ namespace DaraletPlayer.Ui {
                 ShowTooltip(item, count, kind, how);
             }
 
-            if (item != null && ImGui.BeginPopupContextItem(id + "-menu")) {
+            if (item != null && RightClick.BeginItemMenu(id + "-menu",
+                () => Appraisal.Show(unchecked((uint)item.Id), slots: item.EquipableSlots))) {
                 ItemMenu(item, kind);
                 ImGui.EndPopup();
             }

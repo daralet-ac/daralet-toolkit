@@ -30,6 +30,15 @@ namespace DaraletPlayer {
 
         /// <summary>The key TooltipsNeedAlt has held, a Windows virtual key code: Alt (0x12) to start.</summary>
         [DataMember(Name = "tooltipKey")] public int TooltipKey;
+
+        /// <summary>
+        /// Right-clicking a game object in the plugin's windows (an item, creature, NPC or player) appraises it, and its
+        /// right-click menu opens only while MenuKey is held (RightClick). On to start (the user's call, November 2026).
+        /// </summary>
+        [DataMember(Name = "rightClickAppraises")] public bool RightClickAppraises;
+
+        /// <summary>The key RightClickAppraises has held for a menu, a Windows virtual key code: Alt (0x12) to start.</summary>
+        [DataMember(Name = "menuKey")] public int MenuKey;
         /// <summary>
         /// The look of the plugin's windows, a UiThemes name; null (or one no longer there) for Daralet, the default.
         /// </summary>
@@ -482,6 +491,8 @@ namespace DaraletPlayer {
             TextScale = 1;
             TooltipsNeedAlt = true;
             TooltipKey = Keys.Alt;
+            RightClickAppraises = true;
+            MenuKey = Keys.Alt;
             FellowshipShowStamina = true;
             FellowshipShowMana = true;
             FellowVitals = new Dictionary<string, FellowVitals>(StringComparer.OrdinalIgnoreCase);

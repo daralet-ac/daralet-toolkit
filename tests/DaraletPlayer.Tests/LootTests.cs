@@ -429,6 +429,33 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void PyrealsAreOnlyCoinsAndStillOther() {
+            CorpseItemInfo Misc(string name) => new CorpseItemInfo {
+                Name = name, Item = new MarketListing { ItemName = name, ItemCategory = "Misc", MiscType = "Other" },
+            };
+            var pyreals = new LootRule { Category = "Misc", Values = { [Key("Misc", "miscType")] = MarketSearch.PyrealsType } };
+            var other = new LootRule { Category = "Misc", Values = { [Key("Misc", "miscType")] = "Other" } };
+
+            Assert.IsTrue(Loot.Matches(pyreals, Misc("Pyreal")));
+            Assert.IsTrue(Loot.Matches(pyreals, Misc("Pyreals")));
+            Assert.IsFalse(Loot.Matches(pyreals, Misc("Mana Stone")));
+            Assert.IsFalse(Loot.Matches(pyreals, Misc("Lockpick")));
+            Assert.IsFalse(Loot.Matches(pyreals, Misc("Pyreal Mote")));
+            Assert.IsTrue(Loot.Matches(other, Misc("Pyreal")), "rules from before the Pyreals choice still take coins");
+            Assert.IsTrue(Loot.Matches(other, Misc("Mana Stone")));
+        }
+
+        [TestMethod]
+        public void TheMarketSearchLeavesPyrealsOut() {
+            var filter = MarketSearch.Filters.Single(f => f.Param == "miscType");
+            Assert.IsTrue(filter.Options.Any(o => o.Value == MarketSearch.PyrealsType));
+            Assert.IsFalse(filter.SearchOptions.Any(o => o.Value == MarketSearch.PyrealsType));
+
+            var values = new Dictionary<string, string> { [filter.Key] = MarketSearch.PyrealsType };
+            Assert.IsFalse(MarketSearch.Query("", "Misc", "", "", values, "", false, 1).Contains("miscType"));
+        }
+
+        [TestMethod]
         public void SellableOnlySkipsWhatTheMarketWontTake() {
             var rule = new LootRule { SellableOnly = true };
             var attuned = new CorpseItemInfo { Name = "Attuned Sword", Sellable = false };

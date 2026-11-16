@@ -134,7 +134,8 @@ namespace DaraletPlayer.Ui {
                 Select(member);
             }
 
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Right)) {
+            // a right-click appraises them (RightClick); with the menu key held it opens their menu
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Right) && !RightClick.Appraised(AppraiseMember(member))) {
                 menuMember = member.Name;
                 window.OpenMenu();
             }
@@ -142,7 +143,8 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip($"{member.Name}, level {member.Level}: health {member.Health} / {member.MaxHealth}, stamina "
                 + $"{member.Stamina} / {member.MaxStamina}, mana {member.Mana} / {member.MaxMana}"
                 + (member.Distance.HasValue ? $", {Display.Distance(member.Distance)} away" : ", too far away to say")
-                + ". Click to select them; right-click for their bars and Pin to top.");
+                + ". Click to select them; right-click to appraise them, or with the menu key held (Alt to start) for "
+                + "their bars and Pin to top.");
         }
 
         /// <summary>The window's Big fellowships settings: the layout and its numbers, then who shows and in what order.</summary>

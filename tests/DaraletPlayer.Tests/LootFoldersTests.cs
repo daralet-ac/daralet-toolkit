@@ -27,6 +27,33 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void CopyToAddsCopiesAtTheEndInTheirFolders() {
+            var from = List("a", "F/b", "c");
+            var to = List("x", "F/y", "z");
+            LootFolders.CopyTo(to, new[] { Rule(from, "a"), Rule(from, "b") });
+
+            Assert.AreEqual("x F/y F/b z a", Order(to), "a folder the profile has takes the copy in at its end");
+            Assert.AreEqual("a F/b c", Order(from));
+            Assert.AreNotSame(Rule(from, "a"), Rule(to, "a"));
+        }
+
+        [TestMethod]
+        public void CopyFolderToMakesTheFolderThere() {
+            var from = List("a", "F/b", "F/c");
+            var to = List("x");
+            to.EmptyFolders.Add("F");
+            LootFolders.CopyFolderTo(from, "F", to);
+
+            Assert.AreEqual("x F/b F/c", Order(to));
+            Assert.AreEqual(0, to.EmptyFolders.Count, "the empty folder of that name has rules now");
+
+            var empty = new LootList();
+            empty.EmptyFolders.Add("G");
+            LootFolders.CopyFolderTo(empty, "G", to);
+            CollectionAssert.Contains(to.EmptyFolders, "G");
+        }
+
+        [TestMethod]
         public void GatherKeepsAFoldersRulesTogetherWhereItsFirstIs() {
             var list = List("a", "F/b", "c", "F/d", "e");
             LootFolders.Gather(list.Rules);

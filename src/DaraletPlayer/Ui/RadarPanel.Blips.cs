@@ -275,7 +275,10 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>A click on a blip selects it; a right-click anywhere opens the window's menu.</summary>
+        /// <summary>
+        /// A click on a blip selects it; a right-click on one appraises it (RightClick), and anywhere else, or with the
+        /// menu key held, opens the window's menu.
+        /// </summary>
         private void HandleClicks(bool hovered, RadarBlip hover) {
             if (!hovered) {
                 return;
@@ -285,7 +288,13 @@ namespace DaraletPlayer.Ui {
                 CoreManager.Current.Actions.SelectItem(hover.Id);
             }
 
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Right)) {
+            if (!ImGui.IsMouseClicked(ImGuiMouseButton.Right)) {
+                return;
+            }
+
+            var id = hover?.Id ?? 0;
+
+            if (id == 0 || !RightClick.Appraised(() => Appraisal.Object(id))) {
                 Window.OpenMenu();
             }
         }
@@ -294,7 +303,7 @@ namespace DaraletPlayer.Ui {
             Widgets.BeginTooltip();
             Widgets.Text(blip.Name);
             Widgets.TextDisabled($"{RadarKindInfo.For(blip.Kind).Label}, {Vector2.Distance(blip.At, selfWorld):0} m. "
-                + "Click to select.");
+                + "Click to select, right-click to appraise.");
             ImGui.EndTooltip();
         }
     }

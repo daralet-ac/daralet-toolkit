@@ -28,6 +28,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>Set when a threat table row was clicked this frame, so the window's own click doesn't count too.</summary>
         private bool threatClicked;
 
+        /// <summary>Set when a threat table row was right-clicked and appraised this frame, so the window doesn't too.</summary>
+        private bool threatAppraised;
+
         public TargetTab(PlayerFeed feed, Settings settings) {
             this.feed = feed;
             this.settings = settings;
@@ -84,11 +87,17 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// Opens the window's menu from a right-click anywhere on it: its menu doesn't open over items, and the window is
-        /// nearly all bars.
+        /// A right-click anywhere on the window appraises its creature (RightClick), unless a threat row took it; with the
+        /// menu key held, or nothing shown, it opens the window's menu: its menu doesn't open over items, and the window
+        /// is nearly all bars. Called after the contents, so a threat row's right-click is known.
         /// </summary>
-        private static void OpenMenuOnRightClick(FloatingWindow window) {
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Right) && ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)) {
+        private void OpenMenuOnRightClick(FloatingWindow window, uint creature) {
+            if (threatAppraised || !ImGui.IsMouseClicked(ImGuiMouseButton.Right)
+                || !ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)) {
+                return;
+            }
+
+            if (creature == 0 || !RightClick.Appraised(() => Appraisal.Object(unchecked((int)creature)))) {
                 window.OpenMenu();
             }
         }
@@ -361,7 +370,13 @@ namespace DaraletPlayer.Ui {
                     threatClicked = true;
                 }
 
-                Widgets.Tip($"Click to select {entry.Name}. The creature picks who to attack from those near the top of its threat table; < marks the one it's attacking.");
+                var who = unchecked((int)entry.Guid);
+
+                if (ImGui.IsItemClicked(ImGuiMouseButton.Right) && RightClick.Appraised(() => Appraisal.Object(who))) {
+                    threatAppraised = true;
+                }
+
+                Widgets.Tip($"Click to select {entry.Name}, right-click to appraise them. The creature picks who to attack from those near the top of its threat table; < marks the one it's attacking.");
             }
 
             if (target.Threat.Count > rows) {
@@ -383,8 +398,12 @@ namespace DaraletPlayer.Ui {
 
         private void RenderSelectedWindow() {
             tracker.Refresh();
-            OpenMenuOnRightClick(selectedWindow);
+            threatAppraised = false;
+            RenderSelectedContents();
+            OpenMenuOnRightClick(selectedWindow, tracker.Selected);
+        }
 
+        private void RenderSelectedContents() {
             var selected = tracker.Selected;
 
             if (selected == 0) {
@@ -404,8 +423,12 @@ namespace DaraletPlayer.Ui {
 
         private void RenderTrackedWindow() {
             tracker.Refresh();
-            OpenMenuOnRightClick(trackedWindow);
+            threatAppraised = false;
+            RenderTrackedContents();
+            OpenMenuOnRightClick(trackedWindow, tracker.Tracked);
+        }
 
+        private void RenderTrackedContents() {
             if (tracker.Tracked == 0) {
                 Widgets.TextDisabled("Nothing tracked");
                 Widgets.Tip("Select a monster and press Track in the Target window or the Combat tab's Vitals.");

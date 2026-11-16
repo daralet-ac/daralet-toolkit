@@ -110,7 +110,7 @@ namespace DaraletPlayer.Feed {
                 ["salvageTargetType"] = (l => l.SalvageTargetTypes ?? new List<string>(), false),
                 ["salvageMaterial"] = (l => One(l.SalvageMaterial), false),
                 ["consumableType"] = (l => One(l.ConsumableType), false),
-                ["miscType"] = (l => One(MiscTypeOf(l)), false),
+                ["miscType"] = (MiscTypesOf, false),
                 ["scrollSchool"] = (l => One(l.SpellSchool), false),
                 ["gemMaterial"] = (l => One(l.GemMaterialType), false),
                 ["trophyType"] = (l => One(l.TrophyType), false),
@@ -129,6 +129,28 @@ namespace DaraletPlayer.Feed {
             }
 
             return listing.MiscType;
+        }
+
+        /// <summary>
+        /// A Misc item's types for the rules: MiscTypeOf, and Pyreals too for coins, which the description calls Other.
+        /// They stay Other as well, so a rule written before Pyreals was a choice (Other with Max burden 0, the example
+        /// profile's) still takes them.
+        /// </summary>
+        private static IEnumerable<string> MiscTypesOf(MarketListing listing) {
+            var type = MiscTypeOf(listing);
+
+            if (type == "Other" && IsPyreal(listing.ItemName)) {
+                return new[] { type, MarketSearch.PyrealsType };
+            }
+
+            return One(type);
+        }
+
+        /// <summary>The game's coins are named Pyreal (ACE checks the name the same way, Player_Death's isCoin).</summary>
+        public static bool IsPyreal(string name) {
+            var trimmed = (name ?? "").Trim();
+            return trimmed.Equals("Pyreal", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("Pyreals", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

@@ -99,6 +99,15 @@ namespace DaraletPlayer.Feed {
 
         private const uint Hands = MainHand | EquipSlots.Shield | EquipSlots.MissileAmmo;
 
+        /// <summary>
+        /// A one-handed melee weapon, which can be wielded in the off hand (the shield slot) as well: the server takes an
+        /// item whose only place is MeleeWeapon in the Shield slot (Player.HandleActionGetAndWieldItem, "allow dual
+        /// wielding"), though its EquipableSlots don't name it.
+        /// </summary>
+        public static bool CanOffHand(uint slots) {
+            return slots == EquipSlots.MeleeWeapon;
+        }
+
         /// <summary>Slot pairs a piece of jewelry goes in either of: a ring on either hand, a bracelet on either wrist.</summary>
         private static readonly uint[] EitherSlots = {
             EquipSlots.FingerWearLeft | EquipSlots.FingerWearRight,
@@ -114,6 +123,19 @@ namespace DaraletPlayer.Feed {
         /// <param name="slots">Where the item goes (its EquipableSlots).</param>
         /// <param name="asked">The place it was dropped on, or 0.</param>
         public static uint PlaceFor(uint slots, uint asked, IEnumerable<WornItem> worn) {
+            // a one-handed melee weapon dropped on the shield square goes in the off hand, and on the weapon square in the
+            // main hand (from the off hand too), named, as the game's paperdoll sends it: the game's auto-wield only ever
+            // puts one in the main hand
+            if (CanOffHand(slots)) {
+                if ((asked & EquipSlots.Shield) != 0) {
+                    return EquipSlots.Shield;
+                }
+
+                if ((asked & EquipSlots.MeleeWeapon) != 0) {
+                    return EquipSlots.MeleeWeapon;
+                }
+            }
+
             foreach (var pair in EitherSlots) {
                 if ((slots & ~pair) != 0 || slots == 0) {
                     continue;

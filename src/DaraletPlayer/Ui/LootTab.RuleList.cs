@@ -193,6 +193,8 @@ namespace DaraletPlayer.Ui {
             }
             Widgets.Tip($"Adds a copy of {what}, each just below the one it copies, in the same folder.");
 
+            RenderCopyToProfile(list, what, target => LootFolders.CopyTo(target, these));
+
             if (ImGui.MenuItem("New folder")) {
                 pendingRuleMove = () => LootFolders.Group(rules, these, LootFolders.UniqueName(list, "New folder"));
             }
@@ -314,6 +316,8 @@ namespace DaraletPlayer.Ui {
             }
             Widgets.Tip("Adds a copy of the folder and every rule in it, just below it, under a name of its own.");
 
+            RenderCopyToProfile(list, "this folder and its rules", target => LootFolders.CopyFolderTo(list, folder, target));
+
             var empty = list.EmptyFolders.Contains(folder);
 
             if (ImGui.MenuItem(empty ? "Delete" : "Ungroup")) {
@@ -432,6 +436,37 @@ namespace DaraletPlayer.Ui {
 
             ImGui.EndDragDropTarget();
             return dropped;
+        }
+
+        /// <summary>
+        /// A menu of the other loot profiles, to copy rules into: the one picked gets copies at the end of its list, in
+        /// their folders, and this one is left as it is. Not a pending move, since this list doesn't change.
+        /// </summary>
+        private void RenderCopyToProfile(LootList list, string what, Action<LootList> copy) {
+            var others = Data.Lists.Where(l => l != list).ToList();
+
+            if (others.Count == 0) {
+                ImGui.BeginDisabled();
+                ImGui.MenuItem("Copy to profile");
+                ImGui.EndDisabled();
+                Widgets.Tip("There's no other loot profile to copy to. Make one with New first.");
+                return;
+            }
+
+            if (!ImGui.BeginMenu("Copy to profile")) {
+                Widgets.Tip($"Copies {what} into another loot profile, at the end of its list, in the same folders.");
+                return;
+            }
+
+            foreach (var other in others) {
+                if (ImGui.MenuItem(other.Name + "##copy-to")) {
+                    copy(other);
+                    settings.Changed();
+                    PluginCore.Chat($"Copied {what} to the loot profile \"{other.Name}\".");
+                }
+            }
+
+            ImGui.EndMenu();
         }
 
         /// <summary>Makes the change the list asked for while it was drawn, keeping the same rule in the editor.</summary>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Decal.Adapter;
+using Decal.Adapter.Wrappers;
 using DaraletPlayer.Feed;
 using ImGuiNET;
 
@@ -10,9 +11,10 @@ namespace DaraletPlayer.Ui {
     /// <summary>
     /// Appraising an item, from its right-click menu in the plugin's item lists (the Corpse window, the bank). With Plugin
     /// appraisal on (SettingsData.AppraiseInPlugin), the plugin's Appraisal windows show it: Appraise in the first, Appraise in
-    /// new window in another, so several can be open at once. Otherwise the item is selected, as clicking it in the game's
-    /// windows does, for the game's own appraisal: a plugin can't open the game's appraisal panel (Decal's RequestId only sends
-    /// the request, and the client shows only appraisals it started), so it's the game's appraise key that opens it.
+    /// new window in another, so several can be open at once. Otherwise the game's own appraisal panel opens, through the
+    /// client's own notice, as its magnifier does (ClientToolbar.Examine: Decal's RequestId only sends the request, and the
+    /// client shows only appraisals it started); if that can't be called, the item is selected for the game's appraise key.
+    /// A right-click on an object appraises it straight away (RightClick).
     /// </summary>
     internal static class Appraisal {
         /// <summary>The most windows open at once: past this, a new one reuses the oldest extra.</summary>
@@ -81,12 +83,56 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            // the game's own appraisal panel, as its magnifier opens it; selecting it for the appraise key if that fails
+            if (ClientToolbar.Examine(unchecked((int)guid))) {
+                return;
+            }
+
             CoreManager.Current.Actions.SelectItem(unchecked((int)guid));
 
             if (!hinted) {
                 hinted = true;
                 PluginCore.Chat("Selected it: press your appraise key for the game's appraisal. "
                     + "(Plugin appraisal, on the Daralet Toolkit window's top line, shows it in the plugin instead.)");
+            }
+        }
+
+        /// <summary>
+        /// Appraises anything in the world by its id, as the Toolbar window's magnifier and a right-click on a creature do:
+        /// an item in the Appraisal window while Plugin appraisal is on; a creature, NPC or player in Creature Appraisal
+        /// while it Replaces the game's (ClientExamine.TakeOver, which the game's own appraisals go through, but which a
+        /// call straight to the game's notice, as this makes, skips); anything else in the game's own appraisal panel.
+        /// </summary>
+        public static void Object(int id) {
+            if (id == 0) {
+                return;
+            }
+
+            var known = CoreManager.Current.WorldFilter[id];
+
+            if (InPlugin && known != null && IsItem(known.ObjectClass)) {
+                Show(unchecked((uint)id));
+            }
+            else if (!ClientExamine.TryTakeOver(id)) {
+                ClientToolbar.Examine(id);
+            }
+        }
+
+        private static bool IsItem(ObjectClass kind) {
+            switch (kind) {
+                case ObjectClass.Monster:
+                case ObjectClass.Player:
+                case ObjectClass.Npc:
+                case ObjectClass.Vendor:
+                case ObjectClass.Door:
+                case ObjectClass.Portal:
+                case ObjectClass.Lifestone:
+                case ObjectClass.Corpse:
+                case ObjectClass.Housing:
+                case ObjectClass.Unknown:
+                    return false;
+                default:
+                    return true;
             }
         }
 
