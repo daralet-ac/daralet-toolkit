@@ -396,6 +396,13 @@ namespace DaraletPlayer.Ui {
                     PluginCore.Log(ex);
                 }
             }
+
+            try {
+                GameFonts.Free();
+            }
+            catch (Exception ex) {
+                PluginCore.Log(ex);
+            }
         }
     }
 }

@@ -909,13 +909,32 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   hook the game's own appraisals pass, and the first build opened the game's panel for them); Use `ClientUISystem::UseObject`, which
   is `ItemHolder::UseObject(id, 0, 0)` (`0x5898B0`, static cdecl); the stack slider `CM_UI::SendNotice_StackSliderChanged`
   (`0x47A550`, the split size at `0x81D7EC` and the stack at `0x81D7F0`), which the window sets through
-  `StackSplit.SetAmount`. The strip's name has the material in front, as the game's: the server's description's
+  `StackSplit.SetAmount`. For a stack you carry the strip is the game's (`ToolbarPanel.Stack.cs`): the amount in front
+  of the name ("3 Brass Salvage"), over the strip's stack picture `06004CF4` (`toolbar-strip-stack`, `0x100001A0`'s
+  state `0x1000000C`), and on a row at 13, 14 high, the stack box `0x100001A3` (50 wide, black `06004CF5`,
+  `stack-box`), a number typed in and set on Enter or leaving it, drawn at its right when not being typed in (ImGui
+  writes a box's text from the left), and the slider `0x100001A4` (90 wide: the track
+  `06004CF6`, 140 wide and cut off at the slider's end, `stack-slider`; the thumb `06005DC3`, 16x14,
+  `stack-slider-thumb`). The number, and every selection's name in the strip (stack or not), are in the
+  game's own font, 0x40000002 (see Game fonts), the serif size nearest a 14-pixel line in the strip's 31 once it's
+  scaled (`StripFont`; ImGui's stretched font looked soft beside the client's, GDI+ Tahoma close but not the same, and
+  sized from ImGui's font it came out far too big), else a little heavier ImGui text (`DrawStrong`: again a pixel to
+  the right at half strength), and the glow at 75% brightness (`StackGlowTint`), so the text stands out from it (the
+  user's call). Untested in the game when written. The strip's name has the material in front, as the game's: the server's description's
   name, else Decal's (which has none) with `LongValueKey.Material` named by `Feed/MaterialNames.cs` (MaterialType's
   numbers). A panel button is `CM_UI::SendNotice_SetPanelVisibility(id, open)` (`ClientElements.
   SetGamePanel`), lit while `ClientElements.OpenGamePanel` says it's the one open, or opens the plugin's window instead
   where Client UI Override's Inventory, Quests, Social or Map is ticked. Items let go over the backpack (from the
   plugin's lists or the game's pack) go in the main pack (`ToolbarButtons.PutInMainPack`). The strip's health is
-  `PlayerFeed.ClientHealth`; the mana meter isn't drawn (Decal doesn't say an item's mana before an appraisal). Retail
+  `PlayerFeed.ClientHealth`, drawn as the game's meter: its pictures are the whole strip (146x31, black above row 13,
+  the thin bar and the heart below, grey in the empty one, red in the full one, which is cut off at the health), so
+  they go over the strip and the name in the 13 rows above (`MeterNameHeight`), its line a pixel below the strip's
+  top (`StripTextTop`) and centred with a half pixel going right (`StripTextLeft`), as the client's, with no percent (the user's call; the
+  first build squashed them into the strip's lower half). The strip's pictures (its background `06001126`, the meter,
+  the stack's glow) are 146 wide in the 140-pixel strip: the client draws them at their own width from the strip's
+  left and cuts them off at its right (`DrawStripArt`), which a screenshot showed (squeezed to 140, the heart sat two
+  pixels left of the game's). Compared with the client's, pixel for pixel, the name's letters are the same.
+  The mana meter isn't drawn (Decal doesn't say an item's mana before an appraisal). Retail
   places everything as the game does, scaled with the text; Modern is a row of lit buttons and the strip under it.
   With the toolbar hidden, Toolbar buttons have nothing to sit on and don't show, and Shared window's Attach to toolbar
   sits on this window instead (`SharedWindow.PluginToolbar`, set by `PlayerHud`: its `FloatingWindow.DrawnBox` while
@@ -1908,6 +1927,21 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   zoom and Follow me) and the tab's **Show...** (kinds of places, names, fellows, the names' Text size, and the Arrow
   and Dungeon windows, the last three added to the popup for it); the arrow window's **Details** box leaves the arrow
   alone.
+- **Game fonts** (`Ui/GameFont.cs`, `Ui/GameFonts.cs`): the client's own fonts, portal.dat `0x40000000` on (49 of
+  them; UtilityBelt.Common's `ACE.DatLoader.FileTypes.Font`): each a letter sheet (`ForegroundSurfaceDataID`) and an
+  edge sheet (`BackgroundSurfaceDataID`, the black outline the client draws behind its text; none for 0x17, 0x18,
+  0x21-0x23), both `PFID_A8` (the byte is the alpha), and per letter (`FontCharDesc`) its box on the sheets, its
+  top in the line (`VerticalOffsetBefore`) and the spacing before and after, which are signed though stored as
+  bytes (-1 as 255: read unsigned, letters land far apart). A line is the edge in black, then the letters in the
+  text's colour, at the font's own size; a sheet is made a white texture with its alpha the first time it's drawn
+  (`GameFont.Make`), and all are let go when the plugin stops (`GameFonts.Free`). Families by look (`GameFonts`:
+  Serif `1C 25 02 00 01 04 05 06`, lines 10 to 24; Sans `07 08 09 0A 0B 19 0C 0D 1B`, 12 to 36; Display, Celtic
+  capitals, `16 0E 0F 10 11 12 24 13 14`; Mono `1D 1E 1A 1F 30 31 20`; 0x26-0x32 are more serif and sans sizes and
+  weights, and 0x17, 0x18, 0x21-0x23 a large character set, not grouped yet), and `Family.Nearest(line height)`
+  picks a size, so scaled text takes another size rather than being stretched. Which font a game element uses is in
+  its layout (the text templates in `0x2100003F`, property 0x1A), a property type the dump tools don't read yet: the
+  Toolbar strip's was found by matching each font's "Cragstone Guard" against a screenshot's, pixel by pixel
+  (0x40000002, 2 of 175 pixels off; the next best 153). Untested in the game when written. `[fonts]` lines in log.txt.
 - **The game's UI pictures** (`Resources/ui`, embedded as `DaraletPlayer.Resources.ui.<name>.png`, drawn by `ItemIcons.DrawArt`): taken from the client by hand, since they aren't item icons: the main pack (`main-pack`), the green behind each pack in the Retail column (`pack-background`, with the pack's icon on it without its usual tile), the ring over the slot an item is held over in a drag (`drop-ring`, 17x16, scaled to the slot's width; a frame over a list line), and the red crossed-out circle (`drop-invalid`, not the reticle's) where it can't go, letting go there doing nothing (`Accepted(allowed)`: a pack only in a pack slot, on a pack, the main pack or the bank's own slots, never among a pack's items; an item not in a full pack; a paperdoll square only for what its `EquipableSlots` include), the empty slot (`empty-slot`: a pack's room left in the grids, which show a pack as its every slot, `InventoryBrowser.Slots`, and the side pack slots left in the Retail column), the selection frame (`selected`: the selected item, as `Actions.CurrentSelection` says, in the grids, the paperdoll and the Retail pack column, a click in a list selecting it as the game's pack does), and the target reticles (`reticle`, `reticle-invalid`). The Retail chosen pack's arrow is still drawn with shapes: the game's own hasn't been found. The grids have no gap between squares, as the game's pack has none.
   **Retail bars** (`SettingsData.RetailVitalBars`, off to start, ticked in the fellowship window's or the Combat tab's Vitals'
   settings): `Widgets.Bar` draws any bar in a vital's colour (`Colors.Health`, `Stamina`, `Mana`) with the game's vitals

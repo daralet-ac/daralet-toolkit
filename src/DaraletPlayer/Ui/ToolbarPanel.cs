@@ -17,7 +17,7 @@ namespace DaraletPlayer.Ui {
     /// magnifier), what the game's own do (ClientToolbar). The game's shortcut bar goes with its toolbar: the plugin's
     /// hotbars are for that. Retail lays it out as the game does, in its art; Modern is a row of themed buttons.
     /// </summary>
-    internal sealed class ToolbarPanel : GamePanel {
+    internal sealed partial class ToolbarPanel : GamePanel {
         /// <summary>The game's toolbar, as Decal's UIElementType TBar names it.</summary>
         public const uint GameToolbar = 0x10000603;
 
@@ -30,6 +30,9 @@ namespace DaraletPlayer.Ui {
         private static readonly Vector2 UseSize = new Vector2(23, 31);
         private static readonly Vector2 StripAt = new Vector2(78, 27);
         private static readonly Vector2 StripSize = new Vector2(140, 31);
+
+        /// <summary>The strip's pictures' own width (06001126, 0600193E and 0600193F, 06004CF4), past the strip's.</summary>
+        private const float StripArtWidth = 146;
         private static readonly Vector2 AppraiseAt = new Vector2(218, 27);
         private static readonly Vector2 AppraiseSize = new Vector2(22, 31);
 
@@ -231,7 +234,7 @@ namespace DaraletPlayer.Ui {
             // the strip itself: its background, the name on top, and under it the health or the stack's amount
             var stripMin = origin + StripAt * scale;
             var stripMax = stripMin + StripSize * scale;
-            ItemIcons.DrawArtBox(drawList, "toolbar-strip", stripMin, stripMax);
+            DrawStripArt(drawList, "toolbar-strip", stripMin, stripMax);
             ImGui.SetCursorScreenPos(stripMin);
             RenderStrip(selection, selected, StripSize.X * scale, StripSize.Y * scale, true);
         }
@@ -286,44 +289,59 @@ namespace DaraletPlayer.Ui {
             var drawList = ImGui.GetWindowDrawList();
             var min = ImGui.GetCursorScreenPos();
             var half = (float)Math.Round(height / 2);
+            stripHeight = height;
             var name = selection == 0 ? "Nothing selected" : NameOf(selection, selected) ?? $"0x{selection:X8}";
-
-            // the name, cut to fit
-            drawList.PushClipRect(min, min + new Vector2(width, half), true);
-            var nameSize = ImGui.CalcTextSize(name);
-            DrawOutlined(drawList, name, new Vector2((float)Math.Round(min.X + Math.Max(2, (width - nameSize.X) / 2)),
-                (float)Math.Round(min.Y + (half - nameSize.Y) / 2)));
-            drawList.PopClipRect();
-
-            var lower = new Vector2(min.X, min.Y + half);
-            var lowerSize = new Vector2(width, height - half);
             var health = selection == 0 ? null : feed.ClientHealth((uint)selection);
 
-            if (health.HasValue) {
-                var fraction = PowerBarOptions.Clamp(health.Value);
-                var barMax = lower + lowerSize;
+            if (!health.HasValue && selection != 0 && StackSplit.CanSplit(selection) && HotbarItems.IsMine(selection)) {
+                RenderStackStrip(selection, name, min, width, height, retail);
+                ImGui.SetCursorScreenPos(min);
+                ImGui.Dummy(new Vector2(width, height));
+                return;
+            }
 
-                if (!retail || !DrawRetailMeter(drawList, lower, barMax, fraction)) {
+            var nameHeight = half;
+            var nameTop = (float?)null;
+
+            if (health.HasValue) {
+                // the game's meter (0x100001A1) is a picture of the whole strip, its thin bar and the heart in the
+                // middle below the name, so it's drawn over the strip and the name goes on top, in the 13 pixels
+                // above the bar, its line a pixel below the strip's top as the client's is
+                var fraction = PowerBarOptions.Clamp(health.Value);
+
+                if (retail && DrawRetailMeter(drawList, min, min + new Vector2(width, height), fraction)) {
+                    nameHeight = (float)Math.Round(height * MeterNameHeight / 31f);
+                    nameTop = StripTextTop(min.Y, height);
+                }
+                else {
+                    var lower = new Vector2(min.X, min.Y + half);
+                    var barMax = new Vector2(min.X + width, min.Y + height);
                     drawList.AddRectFilled(lower, barMax, ImGui.GetColorU32(ImGuiCol.FrameBg));
-                    drawList.AddRectFilled(lower, new Vector2(lower.X + lowerSize.X * fraction, barMax.Y),
+                    drawList.AddRectFilled(lower, new Vector2(lower.X + width * fraction, barMax.Y),
                         ImGui.GetColorU32(Colors.Health));
                 }
+            }
 
-                var text = $"{(int)Math.Round(fraction * 100)}%";
-                var textSize = ImGui.CalcTextSize(text);
-                DrawOutlined(drawList, text, lower + (lowerSize - textSize) / 2);
-            }
-            else if (selection != 0 && StackSplit.CanSplit(selection) && HotbarItems.IsMine(selection)) {
-                RenderStackSlider(selection, lower, lowerSize);
-            }
+            // the name, cut to fit
+            drawList.PushClipRect(min, min + new Vector2(width, nameHeight), true);
+            var nameSize = StripTextSize(name);
+            DrawStripText(drawList, name, new Vector2(StripTextLeft(min.X, width, nameSize.X),
+                nameTop ?? (float)Math.Round(min.Y + (nameHeight - nameSize.Y) / 2)));
+            drawList.PopClipRect();
 
             ImGui.SetCursorScreenPos(min);
             ImGui.Dummy(new Vector2(width, height));
         }
 
-        /// <summary>The game's health meter (0x100001A1): the dark bar, the red one cut off at the health.</summary>
+        /// <summary>The name's room above the health meter's bar, in the strip's 31 pixels, as the game's places it.</summary>
+        private const float MeterNameHeight = 13;
+
+        /// <summary>
+        /// The game's health meter (0x100001A1): the dark picture (0600193E, its heart grey), the red one (0600193F, its
+        /// heart red) cut off at the health, each the whole strip's size.
+        /// </summary>
         private static bool DrawRetailMeter(ImDrawListPtr drawList, Vector2 min, Vector2 max, float fraction) {
-            if (!ItemIcons.DrawArtBox(drawList, "selection-health-empty", min, max)) {
+            if (!DrawStripArt(drawList, "selection-health-empty", min, max)) {
                 return false;
             }
 
@@ -331,30 +349,39 @@ namespace DaraletPlayer.Ui {
 
             if (cut > min.X) {
                 drawList.PushClipRect(min, new Vector2(cut, max.Y), true);
-                ItemIcons.DrawArtBox(drawList, "selection-health-full", min, max);
+                DrawStripArt(drawList, "selection-health-full", min, max);
                 drawList.PopClipRect();
             }
 
             return true;
         }
 
-        /// <summary>How many of the selected stack the next drag carries: the game's stack bar (StackSplit.SetAmount).</summary>
-        private static void RenderStackSlider(int selection, Vector2 at, Vector2 size) {
-            var stack = StackSplit.StackOf(selection);
-            var amount = CoreManager.Current.Actions.SelectedStackCount;
-            amount = amount <= 0 || amount > stack ? stack : amount;
+        /// <summary>
+        /// One of the strip's pictures (its background, the health meter, the stack's glow): each is 146 pixels wide in a
+        /// 140-pixel strip, and the client draws it at its own width from the strip's left, cut off at its right (matched
+        /// against a screenshot: squeezed to fit, as the first build drew it, the heart sat two pixels left of the game's).
+        /// </summary>
+        private static bool DrawStripArt(ImDrawListPtr drawList, string art, Vector2 min, Vector2 max,
+            uint tint = 0xFFFFFFFF) {
+            var artMax = new Vector2(min.X + (float)Math.Round((max.X - min.X) * StripArtWidth / StripSize.X), max.Y);
+            drawList.PushClipRect(min, max, true);
+            var drawn = ItemIcons.DrawArtBox(drawList, art, min, artMax, tint);
+            drawList.PopClipRect();
+            return drawn;
+        }
 
-            ImGui.SetCursorScreenPos(at);
-            ImGui.SetNextItemWidth(size.X);
-            ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(2, Math.Max(0, (size.Y - ImGui.GetFontSize()) / 2)));
+        /// <summary>
+        /// Where the strip's text starts across: centred, a half pixel going right, as the client's ("Black Rabbit", 61
+        /// wide, starts 40 into the 140; rounding to even put it at 39).
+        /// </summary>
+        private static float StripTextLeft(float stripLeft, float width, float textWidth) {
+            return (float)(Math.Round(stripLeft) + Math.Max(2, Math.Ceiling((width - textWidth) / 2)));
+        }
 
-            if (Sliders.SliderInt("##toolbar-stack", ref amount, 1, stack, $"{amount} of {stack}")) {
-                StackSplit.SetAmount(selection, amount);
-            }
-
-            ImGui.PopStyleVar();
-            Widgets.Tip("How many of the stack your next drag of it carries, as the game's stack bar sets it. Ctrl+click "
-                + "to type a number.");
+        /// <summary>The top of the strip's text line in the game's look: a pixel below the strip's top, as the client's.
+        /// </summary>
+        private static float StripTextTop(float stripTop, float height) {
+            return (float)(Math.Round(stripTop) + Math.Max(1, Math.Round(height / 31f)));
         }
 
         // ---- the plugin's look ----
