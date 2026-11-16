@@ -61,6 +61,18 @@ namespace DaraletPlayer.Ui {
         /// <summary>Whether items are appraised in the plugin's Appraisal window (Plugin appraisal), not the game's panel.</summary>
         public static bool InPlugin => settings?.Data.AppraiseInPlugin != false && feed != null;
 
+        /// <summary>
+        /// Whether the server describes items that aren't yours (on the ground, wielded or held by someone else), so the
+        /// Appraisal window can show them; an older server only describes your own.
+        /// </summary>
+        public static bool DescribesWorldItems => feed?.HasFeature(PlayerFeed.FeatureWorldDescribe) == true;
+
+        /// <summary>Whether the first Appraisal window is on screen showing this item.</summary>
+        public static bool Showing(int id) {
+            var first = windows.FirstOrDefault();
+            return first != null && first.Window.Shown && first.Guid == unchecked((uint)id);
+        }
+
         /// <summary>Closes the first Appraisal window, for an appraisal the game's panel shows instead.</summary>
         public static void DismissFirst() {
             var window = FirstWindow;

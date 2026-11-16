@@ -15,6 +15,16 @@ namespace DaraletPlayer.Ui {
     internal sealed partial class ChatWindows {
         private static readonly TimeSpan ReapplyEvery = TimeSpan.FromSeconds(1);
 
+        /// <summary>
+        /// How soon after a mouse button the chat bar taking the keyboard counts as the click's doing, not a key's: closing
+        /// one of the game's dialogs (the salvage refinery's info box, its Okay clicked) gives the keyboard back to the chat
+        /// bar, which opened the plugin's box as Enter would.
+        /// </summary>
+        private static readonly TimeSpan ClickCausedWithin = TimeSpan.FromMilliseconds(500);
+
+        private const int LeftButton = 0x01;
+        private const int RightButton = 0x02;
+
         /// <summary>Which of the game's chat windows were showing when they were hidden, to show those again.</summary>
         private readonly Dictionary<uint, bool> gameChatWasShown = new Dictionary<uint, bool>();
 
@@ -26,6 +36,10 @@ namespace DaraletPlayer.Ui {
         private bool chatBarSeen;
         private bool enterLogged;
         private bool otherBoxLogged;
+        private bool clickLogged;
+
+        /// <summary>When a mouse button was last seen down, from Windows.</summary>
+        private DateTime mouseDownAt = DateTime.MinValue;
 
         private static IEnumerable<uint> GameChatElements() {
             yield return ClientElements.MainChat;
@@ -111,6 +125,10 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         private void TakeChatBar() {
             var active = CoreManager.Current.Actions.ChatState;
+
+            if (Hotkeys.IsDown(LeftButton) || Hotkeys.IsDown(RightButton)) {
+                mouseDownAt = DateTime.UtcNow;
+            }
             // not while the game's UI is hidden for a screenshot, the chat windows with it
             var take = Data.On && (Data.HideGameChat || Data.EnterTypes) && !HideGameUi.On;
 
@@ -142,6 +160,21 @@ namespace DaraletPlayer.Ui {
                     chatBarWasActive = active;
                     return;
                 }
+            }
+
+            // A click, not a key, gave the chat bar the keyboard (a game dialog closing hands it back): no typing starts.
+            // With the game's chat hidden it's cleared, so keys don't go blind into it; shown, it's left to the game.
+            if (take && active && !chatBarWasActive && DateTime.UtcNow - mouseDownAt < ClickCausedWithin) {
+                var cleared = Data.HideGameChat && ClientElements.ClearFocus();
+
+                if (!clickLogged) {
+                    clickLogged = true;
+                    PluginCore.LogFile("[chat] the chat bar took the keyboard after a click: no typing started ("
+                        + (cleared ? "cleared" : "left to the game") + ")");
+                }
+
+                chatBarWasActive = CoreManager.Current.Actions.ChatState;
+                return;
             }
 
             if (take && active && !chatBarWasActive) {

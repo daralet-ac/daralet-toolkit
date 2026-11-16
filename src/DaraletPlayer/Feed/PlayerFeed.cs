@@ -24,6 +24,12 @@ namespace DaraletPlayer.Feed {
 
         /// <summary>The server's describe takes what the vendor you last opened sells.</summary>
         public const string FeatureVendorDescribe = "vendordescribe";
+
+        /// <summary>
+        /// The server's describe takes any item the game's appraisal could: one on the ground, one someone else wields or
+        /// holds, one in a container you have open. Its descriptions carry the item's own Use text (`use`) too.
+        /// </summary>
+        public const string FeatureWorldDescribe = "worlddescribe";
         public const string KindFellowship = "fellowship";
         public const string KindTargets = "targets";
         public const string KindPosition = "position";

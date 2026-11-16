@@ -73,6 +73,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>Whether it's showing an item: a window that isn't can take the next Appraise in new window.</summary>
         public bool InUse => guid != 0;
 
+        /// <summary>The item it shows; 0 for none.</summary>
+        public uint Guid => guid;
+
         private CorpseItemInfo Item => fromCorpse ?? (feed.Described.TryGetValue(guid, out var described) ? described : null);
 
         /// <summary>
@@ -124,7 +127,7 @@ namespace DaraletPlayer.Ui {
                 ImGui.Separator();
                 var lines = ItemLines.Build(item);
                 var named = lines.Where(l => l.Style != ItemLineStyle.Heading).Select(l => l.Text).ToList();
-                lines.AddRange(ItemUse.AppraisalLines(guid, named, out var properties));
+                lines.AddRange(ItemUse.AppraisalLines(guid, named, out var properties, item.Use));
                 RenderLines(lines, wrap, properties);
 
                 // last, and closed until opened: the item's own stats come first

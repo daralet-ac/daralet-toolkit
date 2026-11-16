@@ -25,6 +25,12 @@ namespace DaraletPlayer.Feed {
         [DataMember(Name = "item")] public MarketListing Item;
         /// <summary>Where each rolled stat landed in its range, 0 to 1, by appraisal's name for it; null if nothing rolled.</summary>
         [DataMember(Name = "rollQuality")] public Dictionary<string, double> RollQuality;
+
+        /// <summary>
+        /// The item's own Use text, as the world database has it ("" for none), without what the game's appraisal adds
+        /// after it (mods, sockets, wield requirements), which the item's lines show already; null from an older server.
+        /// </summary>
+        [DataMember(Name = "use")] public string Use;
     }
 
     [DataContract]

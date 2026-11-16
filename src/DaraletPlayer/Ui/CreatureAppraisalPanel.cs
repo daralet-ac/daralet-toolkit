@@ -81,8 +81,9 @@ namespace DaraletPlayer.Ui {
             }
 
             if (Appraisal.IsItem(target.ObjectClass)) {
-                // one on the ground isn't the server's to describe to the plugin: the game's panel shows it
-                if (!Appraisal.InPlugin || target.Container == 0) {
+                // one on the ground or someone else's is only described by a server with "worlddescribe": on an older
+                // one the game's panel shows it
+                if (!Appraisal.InPlugin || (target.Container == 0 && !Appraisal.DescribesWorldItems)) {
                     GameShows(id, Appraisal.InPlugin ? "lies on the ground" : "is an item, and Plugin appraisal is off");
                     return false;
                 }

@@ -22,6 +22,9 @@ namespace DaraletPlayer.Ui {
         private FloatingWindow current;
         private bool disposed;
 
+        /// <summary>The last thing selected (never 0: a selection cleared and put back isn't a new one).</summary>
+        private int lastSelection;
+
         public AppraisalGroup(Settings settings, params FloatingWindow[] windows) {
             this.settings = settings;
             this.windows = windows.Where(w => w != null).ToList();
@@ -50,12 +53,42 @@ namespace DaraletPlayer.Ui {
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
                 if (!disposed) {
+                    FollowSelection();
                     FollowOpening();
                 }
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
             }
+        }
+
+        /// <summary>
+        /// While an appraisal window is up, selecting something else appraises that instead, as the game's own panel does
+        /// (Appraisal.Object, which routes it: an item here, a creature to Creature Appraisal, the rest to the game's panel).
+        /// Only a new selection counts, not one cleared and put back (WorldAppraise and WorldDrop clear it to ask the game
+        /// what's under the mouse), and nothing while an item's being dropped into the world, whose click selects where.
+        /// </summary>
+        private void FollowSelection() {
+            if (CoreManager.Current.CharacterFilter.LoginStatus != 3) {
+                lastSelection = 0;
+                return;
+            }
+
+            var selection = CoreManager.Current.Actions.CurrentSelection;
+
+            if (selection == 0 || selection == lastSelection) {
+                return;
+            }
+
+            var before = lastSelection;
+            lastSelection = selection;
+
+            if (before == 0 || WorldDrop.Waiting || !windows.Any(w => w.Shown) || Appraisal.Showing(selection)) {
+                return;
+            }
+
+            PluginCore.LogFile($"[appraisal] the selection moved to 0x{selection:X8}: appraising it");
+            Appraisal.Object(selection);
         }
 
         /// <summary>The window that came up since last frame becomes the one showing; any other up is closed.</summary>

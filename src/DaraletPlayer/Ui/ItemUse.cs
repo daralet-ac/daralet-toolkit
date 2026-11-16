@@ -86,7 +86,10 @@ namespace DaraletPlayer.Ui {
         /// stay in the Description. Too long for the item tooltips, which keep to Lines.
         /// </summary>
         /// <param name="named">The texts of the lines shown above, to find which descriptions they name.</param>
-        public static List<ItemLine> AppraisalLines(uint guid, IEnumerable<string> named, out PropertyDescriptions properties) {
+        /// <param name="ownUse">The item's own Use text from the server's description (CorpseItemInfo.Use), shown in place
+        /// of the appraisal's, which adds to it what the lines above already show; null to show the appraisal's.</param>
+        public static List<ItemLine> AppraisalLines(uint guid, IEnumerable<string> named, out PropertyDescriptions properties,
+            string ownUse = null) {
             var lines = new List<ItemLine>();
             var item = CoreManager.Current.WorldFilter[unchecked((int)guid)];
             properties = PropertyDescriptions.Parse("");
@@ -97,7 +100,7 @@ namespace DaraletPlayer.Ui {
 
             Request(guid, gear: true);
 
-            var use = item.Values(StringValueKey.UsageInstructions, "").Trim();
+            var use = (ownUse ?? item.Values(StringValueKey.UsageInstructions, "")).Trim();
             properties = PropertyDescriptions.Parse(item.Values(StringValueKey.FullDescription, ""));
 
             var description = properties.Rest;

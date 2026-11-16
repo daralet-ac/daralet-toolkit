@@ -1738,7 +1738,18 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`ClientToolbar.Examine`, the magnifier's notice), and only if that can't be called selects the item for the game's
   appraise key. `Appraisal.Object(id)` appraises anything by id as the Toolbar window's magnifier does: an item in the
   Appraisal window, a creature, NPC or player in Creature Appraisal while it Replaces the game's
-  (`ClientExamine.TryTakeOver`), else the game's panel.
+  (`ClientExamine.TryTakeOver`), else the game's panel. **The window follows the selection**, as the game's panel does
+  (`AppraisalGroup.FollowSelection`): while any appraisal window is up, a new selection is appraised (`Appraisal.Object`),
+  but not one cleared and put back (WorldAppraise, WorldDrop) nor while `WorldDrop.Waiting`. **Items that aren't yours**
+  (on the ground, wielded by another player or an NPC, in an open container or the trade) go to the Appraisal window too
+  on a server with the `worlddescribe` feature, whose describe takes any item the game's appraisal would show
+  (`PlayerUiCorpseData.FindAppraisableItem`: what the client's been told of, the wielder for a wielded one, never a
+  creature or a ResistItemAppraisal 999 item, never another's packs); an older server's go to the game's panel. The same
+  feature sends each item's own **Use** text (`CorpseItemInfo.Use`, the world database's `PropertyString.Use`), which
+  the Appraisal window shows in place of the appraisal's, the server having added its mods, sockets and the like to it
+  (AppraiseInfo's `_extraPropertiesText`), which the item's lines show already. A weapon's **proc spell** (cast on strike,
+  `ProcSpell`, not in its spell book) leads its Spells, from the server's describe (`PlayerUiCorpseData.Describe`; the
+  Market API's own listings still leave it out).
   **Right-click appraises** (`Ui/RightClick.cs`, `SettingsData.RightClickAppraises`, on to start, and `MenuKey`, Alt to
   start, the Config tab's Text section beside the tooltips' key; `Ui/KeyChoice.cs` is both keys' drop-down; the user's
   call, November 2026): a right-click on a game object in the plugin's windows appraises it at once, and its menu
