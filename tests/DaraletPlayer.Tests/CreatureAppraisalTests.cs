@@ -120,11 +120,13 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
-        public void AnItemsAppraisalIsntACreatures() {
-            Assert.IsNull(CreatureAppraisal.Read(Message(0x1, true, w => {
+        public void AnythingElsesAppraisalHasNoCreature() {
+            var appraisal = CreatureAppraisal.Read(Message(0x1, true, w => {
                 w.Write((ushort)0);
                 w.Write((ushort)16);
-            })));
+            }));
+            Assert.IsNotNull(appraisal);
+            Assert.IsNull(appraisal.Creature);
             Assert.IsNull(CreatureAppraisal.Read(new byte[] { 1, 2, 3 }));
         }
 

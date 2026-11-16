@@ -59,6 +59,14 @@ namespace DaraletPlayer.Feed {
 
         private const uint ServerMessageType = 0xF7E0;
         private const uint GameEventMessageType = 0xF7B0;
+
+        /// <summary>
+        /// The server's word that an object is new or changed as a whole: CreateObject (a bought unique sent again) and
+        /// UpdateObject (an item changed in place: the salvage refinery makes a bag a tier up under the same id). Either
+        /// way, what the server last described of it is out of date.
+        /// </summary>
+        private const uint CreateObjectMessageType = 0xF745;
+        private const uint UpdateObjectMessageType = 0xF7DB;
         private const int UpdateHealthEvent = 0x01C0;
 
         /// <summary>A request with no reply after this long is sent again.</summary>
@@ -433,6 +441,24 @@ namespace DaraletPlayer.Feed {
             }
         }
 
+        /// <summary>
+        /// Forgets what the server described of the object a CreateObject or UpdateObject is about (its id straight after the
+        /// message type), so it's asked for again the next time something wants it: a description was kept until the plugin
+        /// restarted, and a bag the salvage refinery had made Wk10 (3) still showed as the W9 (6) it was.
+        /// </summary>
+        private void ForgetDescription(byte[] message) {
+            if (message == null || message.Length < 8) {
+                return;
+            }
+
+            var guid = BitConverter.ToUInt32(message, 4);
+
+            if (Described.Remove(guid)) {
+                describes.Forget(guid);
+                PluginCore.LogFile($"[describe] 0x{guid:X8} was sent again or changed: described afresh when next wanted");
+            }
+        }
+
         /// <summary>Forgets every description, so they're asked for again (an item's stats can change: tinkering, say).</summary>
         public void ClearDescriptions() {
             Described.Clear();
@@ -519,6 +545,11 @@ namespace DaraletPlayer.Feed {
 
         private void EchoFilter_ServerDispatch(object sender, NetworkMessageEventArgs e) {
             try {
+                if (e.Message.Type == UpdateObjectMessageType || e.Message.Type == CreateObjectMessageType) {
+                    ForgetDescription(e.Message.RawData);
+                    return;
+                }
+
                 if (e.Message.Type == GameEventMessageType) {
                     if (e.Message.Value<int>("event") == UpdateHealthEvent) {
                         NoteClientHealth(e.Message);

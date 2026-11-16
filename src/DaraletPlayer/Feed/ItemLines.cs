@@ -457,8 +457,11 @@ namespace DaraletPlayer.Feed {
         private static void Crafting(List<ItemLine> lines, MarketListing l, string basics) {
             var parts = new List<string>();
 
-            if (l.Workmanship.HasValue) {
-                parts.Add($"workmanship: {N(l.Workmanship, "0.##")}");
+            // a salvage bag's Workmanship is its ItemWorkmanship, the total of what went in (2 items of 5 make 10); its
+            // own is that over NumItemsInMaterial, SalvageWorkmanship, which the Materials line has too
+            var workmanship = l.SalvageWorkmanship ?? l.Workmanship;
+            if (workmanship.HasValue) {
+                parts.Add($"workmanship: {N(workmanship, "0.##")}");
             }
             if (l.NumTimesTinkered > 0) {
                 parts.Add($"tinkered: {l.NumTimesTinkered}");

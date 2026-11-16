@@ -37,6 +37,13 @@ namespace DaraletPlayer.Ui {
         /// <summary>How long the game has to select what was clicked.</summary>
         private static readonly TimeSpan SelectWait = TimeSpan.FromMilliseconds(300);
 
+        /// <summary>
+        /// How long after the right button comes up the left click is posted. Both buttons down is the game's mouse-look
+        /// run forward, and a click posted the frame the right button came up, before the game had seen it come up, took
+        /// a step forward.
+        /// </summary>
+        private static readonly TimeSpan PostDelay = TimeSpan.FromMilliseconds(120);
+
         private readonly Settings settings;
         private bool disposed;
 
@@ -54,6 +61,10 @@ namespace DaraletPlayer.Ui {
         private DateTime? clickedAt;
         private int selectedBefore;
         private bool sawCleared;
+
+        /// <summary>Where a click waits to be posted (PostDelay after the right button came up), and since when; or null.</summary>
+        private Vector2? postAt;
+        private DateTime releasedTime;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct Point {
@@ -94,6 +105,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 Watch();
+                PostWhenDue();
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
@@ -137,7 +149,29 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            Post(spot);
+            postAt = spot;
+            releasedTime = DateTime.UtcNow;
+        }
+
+        /// <summary>
+        /// Posts the waiting click once the game has had PostDelay to see the right button come up, if nothing's changed
+        /// meanwhile: a button pressed again, the mouse moved off the spot, or the click no longer allowed.
+        /// </summary>
+        private void PostWhenDue() {
+            if (!postAt.HasValue || DateTime.UtcNow - releasedTime < PostDelay) {
+                return;
+            }
+
+            var spot = postAt.Value;
+            postAt = null;
+
+            if (Hotkeys.IsDown(VK_LBUTTON) || Hotkeys.IsDown(VK_RBUTTON) || lastLeftAt > releasedTime
+                || !TryGetMouse(out var now) || Vector2.Distance(spot, now) > ClickSlop || !MayStart() || !OverWorld(now)) {
+                PluginCore.LogFile("[world-appraise] left alone: something changed before the click was due");
+                return;
+            }
+
+            Post(now);
         }
 
         /// <summary>Whether a right-click in the world may appraise now.</summary>

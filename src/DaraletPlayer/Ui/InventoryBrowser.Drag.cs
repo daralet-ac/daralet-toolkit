@@ -450,7 +450,7 @@ namespace DaraletPlayer.Ui {
 
             // merge only when the pack has a stack to join: asked to merge, the move ignores the slot and puts it last
             var stacks = item != null && item.Values(LongValueKey.StackMax, 0) > 1;
-            var merge = stacks && ItemsIn(containerId).Any(i => i.Id != itemId && i.Name == item.Name);
+            var merge = stacks && ItemsIn(containerId).Any(i => i.Id != itemId && i.Name == ShownName(item));
 
             CoreManager.Current.Actions.MoveItem(itemId, containerId, 0, merge);
             SnapshotSoon();
@@ -466,7 +466,7 @@ namespace DaraletPlayer.Ui {
             }
 
             var item = CoreManager.Current.WorldFilter[itemId];
-            var merge = item != null && target.Name == item.Name && (target.Stack > 1 || StackText.FromDecal(item.Values(LongValueKey.StackCount, 1)) > 1);
+            var merge = item != null && target.Name == ShownName(item) && (target.Stack > 1 || StackText.FromDecal(item.Values(LongValueKey.StackCount, 1)) > 1);
             var amount = StackSplit.Amount(itemId);
 
             if (amount > 0 && merge) {

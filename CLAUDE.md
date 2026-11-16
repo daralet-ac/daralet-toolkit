@@ -330,14 +330,18 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   sections; the bank, the Loot tab, the Corpse window and market search all draw them, so the layout changes in one place.
   An item you hold or loot is titled with its own name, which the server sends with its material in front
   (`NameWithMaterial`; `ItemLines.WithMaterial` adds it if missing), and its value, burden and stack go on the workmanship
-  line.
+  line. A salvage bag's workmanship there is its own (`SalvageWorkmanship`, ItemWorkmanship over NumItemsInMaterial):
+  its `Workmanship` is ItemWorkmanship, the total of every item salvaged into it, so a bag of two showed double.
   The bank asks for descriptions as the mouse passes over items (`PlayerFeed.Describe`, 20 a request; `@playerui describe`
   covers your packs, your open bank and, with the `vendordescribe` feature, the stock of the vendor you last opened,
   found as the game's appraisal finds it, `PlayerUiCorpseData.FindVendorItem`). The server sends nothing for an item it won't
   describe, nor for a request its rate limit drops, so DescribeRequests keeps track: a request with no answer in 3
   seconds is sent again (3 tries), an item a reply left out is not yours (DescribeState.NotYours), and either is asked
   about again after 5 seconds if something still wants it; PlayerFeed.DescribeWaitText says which in place of the
-  details. Tiers show as T0-T7 everywhere, the way the Search tab's filter has them.
+  details. A description is kept until the server sends the object again (CreateObject, `0xF745`) or changes it as a
+  whole (UpdateObject, `0xF7DB`), then forgotten and asked for afresh (`PlayerFeed.ForgetDescription`): the salvage
+  refinery remakes a bag a tier up under the same id, which showed as the old bag until the plugin restarted.
+  Tiers show as T0-T7 everywhere, the way the Search tab's filter has them.
   Speed is the weapon's WeaponTime (`MarketListing.WeaponTime`) with attacks a second after it, as "atk/s": 60 / WeaponTime,
   so 60 is one a second (`WeaponSpeed.GetSecondsPerHit` in daralet-ACE, at 100 Quickness). The Market API's Dps uses
   the same rule, so DPS and atk/s agree. Casters show no speed. Text is always drawn with `Widgets.Text*`
@@ -905,7 +909,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   hook the game's own appraisals pass, and the first build opened the game's panel for them); Use `ClientUISystem::UseObject`, which
   is `ItemHolder::UseObject(id, 0, 0)` (`0x5898B0`, static cdecl); the stack slider `CM_UI::SendNotice_StackSliderChanged`
   (`0x47A550`, the split size at `0x81D7EC` and the stack at `0x81D7F0`), which the window sets through
-  `StackSplit.SetAmount`. A panel button is `CM_UI::SendNotice_SetPanelVisibility(id, open)` (`ClientElements.
+  `StackSplit.SetAmount`. The strip's name has the material in front, as the game's: the server's description's
+  name, else Decal's (which has none) with `LongValueKey.Material` named by `Feed/MaterialNames.cs` (MaterialType's
+  numbers). A panel button is `CM_UI::SendNotice_SetPanelVisibility(id, open)` (`ClientElements.
   SetGamePanel`), lit while `ClientElements.OpenGamePanel` says it's the one open, or opens the plugin's window instead
   where Client UI Override's Inventory, Quests, Social or Map is ticked. Items let go over the backpack (from the
   plugin's lists or the game's pack) go in the main pack (`ToolbarButtons.PutInMainPack`). The strip's health is
@@ -1317,6 +1323,19 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   has an item. Each has a close button (`FloatingWindow.CloseButton`, `FloatingWindow.Close.cs`: the game's gold X, the
   Indicators' log out picture, in the top right corner over the contents, worked by hand; `EdgeDrag` leaves its corner
   alone). Untested in the game when written.
+  **Every appraisal goes to one place** (`CreatureAppraisalPanel.Route`, `ClientExamine.TakeOver`; the user's call,
+  November 2026: "always one or the other"), whoever starts it (the game's key, magnifier or menus, the plugin's
+  right-click and magnifier, `Appraisal.Object`): an item you carry, wear, have banked or see in a container to the
+  Appraisal window while Plugin appraisal is on (one on the ground to the game's panel: the server won't describe it);
+  anything else in the world (creatures, players, lifestones, portals, doors) to Creature Appraisal while it Replaces
+  the game's; the rest to the game's panel. Whichever takes it closes the others (`ClientExamine.CloseGamePanel`,
+  `Appraisal.DismissFirst`, `GameShows`). Creature Appraisal shows what isn't a creature too (`CreatureAppraisal.Read`
+  takes any SetAppraiseInfo, `Creature` null without a creature profile): the name, its kind, no level box or stats, its
+  Use text and its description (long, else short). **The game's panel follows the selection**: while it's open, the
+  game appraises what's selected next with `CM_Item::Event_Appraise` (static cdecl, the object), called from
+  `0x4AB8FE`, `0x4ABB53` and `0x4B755D`, not through ExamineObject; so the panel, cut down to a creature's model, showed
+  a selected portal device's item page inside the Creature window. Those three calls are hooked too, and routed while
+  the game's panel shows. Untested in the game when written.
   **Radar** (`Ui/RadarPanel*.cs`, `Ui/RadarBlip.cs`, `Ui/ClientRadar.cs`, `Map/RadarMath.cs`, `Feed/RadarOptions.cs`,
   `Feed/RadarKind*.cs`, `SettingsData.Radar`; its settings a section of the World tab's Settings, `WorldTab.RadarSettings`,
   its Replace in Client UI Override's row; the user's call, November 2026): replaces
@@ -1676,7 +1695,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `0x25000009` (`IconLayers.EffectImages`, `ItemIcons.Painted`). The table goes by UiEffects' lowest bit set plus one
   (`IconLayers.EffectOf`, `0x685460`), so magic beats an element; its Default, for no effect, is black. Sigil trinkets'
   one colour each is the website's (`SigilOutlines`). Market listings only have the Market API's few effect names, from
-  damage type and spells. Hovering an icon shows the item's tooltip. **Compact** on the
+  damage type and spells: so an item the server's described keeps the client's effect, from its own UiEffects, unless
+  the server's is a sigil's (`ItemIcons.Of(described, client)`); taking the server's turned salvage bags (Frost, a light
+  outline) black the moment they were hovered. Hovering an icon shows the item's tooltip. **Compact** on the
   window's top line (`SettingsData.CompactLists`) hides them; a loot mark still shows, on its own.
 
 - **World tab** (`Ui/WorldTab.cs`, `Map/`): the map (Daralet Admin's `dereth-map.png`), the places in
@@ -1730,7 +1751,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   most, since holding it turns the camera) is caught on Decal's RenderFrame from Windows (`GetAsyncKeyState`,
   `GetCursorPos`; ImGui only runs while a plugin window draws), then asked of the game as `WorldDrop` asks it: the
   selection cleared and a left click posted on the spot, whatever's selected within 300ms appraised, the old selection
-  put back if nothing is. Left alone over a plugin window (`WantCaptureMouse`), over any of the game's UI that's showing
+  put back if nothing is. The click is posted 120ms after the right button comes up (`PostDelay`): both buttons down
+  is the game's mouse-look run forward, and posted the frame the button came up, the character took a step forward
+  (likely the game hadn't seen the release yet; not confirmed). Left alone over a plugin window (`WantCaptureMouse`), over any of the game's UI that's showing
   (`ClientElements.GameUiPieces`, where the posted click would press a button), with the menu key held, and within a
   double-click's time of the left button going down (the posted click would make a double-click, which uses the thing).
   The client's own pick (`UIElement_SmartBoxWrapper::FindObject`, `SmartBox::find_object` / `get_found_object_id` in

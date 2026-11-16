@@ -124,6 +124,12 @@ namespace DaraletPlayer.Feed {
             inFlight = null;
         }
 
+        /// <summary>Forgets one item's failures, so it's asked about afresh (it's changed since).</summary>
+        public void Forget(uint guid) {
+            failed.Remove(guid);
+            tries.Remove(guid);
+        }
+
         /// <summary>Forgets everything: every item is asked about afresh.</summary>
         public void Clear() {
             queue.Clear();

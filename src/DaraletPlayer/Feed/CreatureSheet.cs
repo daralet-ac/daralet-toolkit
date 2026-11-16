@@ -35,6 +35,8 @@ namespace DaraletPlayer.Feed {
         public const uint HeritageGroup = 4;
         public const uint Template = 5;
         public const uint Fellowship = 10;
+        public const uint Use = 14;
+        public const uint ShortDesc = 15;
         public const uint LongDesc = 16;
         public const uint MonarchsTitle = 21;
         public const uint PatronsTitle = 35;
@@ -182,9 +184,15 @@ namespace DaraletPlayer.Feed {
             return sections;
         }
 
-        /// <summary>The long description, or "" for none.</summary>
+        /// <summary>The long description, else the short one (all a lifestone or a portal may have), or "" for none.</summary>
         public static string Description(CreatureAppraisal appraisal) {
-            return (appraisal.String(LongDesc) ?? "").Trim();
+            var text = appraisal.String(LongDesc);
+            return (string.IsNullOrWhiteSpace(text) ? appraisal.String(ShortDesc) ?? "" : text).Trim();
+        }
+
+        /// <summary>What using it does (a lifestone's, a portal's), or "" for none.</summary>
+        public static string UseText(CreatureAppraisal appraisal) {
+            return (appraisal.String(Use) ?? "").Trim();
         }
 
         /// <summary>Player Killer, Player Killer Lite or Non-Player Killer, as the game says it.</summary>

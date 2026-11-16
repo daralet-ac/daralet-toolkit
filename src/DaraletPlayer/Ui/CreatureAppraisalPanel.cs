@@ -52,47 +52,84 @@ namespace DaraletPlayer.Ui {
                 hideWhen: () => false, defaultSize: new Vector2(310, 420)) {
             this.icons = icons;
             ClientExamine.Start();
-            ClientExamine.TakeOver = TakeOver;
+            ClientExamine.TakeOver = Route;
             CoreManager.Current.EchoFilter.ServerDispatch += EchoFilter_ServerDispatch;
         }
 
-        protected override string ReplaceTip => "Shows creature, NPC and player appraisals in the plugin's Creature "
-            + "Appraisal window instead of the game's examination panel, from the appraise key, the magnifier or anywhere "
-            + "the game appraises. Items still go to the game's panel.";
+        protected override string ReplaceTip => "Shows appraisals of creatures, NPCs, players and anything else in the "
+            + "world (lifestones, portals, doors) in the plugin's Creature Appraisal window instead of the game's "
+            + "examination panel, from the appraise key, the magnifier, a right-click or anywhere the game appraises. Items "
+            + "go to the plugin's Appraisal window while Plugin appraisal is on, else to the game's panel.";
 
         protected override string WindowTip => "A creature's or player's appraisal: level, health, stamina, mana and "
             + "attributes (green raised by a spell, red lowered), ratings, a player's armor, allegiance and character, and "
             + "the description.";
 
-        /// <summary>Takes a creature's, NPC's or player's appraisal from the game while Replace is on.</summary>
-        private bool TakeOver(int id) {
-            if (!Options.Replace || CoreManager.Current.CharacterFilter.LoginStatus != 3) {
+        /// <summary>
+        /// Where an appraisal goes, whoever starts it (the game's key, magnifier or panel following the selection; the
+        /// plugin's right-click and magnifier): always one place, the others closed (the user's call, November 2026). An
+        /// item you carry, wear, have banked or see in a container goes to the plugin's Appraisal window while Plugin
+        /// appraisal is on; anything else in the world (a creature, a player, a lifestone, a portal) to this window while
+        /// Replace is on; the rest to the game's panel. True takes it from the game.
+        /// </summary>
+        private bool Route(int id) {
+            var target = CoreManager.Current.WorldFilter[id];
+
+            if (CoreManager.Current.CharacterFilter.LoginStatus != 3 || target == null) {
+                GameShows(id, "isn't known");
                 return false;
             }
 
-            var target = CoreManager.Current.WorldFilter[id];
+            if (Appraisal.IsItem(target.ObjectClass)) {
+                // one on the ground isn't the server's to describe to the plugin: the game's panel shows it
+                if (!Appraisal.InPlugin || target.Container == 0) {
+                    GameShows(id, Appraisal.InPlugin ? "lies on the ground" : "is an item, and Plugin appraisal is off");
+                    return false;
+                }
 
-            if (target == null || !IsCreature(target)) {
-                // the game shows this one itself (an item): its panel goes back as it was first
-                model.Restore(hide: false);
+                model.Restore(hide: true);
+                ClientExamine.CloseGamePanel();
+                Appraisal.Show(unchecked((uint)id));
+                PluginCore.LogFile($"[appraisal] 0x{id:X8} ({target.Name}) in the Appraisal window");
+                return true;
+            }
+
+            if (!Options.Replace) {
+                GameShows(id, "isn't an item, and Creature Appraisal doesn't Replace the game's");
                 return false;
             }
 
             wanted = id;
             Window.Visible = true;
             Window.BringToFront();
+            Appraisal.DismissFirst();
 
-            // with the model, the game does its own appraisal, whose panel is cut down to the model (CreatureModelView)
-            if (settings.Data.CreatureAppraisalModel) {
+            // with the model, the game does its own appraisal of a creature, whose panel is cut down to the model
+            // (CreatureModelView)
+            if (settings.Data.CreatureAppraisalModel && IsCreature(target)) {
                 model.Expect(id);
                 PluginCore.LogFile($"[appraisal] the game appraises 0x{id:X8} ({target.Name}) for its model");
                 return false;
             }
 
             model.Restore(hide: true);
+            ClientExamine.CloseGamePanel();
             CoreManager.Current.Actions.RequestId(id);
             PluginCore.LogFile($"[appraisal] took the game's appraisal of 0x{id:X8} ({target.Name})");
             return true;
+        }
+
+        /// <summary>The game's panel shows this one: it goes back as it was first, and the plugin's appraisal windows close.</summary>
+        private void GameShows(int id, string why) {
+            model.Restore(hide: false);
+            wanted = 0;
+
+            if (Window.Shown) {
+                Window.Dismiss();
+            }
+
+            Appraisal.DismissFirst();
+            PluginCore.LogFile($"[appraisal] the game's panel shows 0x{id:X8}: it {why}");
         }
 
         private static bool IsCreature(WorldObject target) {
@@ -153,7 +190,7 @@ namespace DaraletPlayer.Ui {
             try {
                 if (shown == null) {
                     Widgets.TextDisabled(wanted != 0 ? "Appraising..." : Options.Replace
-                        ? "Appraise a creature or a player to see it here."
+                        ? "Appraise a creature, a player or anything else in the world to see it here."
                         : "Tick Replace to see the game's creature and player appraisals here.");
                     return;
                 }
@@ -245,8 +282,12 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         private void RenderHeader(WorldObject known, bool retail) {
             var avail = ImGui.GetContentRegionAvail().X;
+
+            // a lifestone or a portal has no level: no box for it, the name across the whole width
+            var levelBox = shown.Creature != null;
             var boxWidth = Widgets.Scaled(LevelBoxWidth);
-            var leftWidth = Math.Max(Widgets.Scaled(120), avail - boxWidth - ImGui.GetStyle().ItemSpacing.X);
+            var leftWidth = levelBox ? Math.Max(Widgets.Scaled(120), avail - boxWidth - ImGui.GetStyle().ItemSpacing.X)
+                : avail;
             var name = CreatureSheet.NameOf(shown, known?.Name);
             var height = Math.Max(headerLinesHeight, Widgets.Scaled(HeaderLeastHeight));
 
@@ -265,7 +306,12 @@ namespace DaraletPlayer.Ui {
                 GamePanelArt.Centred(line, leftWidth, Colors.Detail);
             }
 
-            if (!shown.Success) {
+            // what it is, for what isn't a creature ("Lifestone", "Portal"), as Decal knows it
+            if (!levelBox && known != null) {
+                GamePanelArt.Centred(KindName(known.ObjectClass), leftWidth, Colors.Detail);
+            }
+
+            if (!shown.Success && levelBox) {
                 GamePanelArt.Centred("Your appraisal failed: only its health shows.", leftWidth, Colors.Warning);
             }
 
@@ -274,8 +320,24 @@ namespace DaraletPlayer.Ui {
             headerLinesHeight = ImGui.GetItemRectSize().Y;
             ImGui.EndGroup();
 
-            ImGui.SameLine();
-            RenderLevelBox(CreatureSheet.LevelOf(shown), boxWidth, Math.Max(height, headerLinesHeight), retail);
+            if (levelBox) {
+                ImGui.SameLine();
+                RenderLevelBox(CreatureSheet.LevelOf(shown), boxWidth, Math.Max(height, headerLinesHeight), retail);
+            }
+        }
+
+        /// <summary>Decal's kind of object in words: "Lifestone", "Portal", "Door".</summary>
+        private static string KindName(ObjectClass kind) {
+            switch (kind) {
+                case ObjectClass.Lifestone:
+                    return "Lifestone";
+                case ObjectClass.Housing:
+                    return "Housing";
+                case ObjectClass.Unknown:
+                    return "";
+                default:
+                    return kind.ToString();
+            }
         }
 
         /// <summary>
@@ -386,6 +448,15 @@ namespace DaraletPlayer.Ui {
                 Divider(retail, overModel, width);
                 Widgets.TextColored(ItemTooltip.Heading, section.Title);
                 Rows(section.Rows, width);
+            }
+
+            var use = CreatureSheet.UseText(shown);
+
+            if (use.Length > 0) {
+                Divider(retail, overModel, width);
+                ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + width);
+                Widgets.TextColored(Colors.Text, use);
+                ImGui.PopTextWrapPos();
             }
 
             var description = CreatureSheet.Description(shown);

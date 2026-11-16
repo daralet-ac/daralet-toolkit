@@ -186,7 +186,7 @@ namespace DaraletPlayer.Ui {
                 .Where(o => !skipPacks || o.ObjectClass != ObjectClass.Container)
                 .Select(o => new Item {
                     Id = o.Id,
-                    Name = o.Name ?? "",
+                    Name = ShownName(o),
                     Stack = StackText.FromDecal(o.Values(LongValueKey.StackCount, 1)),
                     Value = o.Values(LongValueKey.Value, 0),
                     Burden = o.Values(LongValueKey.Burden, 0),
@@ -196,6 +196,14 @@ namespace DaraletPlayer.Ui {
                 })
                 .OrderBy(i => i.Slot)
                 .ToList();
+        }
+
+        /// <summary>
+        /// An item's name as the lists show it: Decal's, which has no material, with its material in front, as the game
+        /// writes it ("Steel Tachi"). Anything comparing a listed item's name with Decal's goes through this too.
+        /// </summary>
+        private static string ShownName(WorldObject o) {
+            return MaterialNames.NameWith(o.Name ?? "", o.Values(LongValueKey.Material, 0));
         }
     }
 }

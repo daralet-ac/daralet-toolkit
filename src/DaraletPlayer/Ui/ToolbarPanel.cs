@@ -264,11 +264,22 @@ namespace DaraletPlayer.Ui {
         /// you carry, a slider for how many the next drag takes (the game's stack bar).
         /// </summary>
         /// <summary>
-        /// The selection's name: Decal's, else the open vendor's item's (Decal's WorldFilter hasn't got a vendor's items, so a
-        /// vendor item picked in the Vendor window showed as its hex id); null when neither knows it.
+        /// The selection's name as the game's strip writes it, its material in front ("Leather Koujia Breastplate"): the
+        /// server's description's name when it has one, else Decal's with its material (Decal's names have none), else the
+        /// open vendor's item's (Decal's WorldFilter hasn't got a vendor's items, so a vendor item picked in the Vendor
+        /// window showed as its hex id); null when none knows it.
         /// </summary>
-        private static string NameOf(int selection, WorldObject selected) {
-            return selected?.Name ?? VendorStock.Find(selection)?.Name;
+        private string NameOf(int selection, WorldObject selected) {
+            if (selection != 0 && feed.Described.TryGetValue(unchecked((uint)selection), out var described)
+                && !string.IsNullOrEmpty(described.Name)) {
+                return described.Name;
+            }
+
+            if (selected != null) {
+                return MaterialNames.NameWith(selected.Name, selected.Values(LongValueKey.Material, 0));
+            }
+
+            return VendorStock.Find(selection)?.Name;
         }
 
         private void RenderStrip(int selection, WorldObject selected, float width, float height, bool retail) {

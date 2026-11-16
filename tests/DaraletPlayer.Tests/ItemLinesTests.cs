@@ -105,6 +105,15 @@ namespace DaraletPlayer.Tests {
 
             CollectionAssert.Contains(bag, "Green Jade salvage, workmanship: 7.25, units: 100");
             CollectionAssert.Contains(bag, "For: weapon, armor");
+
+            // a bag's Workmanship is the total of what went in: two items of 5 made 10
+            var described = Texts(ItemLines.Build(new MarketListing {
+                ItemName = "Salvage", ItemCategory = "Salvage", SalvageMaterial = "Bronze", SalvageWorkmanship = 5,
+                Workmanship = 10, SalvageUnits = 3,
+            }));
+
+            CollectionAssert.Contains(described, "Workmanship: 5");
+            CollectionAssert.DoesNotContain(described, "Workmanship: 10");
         }
 
         [TestMethod]

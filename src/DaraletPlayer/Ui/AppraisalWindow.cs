@@ -148,7 +148,7 @@ namespace DaraletPlayer.Ui {
 
             var top = ImGui.GetCursorScreenPos();
             var drawList = ImGui.GetWindowDrawList();
-            var layers = item?.Item?.IconHex != null ? IconLayers.Of(item.Item) : ItemIcons.Of(world);
+            var layers = ItemIcons.Of(item?.Item, ItemIcons.Of(world));
 
             drawList.AddRectFilled(top, top + new Vector2(IconSize, IconSize), ImGui.GetColorU32(ImGuiCol.FrameBg));
             icons.DrawAt(drawList, layers, top, IconSize);

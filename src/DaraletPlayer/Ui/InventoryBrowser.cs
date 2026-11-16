@@ -494,8 +494,8 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The server's icon once it's described the item (it knows a sigil's colour), the client's until then.</summary>
         private IconLayers Icon(Item item) {
-            return feed.Described.TryGetValue(item.Guid, out var described) && described.Item?.IconHex != null
-                ? IconLayers.Of(described.Item)
+            return feed.Described.TryGetValue(item.Guid, out var described)
+                ? ItemIcons.Of(described.Item, item.Icon)
                 : item.Icon;
         }
 

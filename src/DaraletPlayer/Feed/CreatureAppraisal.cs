@@ -41,6 +41,7 @@ namespace DaraletPlayer.Feed {
         public readonly Dictionary<uint, string> Strings = new Dictionary<uint, string>();
         public readonly Dictionary<uint, uint> Dids = new Dictionary<uint, uint>();
         public readonly List<uint> Spells = new List<uint>();
+        /// <summary>The creature profile: null for what isn't a creature (a lifestone, a portal, an item).</summary>
         public CreatureStats Creature;
 
         /// <summary>Which resistances a spell has changed, and which way (ResistMask bits); 0 for none.</summary>
@@ -58,8 +59,8 @@ namespace DaraletPlayer.Feed {
         public string String(uint key) => Strings.TryGetValue(key, out var value) ? value : null;
 
         /// <summary>
-        /// The appraisal a message carries, if it's one of a creature (it has a creature profile); null for any other
-        /// message, an item's appraisal, or one too short to be what it says.
+        /// The appraisal a message carries, of anything (Creature is null for what isn't a creature: a lifestone, a
+        /// portal, an item); null for any other message, or one too short to be what it says.
         /// </summary>
         public static CreatureAppraisal Read(byte[] message) {
             if (message == null || message.Length < 28) {
@@ -81,10 +82,6 @@ namespace DaraletPlayer.Feed {
 
                     var appraisal = new CreatureAppraisal { Guid = reader.ReadUInt32() };
                     var flags = reader.ReadUInt32();
-
-                    if ((flags & CreatureProfile) == 0) {
-                        return null;
-                    }
 
                     appraisal.Success = reader.ReadUInt32() != 0;
                     appraisal.ReadBody(reader, flags);
@@ -131,7 +128,9 @@ namespace DaraletPlayer.Feed {
                 reader.ReadBytes(8 * 4); // eight protections, as floats
             }
 
-            Creature = ReadCreature(reader);
+            if ((flags & CreatureProfile) != 0) {
+                Creature = ReadCreature(reader);
+            }
 
             if ((flags & WeaponProfile) != 0) {
                 // damage type, speed, skill, damage; variance, mod, length, velocity, offense; estimated velocity

@@ -58,7 +58,17 @@ namespace DaraletPlayer.Ui {
             feed = null;
         }
 
-        private static bool InPlugin => settings?.Data.AppraiseInPlugin != false && feed != null;
+        /// <summary>Whether items are appraised in the plugin's Appraisal window (Plugin appraisal), not the game's panel.</summary>
+        public static bool InPlugin => settings?.Data.AppraiseInPlugin != false && feed != null;
+
+        /// <summary>Closes the first Appraisal window, for an appraisal the game's panel shows instead.</summary>
+        public static void DismissFirst() {
+            var window = FirstWindow;
+
+            if (window != null && window.Shown) {
+                window.Dismiss();
+            }
+        }
 
         /// <param name="described">The item as a corpse described it, for one in a corpse; null for one you carry or have
         /// banked, which the Appraisal window has the server describe.</param>
@@ -83,8 +93,9 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            // the game's own appraisal panel, as its magnifier opens it; selecting it for the appraise key if that fails
-            if (ClientToolbar.Examine(unchecked((int)guid))) {
+            // the game's own appraisal panel, as its magnifier opens it (through ClientExamine's routing first, which closes
+            // the plugin's appraisal windows); selecting it for the appraise key if that fails
+            if (ClientExamine.TryTakeOver(unchecked((int)guid)) || ClientToolbar.Examine(unchecked((int)guid))) {
                 return;
             }
 
@@ -98,27 +109,30 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// Appraises anything in the world by its id, as the Toolbar window's magnifier and a right-click on a creature do:
-        /// an item in the Appraisal window while Plugin appraisal is on; a creature, NPC or player in Creature Appraisal
-        /// while it Replaces the game's (ClientExamine.TakeOver, which the game's own appraisals go through, but which a
-        /// call straight to the game's notice, as this makes, skips); anything else in the game's own appraisal panel.
+        /// Appraises anything in the world by its id, as the Toolbar window's magnifier and a right-click do, where
+        /// ClientExamine's routing (CreatureAppraisalPanel.Route, which the game's own appraisals go through too, but which a
+        /// call straight to the game's notice, as this makes, skips) sends it: an item in the Appraisal window while Plugin
+        /// appraisal is on; anything else in the world in Creature Appraisal while it Replaces the game's; the rest in the
+        /// game's own appraisal panel.
         /// </summary>
         public static void Object(int id) {
-            if (id == 0) {
+            if (id == 0 || ClientExamine.TryTakeOver(id)) {
                 return;
             }
 
             var known = CoreManager.Current.WorldFilter[id];
 
-            if (InPlugin && known != null && IsItem(known.ObjectClass)) {
+            // no routing (the Creature Appraisal panel isn't made): items still go to the plugin's window
+            if (!ClientExamine.Routing && InPlugin && known != null && IsItem(known.ObjectClass)) {
                 Show(unchecked((uint)id));
+                return;
             }
-            else if (!ClientExamine.TryTakeOver(id)) {
-                ClientToolbar.Examine(id);
-            }
+
+            ClientToolbar.Examine(id);
         }
 
-        private static bool IsItem(ObjectClass kind) {
+        /// <summary>Whether the plugin's Appraisal window appraises this kind: not a creature or anything in the world.</summary>
+        public static bool IsItem(ObjectClass kind) {
             switch (kind) {
                 case ObjectClass.Monster:
                 case ObjectClass.Player:

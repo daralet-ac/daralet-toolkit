@@ -26,6 +26,19 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void AChangedItemIsAskedAboutAtOnceEvenAfterBeingLeftOut() {
+            var requests = new DescribeRequests(Timeout);
+            requests.Ask(7, Start);
+            requests.Next(Start);
+            requests.Answered(new uint[0], Start);
+            Assert.AreEqual(DescribeState.NotYours, requests.State(7));
+
+            requests.Forget(7);
+            requests.Ask(7, Start.AddSeconds(1));
+            CollectionAssert.AreEqual(new uint[] { 7 }, requests.Next(Start.AddSeconds(1)));
+        }
+
+        [TestMethod]
         public void ARequestWithNoReplyIsSentAgainThenGivenUpOn() {
             var requests = new DescribeRequests(Timeout);
             requests.Ask(7, Start);

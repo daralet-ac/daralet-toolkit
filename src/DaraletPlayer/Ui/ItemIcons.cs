@@ -239,11 +239,27 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The server's icon for an item (it knows a sigil's colour), or the client's until it's described.</summary>
         public static IconLayers Of(uint guid, MarketListing described) {
-            if (described?.IconHex != null) {
-                return IconLayers.Of(described);
+            return Of(described, Of(Decal.Adapter.CoreManager.Current.WorldFilter[unchecked((int)guid)]));
+        }
+
+        /// <summary>
+        /// The server's icon once it's described the item, the client's until then (null for none), but its outline the
+        /// client's effect, from the item's own UiEffects, unless the server's is a sigil's colour (which the client
+        /// doesn't know): the description picks an effect from damage type and spells alone, so a salvage bag (Frost, a
+        /// light outline in the game) turned black the moment it was described, on hover.
+        /// </summary>
+        public static IconLayers Of(MarketListing described, IconLayers client) {
+            if (described?.IconHex == null) {
+                return client;
             }
 
-            return Of(Decal.Adapter.CoreManager.Current.WorldFilter[unchecked((int)guid)]);
+            var server = IconLayers.Of(described);
+
+            if (client != null && !IconLayers.SigilOutlines.ContainsKey(server.Effect)) {
+                server.Effect = client.Effect;
+            }
+
+            return server;
         }
 
         /// <summary>The tile behind an item that doesn't name its own, by its kind (IconLayers.Underlays).</summary>
