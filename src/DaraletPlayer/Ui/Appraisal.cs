@@ -55,7 +55,12 @@ namespace DaraletPlayer.Ui {
             }
 
             windows.Clear();
+
+            // statics outlive a hot reload (the old assembly is never unloaded), so anything left here would keep
+            // the stopped copy's feed, settings and icons in memory for the rest of the game
             feed = null;
+            settings = null;
+            icons = null;
         }
 
         /// <summary>Whether items are appraised in the plugin's Appraisal window (Plugin appraisal), not the game's panel.</summary>

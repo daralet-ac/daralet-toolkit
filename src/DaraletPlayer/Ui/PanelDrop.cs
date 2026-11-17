@@ -49,6 +49,11 @@ namespace DaraletPlayer.Ui {
         }
 
         public static void Stop() {
+            // statics outlive a hot reload (the old assembly is never unloaded): a feed left here would keep the
+            // stopped copy's PlayerFeed, and all it caches, in memory for the rest of the game
+            feed = null;
+            onUst.Clear();
+
             if (!started) {
                 return;
             }

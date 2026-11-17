@@ -69,6 +69,12 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
   same game. If any old window kept drawing, it kept asking the server for data while its chat filter was gone, and the
   `DAP1|` replies flooded the chat box. So shutdown disposes each piece on its own (`PluginCore.ShutdownStep`,
   `PlayerHud.Dispose`), and a disposed feed or window does nothing (`PlayerFeed.Request`, `FloatingWindow.Hud_OnRender`).
+- **Every hot reload stays in memory for good.** .NET Framework can't unload an assembly, so each
+  `Assembly.Load(bytes)` keeps that 5 MB build for the rest of the game, along with anything its static fields still
+  point at. A game reloaded 14 times ran out of memory on the 15th (an OutOfMemoryException in the loader's
+  `Assembly.Load`, November 2026). So a static that holds the feed, settings, icons or a window is set back to null at
+  shutdown (`Appraisal.Stop`, `PanelDrop.Stop`), and the game wants restarting every ten or so reloads. Players don't
+  have the loader, so this is development only.
 - **UtilityBelt can start without the portal dat.** It opens `client_cell_1.dat`, then `client_portal.dat`, by relative path
   from the game's working folder, and stops at the first that fails. ShadowLauncher starts each game in its own
   `AppData\Local\ShadowLauncher\Instances\<id>` folder of that server's dats (hard links into `DatSets`, or another dat
