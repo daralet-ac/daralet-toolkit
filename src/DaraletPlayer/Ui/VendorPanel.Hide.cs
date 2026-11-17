@@ -49,6 +49,12 @@ namespace DaraletPlayer.Ui {
 
             var off = OffScreen(width);
 
+            // off the screen though this didn't move it: the Salvage window's Replace, not yet put back, so not a place to
+            // go back to
+            if (!moved.HasValue && x == off) {
+                return;
+            }
+
             if (moved.HasValue && x == off) {
                 return;
             }

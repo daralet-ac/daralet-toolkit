@@ -43,6 +43,7 @@ namespace DaraletPlayer.Ui {
             ToolbarButtons.RenderToggles(ref first, settings);
             GameHotbar.RenderCheckbox(ref first, settings);
             ChatTab.RenderHideGameChat(ref first, settings);
+            SalvagePanel.RenderToggle(ref first, settings);
             Form.Flow(ref first, Form.CheckWidth("Bank window"));
             RenderBankWindow();
             Form.Flow(ref first, Form.CheckWidth("Loot window"));

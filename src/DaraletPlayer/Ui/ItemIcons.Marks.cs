@@ -217,6 +217,10 @@ namespace DaraletPlayer.Ui {
                     DrawStar(drawList, center, radius, color, black);
                     break;
 
+                case LootMarks.Hammer:
+                    DrawHammer(drawList, center, radius, color, black);
+                    break;
+
                 case LootMarks.Diamond: {
                     var points = new[] {
                         center + new Vector2(0, -radius), center + new Vector2(radius * 0.75f, 0),
@@ -261,6 +265,32 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>A star isn't convex, so it's filled as its inner pentagon plus a triangle for each point.</summary>
+        /// <summary>
+        /// A salvaging hammer, tilted: a handle from the bottom left up to a block head at the top right, set across it.
+        /// Each part filled, then outlined, the head over the handle.
+        /// </summary>
+        private static void DrawHammer(ImDrawListPtr drawList, Vector2 center, float radius, uint color, uint outline) {
+            // along the handle (up and right) and across it
+            var along = Vector2.Normalize(new Vector2(1, -1));
+            var across = new Vector2(-along.Y, along.X);
+
+            Vector2[] Box(Vector2 middle, float length, float width) {
+                var l = along * (length / 2);
+                var w = across * (width / 2);
+                return new[] { middle - l - w, middle + l - w, middle + l + w, middle - l + w };
+            }
+
+            void Part(Vector2[] points) {
+                drawList.AddConvexPolyFilled(ref points[0], points.Length, color);
+                drawList.AddPolyline(ref points[0], points.Length, outline, ImDrawFlags.Closed, 1);
+            }
+
+            var handleWidth = Math.Max(2f, radius * 0.26f);
+            Part(Box(center - along * (radius * 0.2f), radius * 1.45f, handleWidth));
+            // the head, across the handle's top end, a little longer on its striking side
+            Part(Box(center + along * (radius * 0.5f) + across * (radius * 0.12f), radius * 0.6f, radius * 1.45f));
+        }
+
         private static void DrawStar(ImDrawListPtr drawList, Vector2 center, float radius, uint color, uint outline) {
             var points = new Vector2[10];
 

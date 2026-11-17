@@ -230,6 +230,18 @@ namespace DaraletPlayer {
         /// <summary>A healing, stamina or mana kit on a hotbar is used on you at once, with no target to pick.</summary>
         [DataMember(Name = "oneClickHeal")] public bool OneClickHeal;
 
+        /// <summary>The Salvage window opens when the game's salvage panel does (you used an Ust in the game).</summary>
+        [DataMember(Name = "salvageOpensWithGame")] public bool SalvageOpensWithGame;
+
+        /// <summary>Using an Ust from the plugin's lists or a hotbar opens the Salvage window instead of the game's panel.</summary>
+        [DataMember(Name = "ustOpensSalvageWindow")] public bool UstOpensSalvageWindow;
+
+        /// <summary>The game's salvage panel is moved off the screen while it's up, for the Salvage window (Client UI Override).</summary>
+        [DataMember(Name = "salvageReplace")] public bool SalvageReplace;
+
+        /// <summary>The server's line about each item the Salvage window salvages is kept out of the chat.</summary>
+        [DataMember(Name = "salvageHideChatLines")] public bool SalvageHideChatLines;
+
         /// <summary>Join and Invite links on the lines /lfgroup and /lfmore post in the LFG channel (LfgChatLinks).</summary>
         [DataMember(Name = "lfgChatLinks")] public bool LfgChatLinks;
 
@@ -567,6 +579,8 @@ namespace DaraletPlayer {
             };
             SharedWindowTabs = true;
             OneClickHeal = true;
+            SalvageOpensWithGame = true;
+            UstOpensSalvageWindow = true;
             InventoryHotbarMarks = true;
             LfgChatLinks = true;
             EscapeClosesWindows = true;

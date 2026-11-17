@@ -22,6 +22,23 @@ namespace DaraletPlayer.Feed {
             return materialType > 0 && materialType < Names.Length ? Names[materialType] : null;
         }
 
+        /// <summary>The MaterialType of a name (as the server's descriptions write it, any case), or 0 for none.</summary>
+        public static int Number(string name) {
+            if (string.IsNullOrEmpty(name)) {
+                return 0;
+            }
+
+            var wanted = name.Replace("_", " ").Trim();
+
+            for (var i = 1; i < Names.Length; i++) {
+                if (string.Equals(Names[i], wanted, System.StringComparison.OrdinalIgnoreCase)) {
+                    return i;
+                }
+            }
+
+            return 0;
+        }
+
         /// <summary>A name with its material in front, as the game writes it (unless the name has it already).</summary>
         public static string NameWith(string name, int materialType) {
             var material = Of(materialType);

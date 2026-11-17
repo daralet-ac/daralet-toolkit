@@ -1684,6 +1684,43 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   bags afterwards, if two carried bags still match three seconds later, `/salvage combine` is sent (the server asks Yes/No).
   `[salvage]` lines in log.txt. Sort and Salvage start their rows (Retail's top line, the carried `BankCommandBar`), so a
   narrow window doesn't push them out of sight.
+- **Salvage window** (`Ui/SalvagePanel*.cs`, `Feed/SalvageMath.cs`, `salvage`, hidden to start, its settings in the
+  Inventory tab's Settings): the plugin's own Ust panel, laid out as the game's (the warning, a row of 32-pixel slots
+  wrapping to the width, Salvage and Clear on the right). Items go on by being dragged from the plugin's lists, the
+  game's own pack (`GameDrag`) or as a whole pack, the main pack too (`MainPackDragType`, which the main pack's drag
+  no longer marks red over this window, `SalvagePanel.TakesAt`): every item in it that can be salvaged, whatever its
+  material, leaving out those marked for sale. The green ring or red circle marks the slot under the mouse
+  (`DragVerdict`: yours, not worn, not on already, and salvageable: the server's word once it's described, else
+  `ItemChecks.Salvageable`). Each item is described as it goes on, and one the server says can't be salvaged
+  (retained, unstable) comes off again with a line in chat; Salvage waits until all are answered, then sends
+  `@playerui salvage`, 20 a request 700ms apart: the server's own salvaging takes any mix of materials, so the game
+  panel's one material at a time isn't needed. A click takes an item off, as on the game's panel. Under the slots,
+  daralet-ACE's sums (`SalvageMath`, from `Player.GetStructure`, `SalvageStacks` and `CountNewSalvageStacks`): per
+  material and tier (the workmanship rounded), the items, the units (1 + half the workmanship each, an odd one
+  rounding up half the time, so a range), the stack of it you carry (by its weenie, `BaseWcid + material * 10 + tier
+  - 1`), and value; the totals; the new stacks needed against your free pack slots (the server refuses the lot without
+  room); and warnings for no Ust, items your loot profile Keeps and items marked for sale. **Add by rules**
+  (`SalvagePanel.Adds.cs`) describes every carried non-stacking item, then adds those the active loot profile's first
+  matching rule Salvages (`Loot.Decide`, so a Keep rule above wins); **Add all packs** adds everything salvageable in
+  the main pack and side packs but those tagged Keep (`BankCommands.KeepTag`, the server's inscription when it's sent
+  it); both leave items marked for sale out. **Only an Ust opens it** (`alwaysOnlyInUse`, `inUse` the open count, no
+  Enabled box): its close button (the game's, template `0x1000047F` in layout `0x21000040`, `060012AA`, pressed `060012A9`,
+  `panel-close`, at the top right as in the game's salvage panel, layout `0x2100000C`; or Close in its menu) empties it and closes it until an Ust is next used, and one
+  opened with the game's panel closes when that does. **Salvage results** (`SalvagePanel.Results.cs`,
+  `Feed/SalvageResults.cs`): from Salvage until 4 seconds after the last request or line, the Broadcast lines
+  `HandleSalvaging` writes ("Iron Sword (W5 | 3 units)", " -> combined with ..." or " -> moved to Salvage Crate", "You
+  obtain 2 Bezel Fragments.", the pack space refusal; the material told from the item by the longest known name in
+  front) are read into a `SalvageReport`: a Last salvage fold under the summary (units by material and tier, what you
+  carry of each now, each item), and one line in chat summing it up when the run ends. Hide salvage lines
+  (`SalvageHideChatLines`, off to start) eats the server's lines. A player squelching Salvaging gets none. It opens when the game's
+  salvage panel looks open (`PanelDrop.GamePanelShowing`, the drop's guess: ENVP up with no vendor, trade or
+  container, an Ust carried; `SalvageOpensWithGame`), and in place of the game's panel when an Ust is used from the
+  plugin's lists or a hotbar (`SalvagePanel.TakesUse` in `ItemUser`, `UstOpensSalvageWindow`). **Replace**
+  (`SalvageReplace`, off to start, Client UI Override's Salvage panel, `SalvagePanel.Hide.cs`): while the game's
+  salvage panel is up, ENVP is moved off the screen as the Vendor window's Replace moves it, and put back when it goes;
+  closing the Salvage window then hides ENVP (`ClientElements.SetVisible`), taken to close the game's panel as hiding it
+  closed a vendor, and puts it back in place, hidden. Each Replace skips an ENVP it finds off the screen without having
+  moved it itself, so neither saves the other's off-screen place as the one to go back to. `[salvage]` lines in log.txt. Untested in the game when written.
 - **Dragging into the world** (`Ui/WorldDrop.cs`): an item (or pack) let go outside every ImGui window is given to what it was let go over, or dropped on the ground, as the game's own pack does. A plugin can't ask what's under the mouse, so the selection is cleared and the game is posted a left click there (`PostMessage` to `Decal.Hwnd`): whatever it selects within 300ms gets the item (`Actions.GiveItem`); nothing, and it's dropped (`Actions.DropItem`). Yourself does nothing; the bank's items are left alone. `[drop]` lines in log.txt. The game's own panels aren't ImGui windows, so letting go over one counts as the world, except the vendor window: while a vendor is open (`Actions.VendorId`), an item let go over the panel along the bottom it's shown in (ENVP, `ClientElements.Environment`, which also shows chests and corpses) goes on the sell list (`Actions.VendorAddSellList`) instead of on the ground, and while the game shows an open bank
   (Bank window off) or chest there (`Actions.OpenedContainer`, not a corpse), it goes in that container
   (`WorldDrop.OverOpenContainer`, `MoveItem`, or the split for part of a stack): before, it went on the ground. Which

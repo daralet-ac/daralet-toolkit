@@ -20,6 +20,7 @@ namespace DaraletPlayer.Feed {
         public const string Cross = "Cross";
         public const string Check = "Check";
         public const string Arrow = "Arrow";
+        public const string Hammer = "Hammer";
 
         /// <summary>Grade letters, saved as "Letter" and the letter, drawn as text.</summary>
         public const string LetterPrefix = "Letter";
@@ -56,6 +57,7 @@ namespace DaraletPlayer.Feed {
             (Cross, "Cross"),
             (Check, "Check mark"),
             (Arrow, "Up arrow"),
+            (Hammer, "Salvage hammer"),
             (Exclamation, "Exclamation mark"),
             (Dollar, "Dollar sign"),
         }.Concat(Letters.Select(l => (LetterPrefix + l, "Letter " + l))).ToArray();

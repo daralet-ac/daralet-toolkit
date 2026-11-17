@@ -47,7 +47,8 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>
         /// The main pack is you, not an item, so it has a drag type of its own that no drop spot takes: moved, dropped or
-        /// given as an item, the game would be asked to do that to your character. Only a vendor's window does anything.
+        /// given as an item, the game would be asked to do that to your character. Only a vendor's window and the Salvage
+        /// window (SalvagePanel) do anything.
         /// </summary>
         private void MainPackDragSource() {
             if (!ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoPreviewTooltip)) {
@@ -66,7 +67,8 @@ namespace DaraletPlayer.Ui {
             if (WillDropMainPack(mouse)) {
                 VendorDrop.Hover(icons);
             }
-            else {
+            else if (!SalvagePanel.TakesAt(mouse)) {
+                // over the Salvage window its slot under the mouse has the ring or the circle itself
                 icons.DrawDropArt(drawList, at, at + size, false);
             }
 

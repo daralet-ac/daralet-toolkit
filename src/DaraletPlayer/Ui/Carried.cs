@@ -76,7 +76,7 @@ namespace DaraletPlayer.Ui {
                 Material = o.Values(LongValueKey.Material, 0),
                 Retained = o.Values(BoolValueKey.Retained, false),
                 Attuned = o.Values(LongValueKey.Attuned, 0) != 0,
-                IsSalvage = o.ObjectClass == ObjectClass.Salvage,
+                IsSalvage = o.ObjectClass == ObjectClass.Salvage || SalvageMath.IsStackWcid(o.Type),
                 IsPack = o.ObjectClass == ObjectClass.Container,
                 ServerSalvageable = described?.Salvageable,
             };

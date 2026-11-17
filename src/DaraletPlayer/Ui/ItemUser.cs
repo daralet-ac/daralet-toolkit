@@ -76,6 +76,11 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            // an Ust opens the plugin's Salvage window, when that's set, in place of the game's panel
+            if (SalvagePanel.TakesUse(item)) {
+                return;
+            }
+
             var kind = KindOf(item);
             var flags = $"usable 0x{Usable(item):X8}, target type 0x{TargetType(item):X8}, type 0x{ItemType(item):X8}";
             PluginCore.LogFile($"[use] {item.Name} ({id:X8}): {kind}, {flags}");
@@ -122,6 +127,10 @@ namespace DaraletPlayer.Ui {
             var item = CoreManager.Current.WorldFilter[id];
 
             if (item == null) {
+                return;
+            }
+
+            if (SalvagePanel.TakesUse(item)) {
                 return;
             }
 

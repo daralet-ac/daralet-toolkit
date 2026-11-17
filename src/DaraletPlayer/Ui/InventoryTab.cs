@@ -34,6 +34,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>Salvage, on your packs' views: what your loot rules say to salvage.</summary>
         private readonly RuleSalvage salvage;
 
+        /// <summary>The plugin's Ust panel: items and packs dragged onto it to be salvaged.</summary>
+        private readonly SalvagePanel salvagePanel;
+
         /// <summary>
         /// The last container the game opened: asking about the bank with it means a newly opened bank is asked about
         /// straight away (the server doesn't need it).
@@ -50,6 +53,7 @@ namespace DaraletPlayer.Ui {
             windowBrowser = new InventoryBrowser(feed, icons, settings, carried: false, host: "bank-window");
             commands = new BankCommandBar(feed);
             salvage = new RuleSalvage(feed, settings);
+            salvagePanel = new SalvagePanel(feed, settings, icons);
             bankWindow = new FloatingWindow("bank", "Bank", settings, new Vector2(320, 120), RenderBankWindow,
                 defaultSize: new Vector2(640, 460), inUse: BankInUse, alwaysOnlyInUse: true, onClose: CloseBank);
 
@@ -72,6 +76,8 @@ namespace DaraletPlayer.Ui {
 
         public FloatingWindow BankWindow => bankWindow;
 
+        public FloatingWindow SalvageWindow => salvagePanel.Window;
+
         /// <summary>Bank window is on, and the server can do it.</summary>
         private bool UsesWindow => settings.Data.BankWindow && feed.Supports(PlayerFeed.KindBankWindow);
 
@@ -84,6 +90,7 @@ namespace DaraletPlayer.Ui {
             AetheriaSlots.Stop();
             bankWindow.Dispose();
             carriedWindow.Dispose();
+            salvagePanel.Dispose();
         }
 
         public void Render() {
@@ -169,10 +176,11 @@ namespace DaraletPlayer.Ui {
             using var fold = Form.Folded();
 
             if (banking) {
-                Form.Columns("inventory-settings-grid", RenderCarriedWindowSettings, RenderBankWindowSettings);
+                Form.Columns("inventory-settings-grid", RenderCarriedWindowSettings, RenderBankWindowSettings,
+                    salvagePanel.RenderSettings);
             }
             else {
-                Form.Columns("inventory-settings-grid", RenderCarriedWindowSettings);
+                Form.Columns("inventory-settings-grid", RenderCarriedWindowSettings, salvagePanel.RenderSettings);
             }
 
             ImGui.Spacing();
@@ -344,7 +352,8 @@ namespace DaraletPlayer.Ui {
                 // Decal's hooks read the game's memory, which isn't there before login
                 if (CoreManager.Current.CharacterFilter.LoginStatus == 3) {
                     PanelDrop.Step();
-                salvage.Step();
+                    salvage.Step();
+                    salvagePanel.Step();
 
                     // a vendor just opened: what's marked for sale goes on its sell list
                     VendorSale.Step(settings);

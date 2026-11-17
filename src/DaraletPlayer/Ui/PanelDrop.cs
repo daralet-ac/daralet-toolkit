@@ -108,6 +108,20 @@ namespace DaraletPlayer.Ui {
             return ClientElements.IsOver(ClientElements.Environment, at);
         }
 
+        /// <summary>
+        /// Whether the panel along the bottom is up and taken to be the salvage panel (OverUst's guess, anywhere on it),
+        /// for the Salvage window to open with it.
+        /// </summary>
+        public static bool GamePanelShowing() {
+            var actions = CoreManager.Current.Actions;
+
+            if (trading || actions.VendorId != 0 || actions.OpenedContainer != 0 || !CarriesUst()) {
+                return false;
+            }
+
+            return ClientElements.TryGetScreenBox(ClientElements.Environment, ClientElements.Environment, out _, out _);
+        }
+
         private static void AddToUst(int id) {
             var item = CoreManager.Current.WorldFilter[id];
 
