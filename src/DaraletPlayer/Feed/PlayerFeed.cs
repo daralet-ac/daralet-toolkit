@@ -102,6 +102,12 @@ namespace DaraletPlayer.Feed {
         private DateTime lastCommandSentAt = DateTime.MinValue;
         private bool disposed;
 
+        /// <summary>Polling waits till then after the server said you aren't in the world (NotInWorld).</summary>
+        private DateTime pausedUntil = DateTime.MinValue;
+
+        /// <summary>The not-in-world refusal is logged once a session, not every few seconds.</summary>
+        private bool notInWorldLogged;
+
         /// <summary>A look picked in an item's Style menu, sent once the server allows (SendStyleChoice).</summary>
         private string pendingStyle;
 
@@ -222,6 +228,11 @@ namespace DaraletPlayer.Feed {
             }
 
             if (IsWaitingFor(kind)) {
+                return;
+            }
+
+            // out of the world (a teleport, or stuck after one): every request would only bring back a refusal
+            if (DateTime.UtcNow < pausedUntil) {
                 return;
             }
 
@@ -613,6 +624,25 @@ namespace DaraletPlayer.Feed {
                     waitingSince.Clear();
                     e.Eat = true;
                     return;
+                }
+
+                if (NotInWorld.IsRefusal(text)) {
+                    pausedUntil = DateTime.UtcNow + NotInWorld.Pause;
+                    waitingSince.Clear();
+
+                    if (!notInWorldLogged) {
+                        notInWorldLogged = true;
+                        PluginCore.LogFile("[feed] The server said we aren't in the world; polling paused: " + text.Trim());
+                    }
+
+                    // a button the player pressed (SendCommand) should say why nothing happened; polling's never should
+                    var pressed = LastCommand?.StartsWith("@playerui", StringComparison.Ordinal) == true
+                        && DateTime.UtcNow - lastCommandSentAt < CommandReplyWindow;
+
+                    if (!pressed) {
+                        e.Eat = true;
+                        return;
+                    }
                 }
 
                 // only the server's System and Help lines (not someone talking nearby), and the Market Broker's tells

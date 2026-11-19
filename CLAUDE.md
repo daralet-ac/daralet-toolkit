@@ -246,7 +246,10 @@ ignores a request of the same kind sooner than 400ms after the last (hello: 2 se
 kind together, in bursts of up to 20 (`PlayerUiLimits`, a token bucket per player; each a `/modifylong playerui_...`
 server property, 0 for no limit). The plugin never asks sooner than 500ms (`PlayerFeed.MinInterval`) and sends about 6 a
 second at most, with every window open: keep it inside those limits, or its windows wait 3 seconds for a reply that never
-comes (`PlayerFeed.RequestTimeout`). Polling goes through `PlayerFeed.Refresh`. `bankwindow` and `lootwindow`
+comes (`PlayerFeed.RequestTimeout`). Polling goes through `PlayerFeed.Refresh`. `@playerui` is `RequiresWorld`: with
+no landblock (mid-teleport, or stuck out of the world after a `/ls` until a relog) the server answers each request
+"You must be in the world to use @playerui.", which spammed chat once a second; the plugin hides that line (unless
+a button it sent was just pressed) and stops asking for 5 seconds after each (`NotInWorld`). `bankwindow` and `lootwindow`
 (`on|off`, answering `{"on":...}`) are described below. `rollranges` sends the ranges loot rolls each filter stat in (`{"ranges":[{"category","stat","tier","min","max"}]}`), for
 the loot rules' tooltips. `character` sends your character stats (`{"sections":[{"title",
 "lines"}]}`), for the Character tab. `xp` sends your level's XP and rested experience (`{"level","totalXp","levelXp","nextLevelXp","maxLevel",
