@@ -24,8 +24,6 @@ namespace DaraletPlayer.Ui {
         private int? draggingFarLand;
         private int? draggingDensity;
         private int? draggingLandscape;
-        private int? draggingDetail;
-        private int? draggingFar;
         private int? draggingFog;
 
         /// <summary>
@@ -81,13 +79,6 @@ namespace DaraletPlayer.Ui {
 
             if (Form.BeginForm("graphics-trees")) {
                 RenderTreeRows();
-                ImGui.EndTable();
-            }
-
-            Form.Section("Model Detail");
-
-            if (Form.BeginForm("graphics-models")) {
-                RenderModelRows();
                 ImGui.EndTable();
             }
 
@@ -149,7 +140,6 @@ namespace DaraletPlayer.Ui {
         private void RenderDistanceRows() {
             RenderViewRows();
             RenderTreeRows();
-            RenderModelRows();
         }
 
         /// <summary>How far: Landscape and Ground detail.</summary>
@@ -278,44 +268,6 @@ namespace DaraletPlayer.Ui {
             }
 
             CostNote(GraphicsCost.FarBuildings(options.FarBuildings, landscapeShown));
-
-            Form.Label("Video memory", "Keeps the far scenery's buffers and pictures on the graphics card only, not also in "
-                + "the game's memory. They're made again after alt-tab in full screen or a resolution change.");
-
-            if (ImGui.Checkbox("Video memory only##draw-distance-video-memory", ref options.VideoMemory)) {
-                Changed();
-            }
-            ImGui.EndDisabled();
-        }
-
-        /// <summary>How fine models stay with distance.</summary>
-        private void RenderModelRows() {
-            var options = DrawDistanceSettings;
-            var shown = Previewed();
-            ImGui.BeginDisabled(!options.On);
-
-            Form.Label("Detail", "How far out objects keep their finest model. Costly when raised.");
-            var detail = draggingDetail ?? options.ClampedDetailDistance;
-
-            if (DragSlider("##draw-distance-detail", ref detail, DrawDistanceOptions.MinDetailDistance,
-                DrawDistanceOptions.MaxDetailDistance, detail == 0 ? "The game's" : "%d m", ref draggingDetail,
-                SliderWithCost)) {
-                options.DetailDistance = detail;
-                Changed();
-            }
-
-            CostNote(GraphicsCost.Detail(shown.ClampedDetailDistance));
-
-            Form.Label("Far scenery", "How far out trees stay drawn, in their plainest model, instead of vanishing.");
-            var far = draggingFar ?? options.ClampedLowDetailDistance;
-
-            if (DragSlider("##draw-distance-far", ref far, 0, DrawDistanceOptions.MaxLowDetailDistance,
-                far == 0 ? "The game's" : "%d m", ref draggingFar, SliderWithCost)) {
-                options.LowDetailDistance = far;
-                Changed();
-            }
-
-            CostNote(GraphicsCost.FarScenery(shown.ClampedLowDetailDistance));
             ImGui.EndDisabled();
         }
 

@@ -9,7 +9,9 @@ namespace DaraletPlayer.Ui {
     /// with Direct3D's fixed lights (Render::config_hardware_light, 0x59BD40), its lamps as point and spot lights, the
     /// sun and moon as a directional one; nothing blocks them, so a lantern upstairs lit the floor below through the
     /// boards. The device's LightEnable (IDirect3DDevice9 vtable 53) is pointed here while on: a point or spot light
-    /// (D3DLIGHT9's Type, 1 or 2, read with GetLight, vtable 52) is enabled as off, a directional one passes. One vtable
+    /// (D3DLIGHT9's Type, 1 or 2, read with GetLight, vtable 52) at the place of a lamp the plugin lights with a shadow
+    /// map (Places) is enabled as off; any other, and a directional one, passes: switching every lamp off left those
+    /// past the six nearest you lighting nothing. One vtable
     /// for every device of a kind, so patched once, put back when off and at shutdown. `[lamps]` lines in log.txt.
     /// Untested in the game when written.
     /// </summary>
@@ -33,6 +35,30 @@ namespace DaraletPlayer.Ui {
         private static IntPtr* table;
         private static IntPtr originalFunction;
         private static int refused;
+        private static int kept;
+        private static int pointsLogged;
+
+        /// <summary>
+        /// Where the lamps the plugin lights with shadow maps are, in the device's world (east, height, north), set each
+        /// frame by DepthShading; the game's own light of a lamp anywhere else is left on.
+        /// </summary>
+        public static Microsoft.DirectX.Vector3[] Places = new Microsoft.DirectX.Vector3[0];
+
+        private static bool Handled(float x, float y, float z) {
+            var places = Places;
+
+            for (var i = 0; i < places.Length; i++) {
+                var dx = places[i].X - x;
+                var dy = places[i].Y - y;
+                var dz = places[i].Z - z;
+
+                if (dx * dx + dy * dy + dz * dz < 0.25f) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
         private static bool logged;
 
         public static bool On => table != null;
@@ -70,7 +96,7 @@ namespace DaraletPlayer.Ui {
 
             Write(&table[LightEnableSlot], originalFunction);
             table = null;
-            PluginCore.LogFile($"[lamps] the game's own lamp lighting back ({refused} lights kept off)");
+            PluginCore.LogFile($"[lamps] the game's own lamp lighting back ({refused} lights kept off, {kept} left to the game)");
         }
 
         private static void Write(IntPtr* at, IntPtr value) {
@@ -93,10 +119,22 @@ namespace DaraletPlayer.Ui {
                             PluginCore.LogFile($"[lamps] first light the game enabled: {index}, type {type}");
                         }
 
-                        if (type == 1 || type == 2) {
+                        // only the lamps the plugin lights with a shadow map (by place, D3DLIGHT9's Position at +52): the
+                        // rest, past the six nearest you, are left to the game, or a dungeon's far lamps lit nothing
+                        if ((type == 1 || type == 2) && pointsLogged < 4) {
+                            pointsLogged++;
+                            PluginCore.LogFile($"[lamps] the game lights a lamp at {*(float*)(light + 52):0.0} "
+                                + $"{*(float*)(light + 56):0.0} {*(float*)(light + 60):0.0}; one of ours: "
+                                + Handled(*(float*)(light + 52), *(float*)(light + 56), *(float*)(light + 60)));
+                        }
+
+                        if ((type == 1 || type == 2) && Handled(*(float*)(light + 52), *(float*)(light + 56),
+                            *(float*)(light + 60))) {
                             refused++;
                             return original(device, index, 0);
                         }
+
+                        kept += type == 1 || type == 2 ? 1 : 0;
                     }
                 }
                 catch (Exception) {

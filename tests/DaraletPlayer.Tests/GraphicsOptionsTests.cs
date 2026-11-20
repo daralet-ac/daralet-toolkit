@@ -39,14 +39,13 @@ namespace DaraletPlayer.Tests {
             var shading = Json.Read<ShadingOptions>("{}");
             Assert.IsFalse(shading.On);
             Assert.AreEqual(60, shading.ClampedOcclusion);
-            Assert.AreEqual(50, shading.ClampedShadows);
         }
 
         [TestMethod]
         public void ShadingIsHeldBetweenNoneAndAll() {
-            var shading = new ShadingOptions { Occlusion = -10, Shadows = 400 };
+            var shading = new ShadingOptions { Occlusion = -10 };
             Assert.AreEqual(0, shading.ClampedOcclusion);
-            Assert.AreEqual(100, shading.ClampedShadows);
+            Assert.AreEqual(100, new ShadingOptions { Occlusion = 400 }.ClampedOcclusion);
             Assert.AreEqual("shading off", shading.Summary());
             shading.On = true;
             StringAssert.Contains(shading.Summary(), "occlusion 0%");
@@ -67,11 +66,10 @@ namespace DaraletPlayer.Tests {
 
         [TestMethod]
         public void ShadingSurvivesASaveAndLoad() {
-            var saved = Json.Write(new ShadingOptions { On = true, Occlusion = 35, Shadows = 0 });
+            var saved = Json.Write(new ShadingOptions { On = true, Occlusion = 0 });
             var read = Json.Read<ShadingOptions>(saved);
             Assert.IsTrue(read.On);
-            Assert.AreEqual(35, read.Occlusion);
-            Assert.AreEqual(0, read.Shadows, "none is kept as none, not the default");
+            Assert.AreEqual(0, read.Occlusion, "none is kept as none, not the default");
         }
     }
 }

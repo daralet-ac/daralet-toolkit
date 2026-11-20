@@ -164,7 +164,8 @@ namespace DaraletPlayer.Ui {
             var movedX = x - builtX;
             var movedY = y - builtY;
 
-            if (home != builtHome || key != builtKey || movedX * movedX + movedY * movedY > RebuildAfter * RebuildAfter) {
+            if (!DrawDistance.QuietNow && (home != builtHome || key != builtKey
+                || movedX * movedX + movedY * movedY > RebuildAfter * RebuildAfter)) {
                 Build(device, cells, home, x, y);
                 builtHome = home;
                 builtX = x;

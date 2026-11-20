@@ -60,15 +60,11 @@ namespace DaraletPlayer.Ui {
             levels.Insert(0, (pixels, width, height));
             // video memory only (ScenePool): a default-pool texture can't be locked, so it's filled in system memory
             // and copied across, and the system copy let go
-            var pool = ScenePool.VideoOnly ? Pool.SystemMemory : Pool.Managed;
-            var texture = new DxTexture(device, width, height, levels.Count, Usage.None, Format.A8R8G8B8, pool);
+            var texture = new DxTexture(device, width, height, levels.Count, Usage.None, Format.A8R8G8B8,
+                Pool.SystemMemory);
 
             for (var level = 0; level < levels.Count; level++) {
                 Fill(texture, level, levels[level].Pixels, levels[level].Width, levels[level].Height);
-            }
-
-            if (!ScenePool.VideoOnly) {
-                return texture;
             }
 
             var onCard = new DxTexture(device, width, height, levels.Count, Usage.None, Format.A8R8G8B8, Pool.Default);

@@ -118,17 +118,6 @@ namespace DaraletPlayer.Feed {
             return new Item("Billboards on far land", blocks * 0.025, 0.2);
         }
 
-        /// <summary>Detail: every object out to it keeps finer models; the game's is 50 m.</summary>
-        public static Item Detail(int meters) {
-            var past = Math.Max(0, meters - 50);
-            // 1000 m against the game's showed nothing at the desert overlook: it's scenery-heavy places that pay
-            return new Item("Detail", past * 0.02, past * 0.0005, rough: true);
-        }
-
-        public static Item FarScenery(int meters) {
-            return new Item("Far scenery", 0, meters > 0 ? 0.1 : 0, rough: true);
-        }
-
         // the screen passes, measured on and off at the desert overlook (2560x1440, 83 fps): each within the noise
         // (about 0.3 ms), their textures in video memory, not the game's address space. Sun shadows cost with the draws
         // they copy: 107 fps to 93 among Holtburg's trees, 1.4 ms
@@ -163,8 +152,6 @@ namespace DaraletPlayer.Feed {
             items.Add(FarTrees(o.ClampedFarTrees));
             items.Add(Billboards(o.Billboards, landscape, o.ClampedSceneryRadius));
             items.Add(FarBuildings(o.FarBuildings, landscape));
-            items.Add(Detail(o.ClampedDetailDistance));
-            items.Add(FarScenery(o.ClampedLowDetailDistance));
             return items;
         }
 

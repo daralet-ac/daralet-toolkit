@@ -28,6 +28,12 @@ namespace DaraletPlayer.Ui {
         private static FlushCall gameFlush;
         private static bool failedToHook;
 
+        /// <summary>A test run's `set worldpasshook 2`: the hook only calls the game's own, nothing else.</summary>
+        public static bool Bare;
+
+        /// <summary>A test run's `set worldpasshook 3`: bare, through FpuProbe's native stub instead of AcClient.Hook.</summary>
+        public static bool ProbeFpu;
+
         /// <summary>Whether the hook's in: subscribers draw from it, not from RenderFrame.</summary>
         public static bool Hooked => hook != null;
 
@@ -36,6 +42,16 @@ namespace DaraletPlayer.Ui {
             drawers.Add(draw);
 
             if (hook == null && !failedToHook) {
+                Hook();
+            }
+        }
+
+        /// <summary>Takes the hook out and puts it in again, as ProbeFpu now says (a test step).</summary>
+        public static void Rehook() {
+            Unhook();
+            failedToHook = false;
+
+            if (drawers.Count > 0) {
                 Hook();
             }
         }
@@ -53,6 +69,18 @@ namespace DaraletPlayer.Ui {
                 var entry = (int)AcClient.Entrypoint.D3DPolyRender__FlushAlphaList;
                 gameFlush = Marshal.GetDelegateForFunctionPointer<FlushCall>((IntPtr)entry);
                 flushCall = Flush;
+
+                if (ProbeFpu) {
+                    if (FpuProbe.Install((int)AcClient.Call.D3DPolyRender__FlushAlphaList_0x00453C2B,
+                        Marshal.GetFunctionPointerForDelegate(flushCall))) {
+                        return;
+                    }
+
+                    failedToHook = true;
+                    flushCall = null;
+                    return;
+                }
+
                 var hooked = new AcClient.Hook(entry, (int)AcClient.Call.D3DPolyRender__FlushAlphaList_0x00453C2B);
 
                 if (!hooked.Setup(flushCall)) {
@@ -72,6 +100,12 @@ namespace DaraletPlayer.Ui {
         }
 
         private static void Unhook() {
+            if (FpuProbe.Installed) {
+                FpuProbe.Uninstall();
+                flushCall = null;
+                return;
+            }
+
             if (hook == null) {
                 return;
             }
@@ -89,6 +123,12 @@ namespace DaraletPlayer.Ui {
         }
 
         private static void Flush(int flags) {
+            if (Bare) {
+                FpuProbe.Note();
+                gameFlush(flags);
+                return;
+            }
+
             try {
                 // the world's own draws are all in: what follows isn't to cast the sun's shadows
                 ShadowCasters.EndOfWorld();

@@ -18,7 +18,8 @@ namespace DaraletPlayer.Ui {
 
         private sealed class AlphaShape {
             public int Code;
-            public float[][] Turns = new float[4][];
+            /// <summary>By tier (FarLand.Textures.cs), then turn: the shape at that tier's pixels a cell.</summary>
+            public float[][][] Turns = { new float[4][], new float[4][], new float[4][] };
             public int[] Corners = new int[4];
         }
 
@@ -63,22 +64,27 @@ namespace DaraletPlayer.Ui {
                         + $"{image.Length}, pictures " + string.Join(",", candidates.ConvertAll(c => c.ToString("X8"))));
                 }
 
-                var alpha = ShrinkAlpha(pixels, image.Width, image.Height);
                 // the maps say how much of the layer under shows (each one's solid corners are the ones its code leaves
                 // out, seen in the game for every corner, side and road map), so they're turned round: how much of the
                 // layer over it shows
-                for (var i = 0; i < alpha.Length; i++) {
-                    alpha[i] = 1 - alpha[i];
+                for (var tier = 0; tier < TierCount; tier++) {
+                    var size = CellPixelsOf(tier);
+                    var alpha = ShrinkAlpha(pixels, image.Width, image.Height, size);
+
+                    for (var i = 0; i < alpha.Length; i++) {
+                        alpha[i] = 1 - alpha[i];
+                    }
+
+                    shape.Turns[tier][0] = alpha;
+
+                    for (var turn = 1; turn < 4; turn++) {
+                        shape.Turns[tier][turn] = TerrainBlend.Turned(shape.Turns[tier][turn - 1], size);
+                    }
                 }
 
-                shape.Turns[0] = alpha;
-
-                for (var turn = 1; turn < 4; turn++) {
-                    shape.Turns[turn] = TerrainBlend.Turned(shape.Turns[turn - 1], CellPixels);
-                }
-
+                // which corners each turn covers, from the mid tier's 8 pixels a cell, as before the tiers
                 for (var turn = 0; turn < 4; turn++) {
-                    shape.Corners[turn] = TerrainBlend.SolidCorners(shape.Turns[turn], CellPixels);
+                    shape.Corners[turn] = TerrainBlend.SolidCorners(shape.Turns[MidTier][turn], CellPixelsOf(MidTier));
                 }
 
                 PluginCore.LogFile($"[far-land] {kind} map {into.Count} (code {code}, 0x{textureId:X8} {image.Width}x"
@@ -87,10 +93,15 @@ namespace DaraletPlayer.Ui {
             }
             catch (Exception ex) {
                 PluginCore.LogFile($"[far-land] {kind} map 0x{id:X8} couldn't be read: {ex.Message}");
-                var flat = new float[CellPixels * CellPixels];
+                for (var tier = 0; tier < TierCount; tier++) {
+                    var flat = new float[CellPixelsOf(tier) * CellPixelsOf(tier)];
+
+                    for (var turn = 0; turn < 4; turn++) {
+                        shape.Turns[tier][turn] = flat;
+                    }
+                }
 
                 for (var turn = 0; turn < 4; turn++) {
-                    shape.Turns[turn] = flat;
                     shape.Corners[turn] = -1;
                 }
             }
@@ -98,22 +109,22 @@ namespace DaraletPlayer.Ui {
             into.Add(shape);
         }
 
-        /// <summary>An alpha picture's alpha box-shrunk to CellPixels square, row 0 its first row.</summary>
-        private static float[] ShrinkAlpha(uint[] pixels, int width, int height) {
-            var alpha = new float[CellPixels * CellPixels];
+        /// <summary>An alpha picture's alpha box-shrunk to `size` square, row 0 its first row.</summary>
+        private static float[] ShrinkAlpha(uint[] pixels, int width, int height, int size) {
+            var alpha = new float[size * size];
 
-            for (var ty = 0; ty < CellPixels; ty++) {
-                for (var tx = 0; tx < CellPixels; tx++) {
+            for (var ty = 0; ty < size; ty++) {
+                for (var tx = 0; tx < size; tx++) {
                     long sum = 0, n = 0;
 
-                    for (var y = ty * height / CellPixels; y < (ty + 1) * height / CellPixels; y++) {
-                        for (var x = tx * width / CellPixels; x < (tx + 1) * width / CellPixels; x++) {
+                    for (var y = ty * height / size; y < Math.Max(ty * height / size + 1, (ty + 1) * height / size); y++) {
+                        for (var x = tx * width / size; x < Math.Max(tx * width / size + 1, (tx + 1) * width / size); x++) {
                             sum += pixels[y * width + x] >> 24;
                             n++;
                         }
                     }
 
-                    alpha[ty * CellPixels + tx] = sum / (255f * Math.Max(1, n));
+                    alpha[ty * size + tx] = sum / (255f * Math.Max(1, n));
                 }
             }
 

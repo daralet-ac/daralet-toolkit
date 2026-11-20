@@ -26,6 +26,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>How much your own character's light counts, against a lamp of the same strength.</summary>
         public static float OwnLightShare = 0.3f;
 
+        /// <summary>How much deeper a lamp's colour is made (1 as the game has it).</summary>
+        private const double Warmth = 1.6;
+
         /// <summary>The game's own lights reach their falloff times this (read from the client, as it reads it).</summary>
         private const int ReachFactorAt = 0x821CD4;
 
@@ -45,7 +48,14 @@ namespace DaraletPlayer.Ui {
             // nearest to the camera first: the game's own distance (+0xD8) was from when the list was made, a hundred
             // meters for lights twenty away (seen in the game)
             var camera = Vector3.TransformCoordinate(new Vector3(0, 0, 0), Matrix.Invert(view));
-            var chosen = GameLights.Read(home)
+            var all = GameLights.Read(home);
+
+            if (LampOptions.FireLight) {
+                FireLights.AddTo(all);
+                PlacedLights.AddTo(all, unchecked((uint)CoreManager.Current.Actions.Landcell) >> 16);
+            }
+
+            var chosen = all
                 .Where(l => (l.Type == 0 || l.Type == 2) && l.Falloff > 0)
                 .Select(l => (Light: l, Distance: (new Vector3(l.East, l.Height, l.North) - camera).Length()))
                 .Where(c => c.Distance < 150)
@@ -66,6 +76,7 @@ namespace DaraletPlayer.Ui {
             var (night, glow) = Night();
 
             if (chosen.Count == 0 && night <= 0) {
+                GameLampSwitch.Places = new Vector3[0];
                 return;
             }
 
@@ -75,8 +86,9 @@ namespace DaraletPlayer.Ui {
             constants[nightAt + 1] = glow;
             // the sky darkens a little less than the land: the night's own sky, not a black one
             constants[nightAt + 2] = 0.85f;
-            // the plugin lighting the lamps in the game's place: only what a lamp's map says it sees (GameLampSwitch)
-            var replacing = LampOptions.Replace && LampOptions.Shadows;
+            // with shadows the plugin lights the lamps in the game's place: only what a lamp's map says it sees
+            // (GameLampSwitch). It was a switch of its own, "In the game's place", until November 2026
+            var replacing = LampOptions.Shadows;
             constants[nightAt + 3] = replacing ? 1 : 0;
             constants[0] = projection.M33;
             constants[1] = projection.M43;
@@ -93,9 +105,16 @@ namespace DaraletPlayer.Ui {
 
             for (var i = 0; i < chosen.Count; i++) {
                 var l = chosen[i];
+
+                if (DebugView == 5 && !loggedDebugLamps) {
+                    PluginCore.LogFile($"[lamps] debug light {i}: {(l.Dynamic ? "dynamic" : "static")} cell {l.Cell:X8} at "
+                        + $"{l.East:0.0} {l.North:0.0} {l.Height:0.0}, falloff {l.Falloff:0.0}");
+                }
                 var at = Vector3.TransformCoordinate(new Vector3(l.East, l.Height, l.North), view);
                 var place = new Vector3(l.East, l.Height, l.North);
-                var yours = l.Dynamic && (place - you).Length() < 3;
+                // the game hangs it a few meters ahead of you and above (3.7 m off, seen at the tavern door, where taken
+                // for a lamp it lit everything outside and leaked under the walls, November 2026): faint and near
+                var yours = l.Dynamic && l.Intensity < 10 && (place - you).Length() < 6;
                 // the light the game hangs round your own character lit whatever you walked up to, so a room seemed to light
                 // up near its walls and go dark in the open (the user, November 2026): it counts for OwnLightShare of a lamp
                 var strength = Math.Min(1, l.Intensity / 10) * (yours ? OwnLightShare : 1);
@@ -106,12 +125,17 @@ namespace DaraletPlayer.Ui {
                 constants[o + 1] = at.Y;
                 constants[o + 2] = at.Z;
                 constants[o + 3] = reach;
-                constants[o + 4] = l.Red * strength;
-                constants[o + 5] = l.Green * strength;
-                constants[o + 6] = l.Blue * strength;
+                // the colour deepened a little (each channel to the power Warmth): the game lit with a lamp's colour
+                // straight onto the texture, warm through and through, where this adds light over the ambient, which
+                // washed the warmth out of a lit character (the user, November 2026)
+                constants[o + 4] = (float)Math.Pow(l.Red, Warmth) * strength;
+                constants[o + 5] = (float)Math.Pow(l.Green, Warmth) * strength;
+                constants[o + 6] = (float)Math.Pow(l.Blue, Warmth) * strength;
                 constants[o + 7] = yours ? 0 : 1;
                 forShadows.Add((place, reach, constants[o + 7] > 0.5f));
             }
+
+            loggedDebugLamps = DebugView == 5;
 
             if (lampShader == IntPtr.Zero) {
                 lampShader = CreateShader(device, CreatePixelShaderSlot, "lamps.ps.cso");
@@ -133,6 +157,9 @@ namespace DaraletPlayer.Ui {
                     }
                 }
             }
+
+            // the lamps lit here with shadows, whose own light the game is to leave off (GameLampSwitch); the rest it keeps
+            GameLampSwitch.Places = which.Where(w => w >= 0).Select(w => forShadows[(int)w].Place).ToArray();
 
             // a way in view space to the device's world, for the cube maps, which are laid out in the world
             var inverse = Matrix.Invert(view);
@@ -177,19 +204,9 @@ namespace DaraletPlayer.Ui {
             state.AlphaBlendEnable = true;
             DeviceCalls.UseShaders(device, vertexShader, lampShader);
 
-            // the shadows first: what's left of the game's own light where something blocks a lamp, multiplied in
-            // (not when replacing: the game gives the lamps' light no more, so there's none to take away)
-            if (LampOptions.Shadows && !replacing) {
-                constants[7] = 1;
-                state.SourceBlend = Blend.Zero;
-                state.DestinationBlend = Blend.SourceColor;
-                DeviceCalls.PixelConstants(device, 0, constants);
-                device.DrawUserPrimitives(PrimitiveType.TriangleStrip, 2, Quad);
-            }
-
             // a test run's `depthview 4`: what the first shadowed lamp sees, in grey, over everything
-            if (DebugView == 4) {
-                constants[7] = 2;
+            if (DebugView == 4 || DebugView == 5) {
+                constants[7] = DebugView == 5 ? 3 : 2;
                 state.AlphaBlendEnable = false;
                 DeviceCalls.PixelConstants(device, 0, constants);
                 device.DrawUserPrimitives(PrimitiveType.TriangleStrip, 2, Quad);
@@ -242,6 +259,7 @@ namespace DaraletPlayer.Ui {
 
         private const float NightEaseSeconds = 20;
         private float nightLevel;
+        private bool loggedDebugLamps;
         private bool? loggedNight;
         private int nightEasedAt = Environment.TickCount;
 

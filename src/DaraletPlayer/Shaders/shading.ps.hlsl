@@ -1,4 +1,4 @@
-// Shading from the game's depth buffer (Ui/DepthShading.cs): ambient occlusion and contact shadows toward the sun,
+// Shading from the game's depth buffer (Ui/DepthShading.cs): ambient occlusion,
 // as a grey multiplied onto the picture (the blend is destination times source); with mode 1 the depth itself as grey,
 // to see that it's read, and with mode 2 the shading alone as grey. Compiled by Shaders/build.cmd into
 // Resources/shaders/shading.ps.cso.
@@ -12,9 +12,9 @@ sampler closeMap : register(s3);
 
 float4 projection : register(c0);  // M33, M43, M11, M22
 float4 occlusion : register(c1);   // radius (m), strength (0-1), furthest (m), bias (m)
-float4 sun : register(c2);         // toward the sun in view space (xyz), shadow strength (0-1)
+float4 sun : register(c2);         // toward the sun in view space (xyz), unused
 float4 screen : register(c3);      // width, height, 1/width, 1/height
-float4 shadowRay : register(c4);   // length (m), furthest (m), thickness (m), mode (0 shading, 1 depth view)
+float4 shadowRay : register(c4);   // unused, unused, unused, mode (0 shading, 1 depth view)
 float4 toShadow[4] : register(c5);  // rows: view space to the sun's shadow map (x, y in -1..1, z its depth 0..1)
 float4 sunShadow : register(c9);  // strength (0-1, 0 for none), 1 / the map's depth range (m), a texel (m), 1 / size
 float4 sunLight : register(c10);  // the game's ambient, its sun on ground facing it (grey levels), far map on, a far texel (m)
@@ -170,32 +170,6 @@ float4 main(float2 uv : TEXCOORD0, float2 pixel : VPOS) : COLOR {
         }
 
         light *= 1 - closed / max(counted, 1) * occlusion.y * aoFade;
-    }
-
-    // contact shadows: a short march toward the sun; something in the depth buffer in front of the ray, not by more
-    // than the thickness, is in the way
-    float shadowFade = saturate(1 - z / shadowRay.y);
-
-    if (sun.w > 0 && shadowFade > 0 && dot(n, sun.xyz) > 0) {
-        float hit = 0;
-        float3 start = p + n * 0.05 * (1 + z / 50);
-
-        for (int j = 1; j <= 16; j++) {
-            float3 q = start + sun.xyz * (shadowRay.x * j / 16);
-
-            if (q.z <= 0.1) {
-                break;
-            }
-
-            float gap = q.z - SceneZ(ScreenOf(q));
-
-            if (gap > 0.02 * (1 + z / 30) && gap < shadowRay.z) {
-                hit = 1;
-                break;
-            }
-        }
-
-        light *= 1 - hit * sun.w * shadowFade;
     }
 
     // the sun's shadows, from shadow maps of the game's own world drawn from the sun (Ui/DepthShading.Shadows.cs): the

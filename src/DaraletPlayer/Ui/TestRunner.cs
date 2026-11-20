@@ -30,6 +30,9 @@ namespace DaraletPlayer.Ui {
         private static readonly string ResultsFile = Path.Combine(Folder, "results.txt");
         private static readonly string ProgressFile = Path.Combine(Folder, "progress.txt");
 
+        /// <summary>Put there to end a run at once: the runner has the steps in memory, so taking run.txt away doesn't.</summary>
+        private static readonly string StopFile = Path.Combine(Folder, "stop.txt");
+
         private readonly Settings settings;
         private readonly DrawDistance drawDistance;
         private readonly Action changed;
@@ -38,6 +41,13 @@ namespace DaraletPlayer.Ui {
         private int index;
         private DateTime stepStarted;
         private DateTime atTargetSince = DateTime.MaxValue;
+
+        /// <summary>
+        /// A test step's empty piece of the game's frame (`set worldpasshook 1`): WorldPass hooked with nothing drawn and
+        /// nothing read, to tell whether the hook alone has a part in the teleport crashes.
+        /// </summary>
+        private static readonly Action<Microsoft.DirectX.Direct3D.Device> EmptyWorldPiece = device => { };
+        private static bool emptyWorldPieceAdded;
         private DateTime nextLookForRun;
         private bool disposed;
 
@@ -81,6 +91,17 @@ namespace DaraletPlayer.Ui {
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
                 if (disposed || exiting || CoreManager.Current.CharacterFilter.LoginStatus != 3) {
+                    return;
+                }
+
+                if (File.Exists(StopFile)) {
+                    File.Delete(StopFile);
+
+                    if (steps != null) {
+                        Result("stopped: stop.txt");
+                    }
+
+                    End();
                     return;
                 }
 
@@ -459,20 +480,11 @@ namespace DaraletPlayer.Ui {
                 case "landscape":
                     options.LandscapeRadius = value;
                     break;
-                case "detail":
-                    options.DetailDistance = value;
-                    break;
-                case "far":
-                    options.LowDetailDistance = value;
-                    break;
                 case "shading":
                     settings.Data.Shading.On = value != 0;
                     break;
                 case "occlusion":
                     settings.Data.Shading.Occlusion = value;
-                    break;
-                case "shadows":
-                    settings.Data.Shading.Shadows = value;
                     break;
                 case "water":
                     settings.Data.Water.On = value != 0;
@@ -555,9 +567,6 @@ namespace DaraletPlayer.Ui {
                 case "sunsoftness":
                     settings.Data.SunShadows.Softness = (int)value;
                     break;
-                case "anisotropy":
-                    settings.Data.Image.Anisotropy = (int)value;
-                    break;
                 case "depthview":
                     DepthShading.DebugView = value;
                     break;
@@ -570,9 +579,6 @@ namespace DaraletPlayer.Ui {
                 case "ground":
                     options.GroundRadius = (int)value;
                     break;
-                case "videomemory":
-                    options.VideoMemory = value != 0;
-                    break;
                 case "portalreload":
                     DrawDistance.PortalReload = value != 0;
                     break;
@@ -582,11 +588,14 @@ namespace DaraletPlayer.Ui {
                 case "farbuildings":
                     options.FarBuildings = value != 0;
                     break;
-                case "lampreplace":
-                    settings.Data.LampLight.Replace = value != 0;
-                    break;
                 case "lampreach":
                     settings.Data.LampLight.Reach = (int)value;
+                    break;
+                case "prelogin":
+                    DrawDistance.SetBeforeLogin = value != 0;
+                    break;
+                case "firelight":
+                    settings.Data.LampLight.FireLight = value != 0;
                     break;
                 case "walkmode":
                     WalkMode(value != 0);
@@ -600,8 +609,26 @@ namespace DaraletPlayer.Ui {
                 case "nightglow":
                     settings.Data.LampLight.NightGlow = (int)value;
                     break;
+                case "worldpasshook":
+                    WorldPass.Bare = value >= 2;
+                    WorldPass.ProbeFpu = value == 3;
+                    WorldPass.Rehook();
+
+                    if (value != 0 && !emptyWorldPieceAdded) {
+                        WorldPass.Add(EmptyWorldPiece);
+                        emptyWorldPieceAdded = true;
+                    }
+                    else if (value == 0 && emptyWorldPieceAdded) {
+                        WorldPass.Remove(EmptyWorldPiece);
+                        emptyWorldPieceAdded = false;
+                    }
+
+                    break;
                 case "lighttrace":
                     DepthShading.Trace = value != 0;
+                    break;
+                case "farlandfine":
+                    FarLand.NoFine = value == 0;
                     break;
                 case "farlanddebug":
                     FarLand.Debug = value != 0;
@@ -679,6 +706,12 @@ namespace DaraletPlayer.Ui {
 
             disposed = true;
             CoreManager.Current.RenderFrame -= Core_RenderFrame;
+
+            if (emptyWorldPieceAdded) {
+                WorldPass.Remove(EmptyWorldPiece);
+                emptyWorldPieceAdded = false;
+            }
+
             CoreManager.Current.ChatBoxMessage -= Core_ChatBoxMessage;
 
             // the device's own calls back before this copy goes

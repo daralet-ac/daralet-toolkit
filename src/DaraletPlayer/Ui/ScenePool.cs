@@ -2,15 +2,13 @@ using Microsoft.DirectX.Direct3D;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// Where the far scenery's buffers and pictures go (DrawDistanceOptions.VideoMemory; the user's call, November 2026: a
-    /// setting of its own). Direct3D's managed pool keeps a copy of each in system memory as well as on the graphics card,
-    /// and that copy is in the game's 4 GB; the default pool keeps only the card's, but loses it at a device reset, so
-    /// whatever's there is let go before one (DrawDistance.VideoMemory.cs) and made again after.
+    /// Where the far scenery's buffers and pictures go: Direct3D's default pool, video memory only. The managed pool keeps
+    /// a copy of each in system memory as well as on the graphics card, and that copy is in the game's 4 GB (about 35 MB
+    /// at Holtburg). The default pool loses everything at a device reset, so whatever's there is let go before one
+    /// (DrawDistance.VideoMemory.cs, FarLand) and made again after. It was a setting, Video memory, until November 2026
+    /// (the user's call: always on, since it only saves memory).
     /// </summary>
     internal static class ScenePool {
-        /// <summary>Set by DrawDistance from the setting, before anything's made.</summary>
-        public static bool VideoOnly;
-
-        public static Pool Buffers => VideoOnly ? Pool.Default : Pool.Managed;
+        public static Pool Buffers => Pool.Default;
     }
 }

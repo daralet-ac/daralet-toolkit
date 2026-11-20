@@ -59,7 +59,8 @@ namespace DaraletPlayer.Ui {
         };
 
         /// <summary>
-        /// 0 for the shading, 1 the depth as grey, 2 the shading alone as grey, 3 the normals as colours (a test run's `set depthview`).
+        /// 0 for the shading, 1 the depth as grey, 2 the shading alone as grey, 3 the normals as colours, 4 what the
+        /// first shadowed lamp sees, 5 which lamp lights each pixel most (a test run's `set depthview`).
         /// </summary>
         public static int DebugView;
 
@@ -176,8 +177,8 @@ namespace DaraletPlayer.Ui {
 
                 FollowSunShadows(device);
                 // the game's own lamps off while the plugin lights them with shadows (Ui/GameLampSwitch.cs)
-                GameLampSwitch.Follow(DeviceComPointer(device), LampOptions.On && LampOptions.Replace && LampOptions.Shadows);
-                ApplyAnisotropy(device);
+                GameLampSwitch.Follow(DeviceComPointer(device),
+                    LampOptions.On && LampOptions.Shadows);
 
                 var needsDepth = Options.On || settings.Data.Water.On || SunOptions.On || LampOptions.On;
                 var image = settings.Data.Image.Any;
@@ -359,8 +360,6 @@ namespace DaraletPlayer.Ui {
                     toSun.Normalize();
                 }
 
-                // no shadows with the sun under the horizon
-                var shadowStrength = sunUp > 0.05f ? options.ClampedShadows / 100f : 0;
                 var toSunWorld = new Vector3(*(float*)0x8682C8, *(float*)0x8682D0, *(float*)0x8682CC);
 
                 // made and let go each frame: Direct3D won't reset the device while a state block lives, and one kept
@@ -415,13 +414,12 @@ namespace DaraletPlayer.Ui {
                         Slot<SetShaderCall>(device, SetPixelShaderSlot)(com, pixelShader);
                         // Shading off with sun shadows on: the pass only for the shadows
                         var occlusionStrength = options.On ? options.ClampedOcclusion / 100f : 0;
-                        var contactStrength = options.On ? shadowStrength : 0;
                         Slot<SetConstantsCall>(device, SetPixelShaderConstantSlot)(com, 0, new[] {
                             projection.M33, projection.M43, projection.M11, projection.M22,
                             1.2f, occlusionStrength, 250, 0.05f,
-                            toSun.X, toSun.Y, toSun.Z, contactStrength,
+                            toSun.X, toSun.Y, toSun.Z, 0,
                             width, height, 1f / width, 1f / height,
-                            3f, 150, 0.6f, DebugView,
+                            3f, 150, 0.6f, DebugView >= 4 ? 0 : DebugView,
                         }, 5);
 
                         // the game's ambient and sun as grey levels (DrawDistance.Lighting.cs reads the same)
@@ -452,7 +450,7 @@ namespace DaraletPlayer.Ui {
                     }
 
                     // the game's own lights, per pixel and blocked by what's between (DepthShading.Lamps.cs)
-                    if (depthReady && LampOptions.On && (DebugView == 0 || DebugView == 4)) {
+                    if (depthReady && LampOptions.On && (DebugView == 0 || DebugView >= 4)) {
                         device.SetTexture(0, depthTexture);
                         DrawLamps(device, view, projection);
                     }
@@ -575,14 +573,8 @@ namespace DaraletPlayer.Ui {
             WorldPass.Remove(inWorldPass);
 
             GameLampSwitch.Release();
-
-            // the game's own texture filtering back (DepthShading.Anisotropy.cs)
-            try {
-                PutBackTextureFilter();
-            }
-            catch (Exception ex) {
-                PluginCore.LogFile("[image] " + ex.Message);
-            }
+            FireLights.Clear();
+            PlacedLights.Clear();
 
             // the device's own calls back first: a hook left in after the plugin's gone would crash the game
             try {

@@ -33,8 +33,6 @@ namespace DaraletPlayer.Ui {
             o.GroundRadius = draggingGround ?? o.GroundRadius;
             o.SceneryDensity = draggingDensity ?? o.SceneryDensity;
             o.LandscapeRadius = draggingLandscape ?? o.LandscapeRadius;
-            o.DetailDistance = draggingDetail ?? o.DetailDistance;
-            o.LowDetailDistance = draggingFar ?? o.LowDetailDistance;
             o.FarTrees = draggingFarTrees ?? o.FarTrees;
             o.FarLand = draggingFarLand ?? o.FarLand;
             return o;

@@ -39,7 +39,7 @@ namespace DaraletPlayer.Tests {
         [TestMethod]
         public void ReadsTheStepsAddedForGraphics() {
             var steps = TestScript.Parse(new[] {
-                "set billboards 1", "set fog 25", "set shading 1", "set occlusion 60", "set shadows 50",
+                "set billboards 1", "set fog 25", "set shading 1", "set occlusion 60", "set sunshadows 1",
                 "set depthview 3", "where", "kill", "compare", "screenshot after", "option 48 0", "option 5",
             });
 

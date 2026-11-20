@@ -20,12 +20,6 @@ namespace DaraletPlayer.Feed {
         /// </summary>
         [DataMember(Name = "glow")] public int Glow;
 
-        /// <summary>
-        /// Anisotropic filtering for the game's own textures, 0 for the game's (none) or 2 to 16 samples: ground and water
-        /// seen nearly edge-on smear into streaks without it, the game's own drawing as much as ours (seen in the game).
-        /// </summary>
-        [DataMember(Name = "anisotropy")] public int Anisotropy;
-
         public ImageOptions() {
             SetDefaults();
         }
@@ -34,14 +28,11 @@ namespace DaraletPlayer.Feed {
 
         public int ClampedGlow => Glow < 0 ? 0 : Glow > 200 ? 200 : Glow;
 
-        public int ClampedAnisotropy =>
-            Anisotropy <= 1 ? 0 : Anisotropy >= 16 ? 16 : Anisotropy >= 8 ? 8 : Anisotropy >= 4 ? 4 : 2;
-
         /// <summary>Whether any pass is wanted.</summary>
         public bool Any => AntiAlias || ClampedSharpen > 0 || ClampedGlow > 0;
 
         public string Summary() {
-            if (!Any && ClampedAnisotropy == 0) {
+            if (!Any) {
                 return "image as the game's";
             }
 
@@ -59,10 +50,6 @@ namespace DaraletPlayer.Feed {
                 parts.Add($"glow {ClampedGlow}%");
             }
 
-            if (ClampedAnisotropy > 0) {
-                parts.Add($"anisotropic {ClampedAnisotropy}x");
-            }
-
             return string.Join(", ", parts);
         }
 
@@ -75,7 +62,6 @@ namespace DaraletPlayer.Feed {
             AntiAlias = false;
             Sharpen = 0;
             Glow = 0;
-            Anisotropy = 0;
         }
     }
 }

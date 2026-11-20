@@ -21,9 +21,6 @@ namespace DaraletPlayer.Feed {
         public const int MinLandscapeRadius = 3;
         public const int MaxLandscapeRadius = 24;
 
-        public const int MinDetailDistance = 0;
-        public const int MaxDetailDistance = 1000;
-        public const int MaxLowDetailDistance = 3000;
 
         /// <summary>Whether any of this is used: off, the game's own settings are, as if the plugin weren't there.</summary>
         [DataMember(Name = "on")] public bool On;
@@ -36,18 +33,6 @@ namespace DaraletPlayer.Feed {
 
         /// <summary>How many landblocks out the landscape is drawn; 0 for the game's Landscape Draw Distance.</summary>
         [DataMember(Name = "landscapeRadius")] public int LandscapeRadius;
-
-        /// <summary>
-        /// The game's Degrade Distance, in meters, past what its slider allows: objects keep their detail this much
-        /// further out. 0 for the game's own.
-        /// </summary>
-        [DataMember(Name = "detailDistance")] public int DetailDistance;
-
-        /// <summary>
-        /// How far out, in meters, objects the game would stop drawing are drawn with their cheapest model instead
-        /// (Ui/DrawDistance.Lod.cs): far trees stay, without Detail's cost of finer models everywhere. 0 for none.
-        /// </summary>
-        [DataMember(Name = "lowDetailDistance")] public int LowDetailDistance;
 
         /// <summary>
         /// The percent of the game's trees, bushes and rocks made (Ui/DrawDistance.Density.cs), for frame rate: 100 for
@@ -77,12 +62,6 @@ namespace DaraletPlayer.Feed {
         /// the game's own 3D models (Ui/DrawDistance.FarBuildings.cs): the game makes them only for full-detail blocks.
         /// </summary>
         [DataMember(Name = "farBuildings")] public bool FarBuildings;
-
-        /// <summary>
-        /// The far scenery's buffers and pictures in video memory only (Ui/ScenePool.cs), not also in the game's 4 GB;
-        /// let go and made again at a device reset.
-        /// </summary>
-        [DataMember(Name = "videoMemory")] public bool VideoMemory;
 
         /// <summary>
         /// Rings of landblocks past the game's landscape whose ground the plugin draws itself, at full detail, where the
@@ -118,7 +97,10 @@ namespace DaraletPlayer.Feed {
         // model level distances, which "detailFalloff" replaced, then that too (with Far scenery on, a tree's one real
         // model came back as its plainest, so it changed nothing; wanted again once far trees can be billboards);
         // "sceneryCutOff", "farThinFrom", "farThinPercent", "slowModelsFrom" and "slowModelsEvery", whose hooks only
-        // ever caught the sky (thinning it turned it black), never a tree. CLAUDE.md has how each worked.
+        // ever caught the sky (thinning it turned it black), never a tree; and "detailDistance", the game's Degrade
+        // Distance raised to 1000 m, which changed nothing to see and crashed teleports. Also "lowDetailDistance" (Far
+        // scenery: the game's trees reach 1 or 2 landblocks now, 3D trees and billboards past them) and "videoMemory"
+        // (always on). CLAUDE.md has how each worked.
 
         public int ClampedSceneryDensity => SceneryDensity <= 0 || SceneryDensity >= 100 ? 100
             : SceneryDensity < MinSceneryDensity ? MinSceneryDensity : SceneryDensity;
@@ -146,12 +128,6 @@ namespace DaraletPlayer.Feed {
             : LandscapeRadius < MinLandscapeRadius ? MinLandscapeRadius
             : LandscapeRadius > MaxLandscapeRadius ? MaxLandscapeRadius : LandscapeRadius;
 
-        public int ClampedDetailDistance => DetailDistance <= 0 ? 0
-            : DetailDistance > MaxDetailDistance ? MaxDetailDistance : DetailDistance;
-
-        public int ClampedLowDetailDistance => LowDetailDistance <= 0 ? 0
-            : LowDetailDistance > MaxLowDetailDistance ? MaxLowDetailDistance : LowDetailDistance;
-
         /// <summary>The settings in a line, for the Frame Rate window's marks: "Scenery 5, landscape 24, ...".</summary>
         public string Summary() {
             var farLand = ClampedFarLand > 0
@@ -164,11 +140,9 @@ namespace DaraletPlayer.Feed {
             return $"Scenery {ClampedSceneryRadius} at {ClampedSceneryDensity}%, "
                 + (ClampedGroundRadius > ClampedSceneryRadius ? $"ground {ClampedGroundRadius}, " : "") + $"landscape "
                 + (ClampedLandscapeRadius == 0 ? "game's" : ClampedLandscapeRadius.ToString())
-                + $", detail {(ClampedDetailDistance == 0 ? "game's" : ClampedDetailDistance + " m")}"
-                + $", far {ClampedLowDetailDistance} m" + (Billboards ? ", billboards" : "")
+                + (Billboards ? ", billboards" : "")
                 + (ClampedFarTrees > 0 ? $", 3D trees {ClampedFarTrees} rings" : "")
                 + (FarBuildings ? ", far buildings" : "")
-                + (VideoMemory ? ", video memory" : "")
                 + (ClampedFog < 100 ? $", fog {ClampedFog}%" : "") + farLand;
         }
 
@@ -182,13 +156,10 @@ namespace DaraletPlayer.Feed {
             SceneryRadius = GameSceneryRadius;
             GroundRadius = 0;
             LandscapeRadius = 0;
-            DetailDistance = 0;
-            LowDetailDistance = 0;
             SceneryDensity = 100;
             Billboards = false;
             FarTrees = 0;
             FarBuildings = false;
-            VideoMemory = false;
             Fog = 100;
             FarLand = 0;
             FarLandNear = false;

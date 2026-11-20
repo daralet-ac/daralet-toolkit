@@ -98,6 +98,12 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            // nothing worked out or made while the game loads the place: billboards built 7 s after a teleport, reading
+            // the dats and making textures for 2,376 blocks, were followed by a crash in the game's cache (0x58712F)
+            if (Arriving) {
+                return;
+            }
+
             // your character's landblock: the game's own full-detail ring is round it (the load point), so the hole
             // left for the real scenery is too; drawn shifted into the camera's frame (RenderOrigin), which near an
             // edge is a landblock away
@@ -243,6 +249,7 @@ namespace DaraletPlayer.Ui {
             usedModels.Clear();
             billboardPlaces.Clear();
             var farByModel = new Dictionary<FarTreeModel, List<FarTreeInstance>>();
+            var farLandByModel = new Dictionary<FarTreeModel, List<FarTreeInstance>>();
             var showBillboards = Options.Billboards;
             var hx = (int)(pendingHome >> 8);
             var hy = (int)(pendingHome & 0xFF);
@@ -268,8 +275,10 @@ namespace DaraletPlayer.Ui {
 
                 var farRing = !beyond && IsFarTreeRing(ring);
 
-                if (Options.FarBuildings && ring > patchedRadius && !beyond) {
-                    AddFarBuildings(block, step, heights, offsetX, offsetY, portal, device, farByModel);
+                // on the far land too, drawn in its pass with its camera: with a low landscape, far towns were gone
+                if (Options.FarBuildings && ring > patchedRadius) {
+                    AddFarBuildings(block, step, heights, offsetX, offsetY, portal, device,
+                        beyond ? farLandByModel : farByModel);
                 }
 
                 foreach (var p in placed) {
@@ -315,7 +324,7 @@ namespace DaraletPlayer.Ui {
 
             ClearBillboards();
             billboardHome = pendingHome;
-            BuildFarTrees(device, farByModel);
+            BuildFarTrees(device, farByModel, farLandByModel);
             ForgetScenerySeen();
             var modelsGone = billboardModels.KeepOnly(usedModels) + farTreeModels.KeepOnly(usedModels);
 
@@ -494,8 +503,10 @@ namespace DaraletPlayer.Ui {
             DrawBillboardRuns(device, shift, billboardBatches, null);
         }
 
-        /// <summary>How many rings of the far land carry billboards: all of it, with billboards and far land both on.</summary>
-        private int FarLandBillboardRings => Options.Billboards ? Options.ClampedFarLand : 0;
+        /// <summary>
+        /// How many rings of the far land carry billboards or far buildings: all of it, with either and far land on.
+        /// </summary>
+        private int FarLandBillboardRings => Options.Billboards || Options.FarBuildings ? Options.ClampedFarLand : 0;
 
         /// <summary>Whether the far land draws the game's coarse rings in full detail (Ui/FarLand.Takeover.cs).</summary>
         private bool FarLandTakesOver => Options.ClampedFarLand > 0 && Options.FarLandNear;
@@ -505,7 +516,7 @@ namespace DaraletPlayer.Ui {
         /// with its camera, whose far plane is past the game's.
         /// </summary>
         public void DrawFarLandBillboards(Device device, Matrix projection) {
-            if (disposed || billboardsFailed || billboardBuffer == null || farLandBatches.Count == 0) {
+            if (disposed || billboardsFailed) {
                 return;
             }
 
@@ -513,10 +524,16 @@ namespace DaraletPlayer.Ui {
             var shift = Matrix.Translation(
                 ((int)(billboardHome >> 8) - (int)(origin >> 8)) * SceneryLayout.BlockSize, 0,
                 ((int)(billboardHome & 0xFF) - (int)(origin & 0xFF)) * SceneryLayout.BlockSize);
-            DrawBillboardRuns(device, shift, farLandBatches, projection);
+            DrawFarTrees(device, shift, projection);
+
+            if (billboardBuffer != null && farLandBatches.Count > 0) {
+                DrawBillboardRuns(device, shift, farLandBatches, projection);
+            }
         }
 
-        /// <summary>Runs of the billboard buffer, lit as the game lights outdoors, with the camera's projection or one given.</summary>
+        /// <summary>
+        /// Runs of the billboard buffer, lit as the game lights outdoors, with the camera's projection or one given.
+        /// </summary>
         private void DrawBillboardRuns(Device device, Matrix shift, List<(Texture Texture, int Start, int Triangles)> runs,
             Matrix? projection) {
             // made and let go each frame: Direct3D won't reset the device while a state block lives, and one kept

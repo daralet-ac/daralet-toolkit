@@ -27,8 +27,9 @@ namespace DaraletPlayer.Ui {
         private const int InstanceSize = 32;
 
         private readonly FarTreeModels farTreeModels = new FarTreeModels();
-        private readonly List<(FarTreeModel Model, int First, int Count)> farTreeBatches =
-            new List<(FarTreeModel, int, int)>();
+        /// <summary>Runs of the instance buffer by model; Far for those on the far land, drawn in its pass.</summary>
+        private readonly List<(FarTreeModel Model, int First, int Count, bool Far)> farTreeBatches =
+            new List<(FarTreeModel, int, int, bool)>();
 
         private VertexBuffer farTreeInstances;
         private VertexDeclaration farTreeDeclaration;
@@ -43,12 +44,18 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>The far trees' instances, one buffer, in runs by model (from BuildBillboards).</summary>
-        private void BuildFarTrees(Device device, Dictionary<FarTreeModel, List<FarTreeInstance>> byModel) {
+        private void BuildFarTrees(Device device, Dictionary<FarTreeModel, List<FarTreeInstance>> byModel,
+            Dictionary<FarTreeModel, List<FarTreeInstance>> onFarLand) {
             ClearFarTrees();
             var all = new List<FarTreeInstance>();
 
             foreach (var kv in byModel) {
-                farTreeBatches.Add((kv.Key, all.Count, kv.Value.Count));
+                farTreeBatches.Add((kv.Key, all.Count, kv.Value.Count, false));
+                all.AddRange(kv.Value);
+            }
+
+            foreach (var kv in onFarLand) {
+                farTreeBatches.Add((kv.Key, all.Count, kv.Value.Count, true));
                 all.AddRange(kv.Value);
             }
 
@@ -74,8 +81,14 @@ namespace DaraletPlayer.Ui {
             };
         }
 
-        private unsafe void DrawFarTrees(Device device, Matrix shift) {
-            if (farTreeInstances == null || farTreeBatches.Count == 0) {
+        /// <summary>
+        /// The far trees (and far buildings) with the device's camera, or those on the far land with its camera
+        /// (projection given, from FarLand's pass).
+        /// </summary>
+        private unsafe void DrawFarTrees(Device device, Matrix shift, Matrix? projection = null) {
+            var onFarLand = projection.HasValue;
+
+            if (farTreeInstances == null || !farTreeBatches.Any(b => b.Far == onFarLand)) {
                 return;
             }
 
@@ -115,7 +128,7 @@ namespace DaraletPlayer.Ui {
                 F(0x8682B8) + F(0x8682C4) * share, 0,
                 fogColour.R / 255f, fogColour.G / 255f, fogColour.B / 255f, 0,
             };
-            var m = shift * device.Transform.View * device.Transform.Projection;
+            var m = shift * device.Transform.View * (projection ?? device.Transform.Projection);
 
             // made and let go each frame: a state block alive at a device reset hangs the game
             using (var saved = new StateBlock(device, StateBlockType.All)) {
@@ -145,6 +158,10 @@ namespace DaraletPlayer.Ui {
                     });
 
                     foreach (var batch in farTreeBatches) {
+                        if (batch.Far != onFarLand) {
+                            continue;
+                        }
+
                         device.SetStreamSource(0, batch.Model.Vertices, 0, 20);
                         device.SetStreamSource(1, farTreeInstances, batch.First * InstanceSize, InstanceSize);
                         DeviceCalls.StreamFrequency(device, 0, 0x40000000 | batch.Count);

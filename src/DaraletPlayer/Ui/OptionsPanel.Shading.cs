@@ -7,7 +7,6 @@ namespace DaraletPlayer.Ui {
     /// </summary>
     internal sealed partial class OptionsPanel {
         private int? draggingOcclusion;
-        private int? draggingShadows;
         private int? draggingSunStrength;
         private int? draggingSunDistance;
         private int? draggingSunSoftness;
@@ -19,8 +18,7 @@ namespace DaraletPlayer.Ui {
 
         private void RenderShading() {
             var options = ShadingSettings;
-            Form.Label("Shading", "Darkens corners and the ground under things, and adds short shadows away from the "
-                + "sun. Worked out from the game's depth.");
+            Form.Label("Shading", "Darkens corners and the ground under things. Worked out from the game's depth.");
 
             if (ImGui.Checkbox("Shade from depth##shading-on", ref options.On)) {
                 Changed();
@@ -33,15 +31,6 @@ namespace DaraletPlayer.Ui {
             if (DragSlider("##shading-occlusion", ref occlusion, 0, 100, occlusion == 0 ? "None" : "%d%%",
                 ref draggingOcclusion)) {
                 options.Occlusion = occlusion;
-                Changed();
-            }
-
-            Form.Label("Shadows", "How dark the short shadows away from the sun are. None at night.");
-            var shadows = draggingShadows ?? options.ClampedShadows;
-
-            if (DragSlider("##shading-shadows", ref shadows, 0, 100, shadows == 0 ? "None" : "%d%%",
-                ref draggingShadows)) {
-                options.Shadows = shadows;
                 Changed();
             }
 
@@ -70,7 +59,7 @@ namespace DaraletPlayer.Ui {
                 Changed();
             }
 
-            Form.Label("Lamp shadows", "Walls and things block a lamp's light.");
+            Form.Label("Lamp shadows", "Walls and things block a lamp's light, which comes out of open doors.");
 
             if (ImGui.Checkbox("Cast shadows##lamps-shadows", ref options.Shadows)) {
                 Changed();
@@ -78,12 +67,11 @@ namespace DaraletPlayer.Ui {
 
             ImGui.SameLine();
 
-            if (ImGui.Checkbox("In the game's place##lamps-replace", ref options.Replace)) {
+            if (ImGui.Checkbox("Fires##lamps-fires", ref options.FireLight)) {
                 Changed();
             }
 
-            Widgets.Tip("The game's own lamp light off, the plugin's alone: it stops at walls and comes out of open doors. "
-                + "Needs shadows.");
+            Widgets.Tip("Fires the game gives no light, like a town's bonfire, light what's round them.");
             Form.Label("Reach", "How far the lamps reach, against the game's own.");
             var reach = draggingLampReach ?? options.ClampedReach;
 

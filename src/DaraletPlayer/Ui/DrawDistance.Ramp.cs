@@ -24,6 +24,9 @@ namespace DaraletPlayer.Ui {
         public bool Arriving => inPortalSpace
             || (DateTime.UtcNow - arrivedAt).TotalSeconds < DrawDistanceRamp.ArrivalQuietSeconds;
 
+        /// <summary>Arriving, for what isn't this class's (the water map, the dats' lights, grass), set each frame.</summary>
+        public static bool QuietNow;
+
         /// <summary>When the next step up may be taken.</summary>
         private DateTime nextStepAt = DateTime.MinValue;
 
@@ -95,6 +98,9 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         internal static bool PortalReload = false;
 
+        /// <summary>The full-detail rings a teleport may load with: the presets' 2 are left as they are.</summary>
+        private const int PortalRings = 2;
+
         private void CharacterFilter_ChangePortalMode(object sender, ChangePortalModeEventArgs e) {
             try {
                 // the far scenery let go for the teleport, so the game has its memory for the new place; made again
@@ -109,11 +115,13 @@ namespace DaraletPlayer.Ui {
                     // no reload, so nothing to collide with it. Out of a dungeon nothing outdoors is loaded, and with the
                     // rings at 6 that whole cold load crashed the game in its unpacking (0x526A8A, November 2026, with
                     // 2.5 GB free); the rings step back up in place once you're there, as at login
-                    if (patchedRadius > DrawDistanceOptions.GameSceneryRadius && !broken
-                        && PatchRings(DrawDistanceOptions.GameSceneryRadius)) {
+                    // down only past PortalRings (2), and only to it: the presets' 2 are left for the load, so nothing
+                    // steps back up after; the patch to 1 and the steps and reloads after it, in the minute after
+                    // arriving, were followed by crashes when the next teleport came soon (November 2026)
+                    if (patchedRadius > PortalRings && !broken && PatchRings(PortalRings)) {
                         PluginCore.LogFile($"[draw-distance] portal space: full detail {patchedRadius} -> "
-                            + $"{DrawDistanceOptions.GameSceneryRadius} for the game's load, no reload");
-                        patchedRadius = DrawDistanceOptions.GameSceneryRadius;
+                            + $"{PortalRings} for the game's load, no reload");
+                        patchedRadius = PortalRings;
                     }
                 }
                 else {

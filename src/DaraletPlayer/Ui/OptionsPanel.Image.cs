@@ -8,7 +8,6 @@ namespace DaraletPlayer.Ui {
     internal sealed partial class OptionsPanel {
         private int? draggingSharpen;
         private int? draggingGlow;
-        private int? draggingAnisotropy;
 
         private void RenderImage() {
             var options = ImageSettings;
@@ -31,16 +30,6 @@ namespace DaraletPlayer.Ui {
 
             if (DragSlider("##image-glow", ref glow, 0, 200, glow == 0 ? "None" : "%d%%", ref draggingGlow)) {
                 options.Glow = glow;
-                Changed();
-            }
-
-            Form.Label("Texture filtering", "Ground and water seen nearly edge-on stay sharp instead of smearing into "
-                + "streaks (anisotropic filtering).");
-            var anisotropy = draggingAnisotropy ?? options.ClampedAnisotropy;
-
-            if (DragSlider("##image-anisotropy", ref anisotropy, 0, 16, anisotropy <= 1 ? "The game's" : "%dx",
-                ref draggingAnisotropy)) {
-                options.Anisotropy = anisotropy;
                 Changed();
             }
         }

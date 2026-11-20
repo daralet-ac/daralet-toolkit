@@ -24,13 +24,8 @@ namespace DaraletPlayer.Ui {
     /// 1 or more is taken (LScape::SetMidRadius, 0x505660). The game sets it again from 0x81FFB4 on some changes of
     /// region, so it's looked at once a second and set again. The patched rings need the same reload to take effect.
     /// </para>
-    /// <para>
-    /// Detail: GfxObjDegradeInfo::get_degrade (0x51EFC0) takes the game's Degrade Distance (the float at 0x81FC68, 50
-    /// to start) off the distance before picking an object's level of detail, so a bigger one keeps far objects
-    /// detailed. Set once a second while wanted, and what it was put back after.
-    /// </para>
     /// Before writing a byte, each patched instruction is checked to be what's expected; a client that differs is left
-    /// alone. Far scenery at low detail is DrawDistance.Lod.cs. `[draw-distance]` lines in log.txt. Untested in the game when written.
+    /// alone. `[draw-distance]` lines in log.txt. Untested in the game when written.
     /// </summary>
     internal sealed partial class DrawDistance : IDisposable {
         /// <summary>Kept so the same one can be taken out of WorldPass.</summary>
@@ -43,7 +38,6 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The landscape radius held through portal space (the game's least preset is 3).</summary>
         private const int PortalLandscape = 5;
-        private const uint DegradeDistance = 0x81FC68;
         private const uint PageExecuteReadWrite = 0x40;
 
         /// <summary>Each ring's cmp and mov in get_block_orient: where, the opcode bytes, the value's size.</summary>
@@ -58,7 +52,6 @@ namespace DaraletPlayer.Ui {
 
         private readonly Settings settings;
         private int patchedRadius = DrawDistanceOptions.GameSceneryRadius;
-        private float? gameDegradeDistance;
         private DateTime nextLook;
         private bool broken;
         private bool disposed;
@@ -87,12 +80,12 @@ namespace DaraletPlayer.Ui {
         /// <summary>The scenery and landscape radius loaded as of the last look, for a test run's results.</summary>
         public string Loaded => $"scenery {patchedRadius} at {appliedDensity}%";
 
-        /// <summary>The landscape radius these settings load: theirs, else the game's Landscape Draw Distance.</summary>
         /// <summary>The game's own Landscape Draw Distance.</summary>
-        public unsafe int GameLandscape => *(int*)GameLandscapeRadius;
+        public int GameLandscape => GameOwnLandscape;
 
-        public unsafe int LandscapeFor(DrawDistanceOptions options) {
-            return options.ClampedLandscapeRadius > 0 ? options.ClampedLandscapeRadius : *(int*)GameLandscapeRadius;
+        /// <summary>The landscape radius these settings load: theirs, else the game's Landscape Draw Distance.</summary>
+        public int LandscapeFor(DrawDistanceOptions options) {
+            return options.ClampedLandscapeRadius > 0 ? options.ClampedLandscapeRadius : GameOwnLandscape;
         }
 
         public string Problem => broken ? "This client isn't the one the draw distance was worked out for: it's left alone."
@@ -119,6 +112,8 @@ namespace DaraletPlayer.Ui {
 
                 NoteFrame();
                 UpdateProgressHud();
+                PrepareBeforeLogin();
+                QuietNow = Arriving;
 
                 if (CoreManager.Current.CharacterFilter.LoginStatus == 3) {
                     BillboardFrame();
@@ -141,9 +136,14 @@ namespace DaraletPlayer.Ui {
         private unsafe void Apply() {
             var options = Options;
             var on = options.On && !broken;
+
+            if (!on) {
+                RestoreGameLandscape();
+            }
+
             var reload = false;
             var ringsChanged = false;
-            var gameLandscape = *(int*)GameLandscapeRadius;
+            var gameLandscape = GameOwnLandscape;
             var wantedLandscape = options.ClampedLandscapeRadius > 0 ? options.ClampedLandscapeRadius : gameLandscape;
             var wanted = Cost(options.ClampedSceneryRadius, options.ClampedSceneryDensity, options.ClampedGroundRadius,
                 wantedLandscape);
@@ -163,8 +163,6 @@ namespace DaraletPlayer.Ui {
                 // as it'll go, so a test run's settle doesn't wait for what won't come
                 AtTarget = true;
                 NoteProgress(0, 0, 0, 0, true);
-                ApplyDetail(options.ClampedDetailDistance);
-                ApplyLowDetail(options.ClampedLowDetailDistance);
                 ApplyFog(options.ClampedFog);
 
                 FollowVideoMemory();
@@ -299,31 +297,9 @@ namespace DaraletPlayer.Ui {
 
             FollowVideoMemory();
             MaybeFlushCache();
-            ApplyDetail(on ? options.ClampedDetailDistance : 0);
-            ApplyLowDetail(on ? options.ClampedLowDetailDistance : 0);
             ApplyFog(broken ? 100 : options.ClampedFog);
             UpdateBillboards(on && options.FarScenery && !inPortal && lscape != IntPtr.Zero,
                 lscape != IntPtr.Zero ? *(int*)lscape : 0);
-        }
-
-        /// <summary>The Degrade Distance wanted, or 0 to put the game's back.</summary>
-        private unsafe void ApplyDetail(int meters) {
-            var degrade = (float*)DegradeDistance;
-
-            if (meters > 0) {
-                gameDegradeDistance = gameDegradeDistance ?? *degrade;
-
-                if (*degrade != meters) {
-                    *degrade = meters;
-                }
-
-                return;
-            }
-
-            if (gameDegradeDistance.HasValue) {
-                *degrade = gameDegradeDistance.Value;
-                gameDegradeDistance = null;
-            }
         }
 
         /// <summary>Sets get_block_orient's rings for a full-detail radius; false if the code isn't as expected.</summary>
@@ -386,6 +362,7 @@ namespace DaraletPlayer.Ui {
             DisposeProgress();
             DisposeVideoMemory();
             StopListeningForPortals();
+            RestoreGameLandscape();
 
             // the game's own back, whatever the reason this is going: a hot reload, the plugin turned off. The landscape is
             // only loaded again if the rings or its radius were this class's
@@ -405,10 +382,8 @@ namespace DaraletPlayer.Ui {
 
                 DisposeBillboards();
                 UnhookOnRoad();
-                UnhookGetDegrade();
                 UnhookFog();
                 ReloadAtGameRadius(reload);
-                ApplyDetail(0);
             }
             catch (Exception ex) {
                 PluginCore.LogFile("[draw-distance] " + ex);
@@ -423,7 +398,7 @@ namespace DaraletPlayer.Ui {
 
             var smartBox = *(IntPtr*)SmartBoxPointer;
             var lscape = smartBox == IntPtr.Zero ? IntPtr.Zero : *(IntPtr*)((byte*)smartBox + SmartBoxLScape);
-            var radius = *(int*)GameLandscapeRadius;
+            var radius = GameOwnLandscape;
 
             if (lscape == IntPtr.Zero || radius < 1 || (!ringsChanged && *(int*)lscape == radius)) {
                 return;

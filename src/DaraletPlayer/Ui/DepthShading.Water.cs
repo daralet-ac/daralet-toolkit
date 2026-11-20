@@ -112,6 +112,11 @@ namespace DaraletPlayer.Ui {
                 return true;
             }
 
+            // not while the game loads the place (DrawDistance.QuietNow): nothing of the plugin's is read or made then
+            if (DrawDistance.QuietNow) {
+                return false;
+            }
+
             var cells = UBService.CellDat;
 
             if (cells == null) {

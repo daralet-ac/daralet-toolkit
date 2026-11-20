@@ -72,7 +72,8 @@ float Seen(samplerCUBE map, float3 fromLamp, float distance, float reach, float 
     // the blocker nearest the place decides: averaged, the door frame found round your shadow blurred it (the user
     // wanted it harder, November 2026)
     float blocker = max(max(h0 * d0, h1 * d1), max(max(h2 * d2, h3 * d3), h4 * d4));
-    // the lamp taken as a light 40 cm across (1.5 m washed the beam's shape out): the soft edge widens with how far past the blocker the place is, as
+    // the lamp taken as a light 40 cm across (1.5 m washed the beam's shape out): the soft edge widens with how far
+    // past the blocker the place is, as
     // seen from the lamp (a door frame's shadow was hard)
     float spread = min(0.003 + 0.4 * max(distance - blocker, 0) / (max(blocker, 0.5) * distance), 0.08);
     float3 a = side * spread;
@@ -119,12 +120,12 @@ float MapSeen(samplerCUBE map, float4 lamp, float3 p, float3 n, float toward) {
 
         // the ground outdoors isn't in the maps, so a ray from a lamp passing just under a wall's lower edge (between
         // the map's texels) found nothing and lit a faint line along the wall's foot (the tavern's angled wall, the
-        // user, November 2026): a point 30 cm above must be seen too where something is within half a meter of it (the
+        // user, November 2026): a point 30 cm above must be seen too where something is within 0.6 m of it (the
         // wall), softly as the place itself; not further (your body cast a second, stepped shadow)
         float3 lifted = fromLamp + float3(0, 0.3, 0);
         float liftedDistance = length(lifted);
         float blocker = texCUBElod(map, float4(lifted / liftedDistance, 0)).r * lamp.w;
-        float nearWall = smoothstep(liftedDistance - 0.6, liftedDistance - 0.3, blocker);
+        float nearWall = smoothstep(liftedDistance - 1.0, liftedDistance - 0.6, blocker);
         seen = min(seen, lerp(1, Seen(map, lifted, liftedDistance, lamp.w, facing), nearWall));
     }
 
@@ -182,6 +183,9 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
     }
 
     float firstSeen = seenA.x;
+    // a test run's `depthview 5`: which light gives a pixel the most, by colour
+    float most = 0;
+    float mostAt = -1;
 
     [loop]
     for (int i = 0; i < 8; i++) {
@@ -196,11 +200,15 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
 
         if (distance < place.w && distance > 0.01) {
             toLight /= distance;
-            float facing = saturate(min(min(dot(n1, toLight), dot(n2, toLight)),
-                min(dot(n3, toLight), dot(n4, toLight))));
+            float faces = min(min(dot(n1, toLight), dot(n2, toLight)), min(dot(n3, toLight), dot(n4, toLight)));
+            float facing = saturate(faces);
+            // how a face turns counts for little: the game lights a character smoothly between its corners' normals, but
+            // the depth only gives each triangle's own, and its armour showed every facet (the user, November 2026). A
+            // face turned away still gets none, faded in so there's no line; the maps shade a body's far side
+            float turned = smoothstep(-0.3, 0.1, faces) * (0.35 + 0.5 * facing);
             // (1 - x squared) squared: to nothing at the reach with no edge (the plain square showed where it ended)
             float fade = saturate(1 - (distance / place.w) * (distance / place.w));
-            float amount = facing * fade * fade;
+            float amount = turned * fade * fade;
             float seen = 1;
 
             float4 inA = shadowed == i;
@@ -222,10 +230,27 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
             }
 
             added += colour * amount * seen;
+
+            if (amount * seen > most) {
+                most = amount * seen;
+                mostAt = i;
+            }
         }
     }
 
     // a test run's `depthview 4`: what the first shadowed lamp sees, white, and what's hidden from it, black
+    if (settings.w > 2.5) {
+        float3 hues[8] = { float3(1, 0, 0), float3(0, 1, 0), float3(0, 0, 1), float3(1, 1, 0), float3(1, 0, 1),
+            float3(0, 1, 1), float3(1, 0.5, 0), float3(1, 1, 1) };
+        float3 shown = 0;
+
+        for (int k = 0; k < 8; k++) {
+            shown += k == mostAt ? hues[k] : 0;
+        }
+
+        return float4(shown * saturate(most * 4), 1);
+    }
+
     if (settings.w > 1.5) {
         return float4(firstSeen, firstSeen, firstSeen, 1);
     }

@@ -65,6 +65,9 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The plugin's land tinted red (test step farlanddebug), to see where it starts.</summary>
         public static bool Debug;
+
+        /// <summary>A test step's switch (`set farlandfine 0`): no fine tier, the mid atlas instead, to compare.</summary>
+        public static bool NoFine;
         private readonly Action<Device> inWorldPass;
         private readonly Dictionary<uint, LandBlock> blocks = new Dictionary<uint, LandBlock>();
         private readonly Queue<uint> toRead = new Queue<uint>();
@@ -85,7 +88,16 @@ namespace DaraletPlayer.Ui {
         private string wantedKey;
         private uint wantedHome;
         private bool toBuild;
+
+        /// <summary>Whether the land's buffers are in the default pool, so let go before a device reset.</summary>
+        private bool buffersInDefaultPool;
         private int roadColour = unchecked((int)0xFF807060);
+
+        /// <summary>Blocks read only to be baked into the atlases (the ring inside the seam), never drawn.</summary>
+        private HashSet<uint> marginOnly = new HashSet<uint>();
+
+        /// <summary>The triangles of each run, near (0) or far (1) by tier, in the buffers' order.</summary>
+        private readonly int[,] runTriangles = new int[2, TierCount];
 
         private sealed class LandBlock {
             public byte[] Heights;
@@ -209,7 +221,7 @@ namespace DaraletPlayer.Ui {
 
             NoteCoarseRings(home);
             var nearStart = hooked && nearestCoarseRing > 0 ? Math.Min(nearestCoarseRing, landscape) : 0;
-            var key = $"{home:X4} {landscape} {rings} {nearStart}";
+            var key = $"{home:X4} {landscape} {rings} {nearStart} {NoFine}";
 
             if (key != wantedKey) {
                 Want(home, landscape, rings, nearStart);
@@ -220,7 +232,7 @@ namespace DaraletPlayer.Ui {
 
             // made again after a device reset: every block in the buffers baked again, the land in its vertex colours
             // meanwhile
-            if (atlas == null) {
+            if (atlases[MidTier] == null) {
                 MakeAtlas(device);
 
                 if (!toBuild) {
@@ -244,13 +256,21 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>The blocks from the game's last ring out to the far land's edge, nearest first; the rest let go.</summary>
+        /// <summary>
+        /// The blocks from the game's last ring out to the far land's edge, nearest first; the rest let go.
+        /// </summary>
         private void Want(uint home, int landscape, int rings, int nearStart) {
             var hx = (int)(home >> 8);
             var hy = (int)(home & 0xFF);
             var outer = landscape + rings;
             var wanted = new List<(uint Block, int Ring)>();
             var near = new HashSet<uint>();
+            var start = nearStart > 0 ? nearStart : landscape;
+            // each block's atlas tier by its ring (FarLand.Textures.cs), with a ring either side baked into each too, the
+            // inner one (the game's own ground) read for that alone
+            var drawn = new Dictionary<uint, int>();
+            var baked = new Dictionary<uint, List<int>>();
+            var margin = new HashSet<uint>();
 
             for (var dx = -outer; dx <= outer; dx++) {
                 for (var dy = -outer; dy <= outer; dy++) {
@@ -258,9 +278,28 @@ namespace DaraletPlayer.Ui {
                     var x = hx + dx;
                     var y = hy + dy;
 
+                    if (x < 0 || y < 0 || x > 0xFE || y > 0xFE) {
+                        continue;
+                    }
+
+                    var id = (uint)(x << 8 | y);
+                    var tiers = new List<int>();
+                    TiersFor(ring, start, out var tier, tiers);
+
+                    if (tiers.Count > 0) {
+                        baked[id] = tiers;
+                    }
+
+                    drawn[id] = tier;
+
                     // from the game's last ring, drawn there too: the game draws it coarsely, and land only shows where
                     // the game drew nothing
-                    if (ring < (nearStart > 0 ? nearStart : landscape) || x < 0 || y < 0 || x > 0xFE || y > 0xFE) {
+                    if (ring < start) {
+                        if (ring == start - 1 && baked.ContainsKey(id)) {
+                            margin.Add(id);
+                            wanted.Add((id, ring));
+                        }
+
                         continue;
                     }
 
@@ -293,6 +332,9 @@ namespace DaraletPlayer.Ui {
 
             wantedHome = home;
             wantedNear = near;
+            drawnTier = drawn;
+            bakedTiers = baked;
+            marginOnly = margin;
             // the bakes are queued again for the new set once it's read: a set wanted mid-bake left its new blocks black
             toBake.Clear();
             bakesQueued = false;
@@ -353,13 +395,14 @@ namespace DaraletPlayer.Ui {
                         null);
                     var average = pixels == null ? 0xFF6A8040u : GrassPicture.Average(pixels);
                     colours[type] = unchecked((int)(average | 0xFF000000u));
-                    PluginCore.LogFile($"[far-land] terrain {type:X2}: texture 0x{textureId:X8} {image.Width}x{image.Height} "
+                    PluginCore.LogFile($"[far-land] terrain {type:X2}: texture 0x{textureId:X8} "
+                        + $"{image.Width}x{image.Height} "
                         + $"averages {average:X8}, tiling {desc.TerrainTex.TexTiling}, from 0x{id:X8}");
-                    tiles[type] = pixels == null ? Flat(colours[type]) : Shrink(pixels, image.Width, image.Height);
+                    AddTiles(type, pixels, image.Width, image.Height, colours[type]);
                 }
                 catch (Exception ex) {
                     colours[type] = unchecked((int)0xFF6A8040);
-                    tiles[type] = Flat(colours[type]);
+                    AddTiles(type, null, 0, 0, colours[type]);
                     PluginCore.LogFile($"[far-land] terrain {type:X}'s texture couldn't be read: {ex.Message}");
                 }
             }
@@ -368,8 +411,7 @@ namespace DaraletPlayer.Ui {
                 roadColour = road;
             }
 
-            roadTile = tiles.TryGetValue((int)RoadType, out var roads) ? roads : Flat(roadColour);
-
+            SetRoadTiles(roadColour);
 
             PluginCore.LogFile($"[far-land] {colours.Count} terrain colours, road {roadColour:X8}");
         }
@@ -404,9 +446,11 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            // in the card's memory alone with Video memory only (ScenePool), let go before a device reset and built again
+            buffersInDefaultPool = ScenePool.Buffers == Pool.Default;
             vertices = new VertexBuffer(typeof(LandVertex), count * VerticesABlock, device, Usage.WriteOnly, Format,
-                Pool.Managed);
-            indices = new IndexBuffer(typeof(int), count * IndicesABlock, device, Usage.WriteOnly, Pool.Managed);
+                ScenePool.Buffers);
+            indices = new IndexBuffer(typeof(int), count * IndicesABlock, device, Usage.WriteOnly, ScenePool.Buffers);
 
             // the near blocks (the game's coarse rings, drawn with its camera) first, then the far ones
             var near = new HashSet<uint>();
@@ -419,11 +463,19 @@ namespace DaraletPlayer.Ui {
                 var vertexAt = (LandVertex*)vertexStream.InternalDataPointer;
                 var indexAt = (int*)indexStream.InternalDataPointer;
 
-                foreach (var nearPass in new[] { true, false }) {
+                // within each, a run a tier (FarLand.Textures.cs), each drawn from its own atlas
+                Array.Clear(runTriangles, 0, runTriangles.Length);
+
+                for (var pass = 0; pass < 2 * TierCount; pass++) {
+                    var nearPass = pass < TierCount;
+                    var tierPass = pass % TierCount;
+                    var passStart = written;
+
                     foreach (var kv in blocks) {
                         var land = kv.Value;
 
-                        if (land.Heights == null || wantedNear.Contains(kv.Key) != nearPass) {
+                        if (land.Heights == null || marginOnly.Contains(kv.Key) || wantedNear.Contains(kv.Key) != nearPass
+                            || (drawnTier.TryGetValue(kv.Key, out var t) ? t : MidTier) != tierPass) {
                             continue;
                         }
 
@@ -432,7 +484,7 @@ namespace DaraletPlayer.Ui {
                         blockVertices.Clear();
                         blockIndices.Clear();
                         AddBlock(blockVertices, blockIndices, kv.Key, land, table, (bx - hx) * BlockSize,
-                            (by - hy) * BlockSize);
+                            (by - hy) * BlockSize, tierPass);
                         var baseVertex = written * VerticesABlock;
 
                         for (var i = 0; i < VerticesABlock; i++) {
@@ -453,6 +505,8 @@ namespace DaraletPlayer.Ui {
                     if (nearPass) {
                         nearTris = written * IndicesABlock / 3;
                     }
+
+                    runTriangles[nearPass ? 0 : 1, tierPass] = (written - passStart) * IndicesABlock / 3;
                 }
             }
             finally {
@@ -466,16 +520,21 @@ namespace DaraletPlayer.Ui {
             builtNear = near;
             nearTriangleCount = nearTris;
             PluginCore.LogFile($"[far-land] {(atlasReady ? "textured" : "untextured")}: built {written} blocks "
-                + $"({near.Count} near) round {builtHome:X4}: {triangleCount} triangles, {MegabytesHeld:0.0} MB, "
+                + $"({near.Count} near; by tier {runTriangles[0, 0] + runTriangles[1, 0]}, "
+                + $"{runTriangles[0, 1] + runTriangles[1, 1]}, {runTriangles[0, 2] + runTriangles[1, 2]} triangles) round {builtHome:X4}: {triangleCount} triangles, "
+                + $"{MegabytesHeld:0.0} MB, "
                 + $"{clock.ElapsedMilliseconds} ms, {DrawDistance.FreeMegabytes()} MB free");
         }
 
         /// <summary>A block's 81 vertices, its 128 triangles, and a skirt down each edge.</summary>
         private void AddBlock(List<LandVertex> verts, List<int> tris, uint block, LandBlock land,
-            IReadOnlyList<float> table, float offsetX, float offsetY) {
+            IReadOnlyList<float> table, float offsetX, float offsetY, int tier) {
             var first = verts.Count;
-            var slotX = (int)((block >> 8) & (Slots - 1));
-            var slotY = (int)(block & (Slots - 1));
+            var slots = TierSlots[tier];
+            var blockPixels = TierBlockPixels[tier];
+            var cellPixels = CellPixelsOf(tier);
+            var slotX = (int)((block >> 8) & (slots - 1));
+            var slotY = (int)(block & (slots - 1));
             var id = block << 16;
             float H(int x, int y) => table[land.Heights[x * Dim + y]];
 
@@ -493,8 +552,8 @@ namespace DaraletPlayer.Ui {
                     verts.Add(new LandVertex {
                         X = offsetX + x * CellSize, Y = H(x, y), Z = offsetY + y * CellSize,
                         NX = nx, NY = 1, NZ = ny, Colour = colour,
-                        U = (slotX * BlockPixels + x * CellPixels) / (float)(Slots * BlockPixels),
-                        V = (slotY * BlockPixels + y * CellPixels) / (float)(Slots * BlockPixels),
+                        U = (slotX * blockPixels + x * cellPixels) / (float)(slots * blockPixels),
+                        V = (slotY * blockPixels + y * cellPixels) / (float)(slots * blockPixels),
                     });
                 }
             }
@@ -592,7 +651,7 @@ namespace DaraletPlayer.Ui {
                     // (FarLand.Takeover.cs), so what stands there sorts against them as against the game's ground
                     if (nearActive && nearTriangleCount > 0) {
                         state.StencilEnable = false;
-                        DrawLand(device, shift * view * projection, fog, 0, nearTriangleCount);
+                        DrawRuns(device, shift * view * projection, fog, 0, 0);
                     }
 
                     var farTriangles = triangleCount - nearTriangleCount;
@@ -623,10 +682,13 @@ namespace DaraletPlayer.Ui {
                     state.StencilFunction = Compare.Equal;
                     state.StencilPass = StencilOperation.Keep;
                     state.StencilZBufferFail = StencilOperation.Keep;
-                    DrawLand(device, shift * view * far, fog, nearTriangleCount, farTriangles);
+                    DrawRuns(device, shift * view * far, fog, 1, nearTriangleCount);
                     DeviceCalls.UseShaders(device, IntPtr.Zero, IntPtr.Zero);
 
-                    // the trees standing on it, in the same pixels, with the same camera (DrawDistance.Billboards.cs)
+                    // the trees standing on it, in the same pixels, with the same camera (DrawDistance.Billboards.cs), and
+                    // the game's fog on again for them: it was off for the land's shader, which fogs itself, and far
+                    // billboards stood out bright against hazy hills (the user, November 2026)
+                    state.FogEnable = fog.On;
                     drawDistance.DrawFarLandBillboards(device, far);
                     DeviceCalls.UseShaders(device, IntPtr.Zero, IntPtr.Zero);
 
@@ -643,9 +705,23 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>The near (0) or far (1) runs, a tier each, from the first triangle given.</summary>
+        private void DrawRuns(Device device, Matrix m, (bool On, float Start, float End, System.Drawing.Color Colour) fog,
+            int run, int first) {
+            for (var tier = 0; tier < TierCount; tier++) {
+                DrawLand(device, m, fog, first, runTriangles[run, tier], tier);
+                first += runTriangles[run, tier];
+            }
+        }
+
         /// <summary>A run of the land's triangles, lit, textured and fogged, through the matrix given.</summary>
-        private unsafe void DrawLand(Device device, Matrix m, (bool On, float Start, float End, System.Drawing.Color Colour) fog,
-            int firstTriangle, int triangles) {
+        private unsafe void DrawLand(Device device, Matrix m,
+            (bool On, float Start, float End, System.Drawing.Color Colour) fog,
+            int firstTriangle, int triangles, int tier) {
+            if (triangles <= 0) {
+                return;
+            }
+
             float F(uint at) => *(float*)at;
             device.VertexFormat = Format;
             device.SetStreamSource(0, vertices, 0);
@@ -662,8 +738,9 @@ namespace DaraletPlayer.Ui {
                 // toward the sun: x east, y north, z up, into the device's (east, up, north)
                 F(0x8682C8), F(0x8682D0), F(0x8682CC), 0,
             });
-            var textured = atlas != null && atlasReady;
-            device.SetTexture(0, textured ? atlas : null);
+            var picture = atlases[tier];
+            var textured = picture != null && atlasReady;
+            device.SetTexture(0, textured ? picture : null);
             device.SamplerState[0].MinFilter = TextureFilter.Linear;
             device.SamplerState[0].MagFilter = TextureFilter.Linear;
             device.SamplerState[0].MipFilter = TextureFilter.Linear;
@@ -700,6 +777,7 @@ namespace DaraletPlayer.Ui {
             builtHome = uint.MaxValue;
             builtNear = new HashSet<uint>();
             nearTriangleCount = 0;
+            Array.Clear(runTriangles, 0, runTriangles.Length);
         }
 
         public void Dispose() {
