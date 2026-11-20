@@ -382,10 +382,7 @@ namespace DaraletPlayer.Ui {
             var view = device.Transform.View;
             var projection = device.Transform.Projection;
 
-            if (projection.M11 == 0 || CombatProjection.IsSwapped(new[] {
-                view.M11, view.M12, view.M13, view.M14, view.M21, view.M22, view.M23, view.M24,
-                view.M31, view.M32, view.M33, view.M34, view.M41, view.M42, view.M43, view.M44,
-            }, x, y, z)) {
+            if (projection.M11 == 0 || RenderOrigin.Swapped(view)) {
                 return;
             }
 

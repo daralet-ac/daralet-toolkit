@@ -28,7 +28,8 @@ namespace DaraletPlayer.Feed {
                 "shadows", "depthview", "water", "waterstrength", "ripples", "ripplesize", "fresnel", "glints", "blur",
                 "softshore", "antialias", "sharpen", "grass", "grassdensity", "grassdistance", "grassheight", "reeds",
                 "keptnear", "wind", "sunshadows", "sunstrength", "sundistance", "sunreplay", "fartrees", "farbuildings",
-                "ground", "portalreload", "lamps", "lampstrength", "lampshadows", "glow", "sunsoftness", "anisotropy" };
+                "ground", "portalreload", "videomemory", "lamps", "lampstrength", "lampshadows", "glow", "sunsoftness", "charsoftness", "anisotropy", "farland", "farlandnear", "farlanddebug", "lighttrace", "night", "nightglow", "timeofday", "walkmode", "lampreplace",
+                "lampreach" };
 
         /// <summary>Each step in order; a line it can't read is a step of kind "bad", which the run reports and stops on.</summary>
         public static List<TestStep> Parse(IEnumerable<string> lines) {
@@ -60,6 +61,8 @@ namespace DaraletPlayer.Feed {
                 case "measure":
                 case "settle":
                 case "walk":
+                case "gohighest":
+                case "gowaterside":
                     return Number(rest, out var seconds) && seconds > 0
                         ? new TestStep(number, line, kind, null, seconds, null)
                         : Bad(number, line, kind + " takes a number of seconds");
@@ -72,6 +75,15 @@ namespace DaraletPlayer.Feed {
                     }
 
                     return new TestStep(number, line, kind, parts[0].ToLowerInvariant(), value, null);
+                }
+                case "walkshots": {
+                    // seconds of running and how many screenshots spread over them
+                    var parts = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+                    return parts.Length == 2 && Number(parts[0], out var span) && span > 0 && int.TryParse(parts[1], out var shots)
+                        && shots > 0 && shots <= 60
+                        ? new TestStep(number, line, kind, parts[1], span, null)
+                        : Bad(number, line, "walkshots takes seconds and a number of shots (up to 60)");
                 }
                 case "face":
                     // a heading in degrees, 0 north, 90 east, as the game's
@@ -95,9 +107,15 @@ namespace DaraletPlayer.Feed {
                 case "screenshot":
                     return rest.Length > 0 ? new TestStep(number, line, kind, null, 0, rest)
                         : Bad(number, line, kind + " takes some text");
+                case "flushcache":
+                case "memory":
+                    // a snapshot of the game's memory, with an optional label: where and what, to compare later
+                    return new TestStep(number, line, kind, null, 0, rest);
                 case "restart":
                 case "kill":
                 case "camera":
+                case "usedoor":
+                case "facesaved":
                 case "lights":
                 case "probe":
                 case "compare":

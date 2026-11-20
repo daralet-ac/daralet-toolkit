@@ -34,10 +34,19 @@ namespace DaraletPlayer.Feed {
 
         public int ClampedSoftness => Softness < 0 ? 0 : Softness > MaxSoftness ? MaxSoftness : Softness;
 
+        /// <summary>
+        /// How soft your character's own shadow is, in centimeters across: its close map is 8 mm a texel, and trees'
+        /// soft edges blunted it (the user's call, November 2026: characters want other blurring than trees).
+        /// </summary>
+        [DataMember(Name = "characterSoftness")] public int CharacterSoftness;
+
+        public int ClampedCharacterSoftness => CharacterSoftness < 0 ? 0
+            : CharacterSoftness > MaxSoftness ? MaxSoftness : CharacterSoftness;
+
         public int ClampedDistance => Distance < MinDistance ? MinDistance : Distance > MaxDistance ? MaxDistance : Distance;
 
         public string Summary() {
-            return On ? $"sun shadows {ClampedStrength}% to {ClampedDistance} m, soft {ClampedSoftness} cm"
+            return On ? $"sun shadows {ClampedStrength}% to {ClampedDistance} m, soft {ClampedSoftness} cm, character {ClampedCharacterSoftness} cm"
                 : "sun shadows off";
         }
 
@@ -51,6 +60,7 @@ namespace DaraletPlayer.Feed {
             Strength = 100;
             Distance = 150;
             Softness = 10;
+            CharacterSoftness = 2;
         }
     }
 }

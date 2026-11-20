@@ -53,6 +53,7 @@ namespace DaraletPlayer {
         protected override void Startup() {
             try {
                 DataFolder.MoveOldFolder();
+                SessionLog.Start();
                 settings = new Settings(log: Log);
 
                 // a hot reload starts after login: the character's own profile is in use from the first frame
@@ -91,6 +92,8 @@ namespace DaraletPlayer {
             ShutdownStep(() => updates?.Dispose());
             ShutdownStep(() => settings?.SaveIfChanged());
             ShutdownStep(() => Loot.KnowsScrollSpell = null);
+            ShutdownStep(TimeOfDay.Release);
+            ShutdownStep(SessionLog.End);
         }
 
         /// <summary>Whether the character knows a scroll's spell (Decal's AssociatedSpell), or null when the client wasn't told.</summary>
@@ -117,6 +120,7 @@ namespace DaraletPlayer {
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
                 UseCharacterProfile();
+                SessionLog.Frame(settings);
                 settings.SaveIfDue();
                 AnnounceUpdate();
             }
@@ -228,12 +232,16 @@ namespace DaraletPlayer {
             Log(ex.ToString());
         }
 
+        private static readonly object LogLock = new object();
+
         /// <summary>Writes to log.txt only, not to chat: for things about chat itself, which must not add to it.</summary>
         internal static void LogFile(string message) {
-            // logging must never be what crashes the plugin
+            // logging must never be what crashes the plugin; locked, as the crash records are read on another thread
             try {
-                Directory.CreateDirectory(DataFolder.Root);
-                File.AppendAllText(DataFolder.For("log.txt"), $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+                lock (LogLock) {
+                    Directory.CreateDirectory(DataFolder.Root);
+                    File.AppendAllText(DataFolder.For("log.txt"), $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+                }
             }
             catch {
             }

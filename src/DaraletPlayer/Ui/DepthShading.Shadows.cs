@@ -37,6 +37,12 @@ namespace DaraletPlayer.Ui {
         /// <summary>Draws placed this far past a map's edge are still made: a tall thing's shadow reaches in.</summary>
         private const float CasterMargin = 40;
 
+        /// <summary>
+        /// How near your place a draw is placed, in meters across the ground, to count as your character's (its parts are
+        /// placed within a meter of it): drawn into the close map alone.
+        /// </summary>
+        private const float CharacterReach = 1.5f;
+
         private Texture nearTexture;
         private Surface nearSurface;
         private Texture farTexture;
@@ -115,12 +121,13 @@ namespace DaraletPlayer.Ui {
 
             try {
                 PrepareShadowDrawing(device);
-                // everything that could cast into the close map, not only what's in it: a tree's shadow reaches in
-                shadowDrawsClose += DrawInto(device, closeSurface, closeMatrix, noted, centre, CloseReach);
-                shadowDrawsNear += DrawInto(device, nearSurface, nearMatrix, noted, centre, nearReach);
+                // your character alone in the close map, the rest in the near and far ones: each map's edges have a
+                // softness of their own, and the trees' blunted the character's (the user's call, November 2026)
+                shadowDrawsClose += DrawInto(device, closeSurface, closeMatrix, noted, centre, CloseReach, true);
+                shadowDrawsNear += DrawInto(device, nearSurface, nearMatrix, noted, centre, nearReach, false);
 
                 if (farUsed) {
-                    shadowDrawsFar += DrawInto(device, farSurface, farMatrix, noted, centre, FarReach);
+                    shadowDrawsFar += DrawInto(device, farSurface, farMatrix, noted, centre, FarReach, false);
                 }
 
                 shadowDrawsNoted += noted;
@@ -171,7 +178,7 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The draws placed within reach (and the margin) made into one map; how many.</summary>
         private static unsafe int DrawInto(Device device, Surface target, Matrix sun, int noted,
-            Vector3 centre, float reach) {
+            Vector3 centre, float reach, bool characters) {
             device.SetRenderTarget(0, target);
             device.Clear(ClearFlags.Target | ClearFlags.ZBuffer, System.Drawing.Color.White, 1, 0);
             var com = (IntPtr)device.UnmanagedComPointer;
@@ -186,7 +193,9 @@ namespace DaraletPlayer.Ui {
                 var dx = w[12] - centre.X;
                 var dz = w[14] - centre.Z;
 
-                if (dx * dx + dz * dz > reachSquared) {
+                var apart = dx * dx + dz * dz;
+
+                if (apart > reachSquared || (apart <= CharacterReach * CharacterReach) != characters) {
                     continue;
                 }
 
@@ -285,7 +294,8 @@ namespace DaraletPlayer.Ui {
                 close.M21, close.M22, close.M23, close.M24,
                 close.M31, close.M32, close.M33, close.M34,
                 close.M41, close.M42, close.M43, close.M44,
-                CloseReach * 2f / ShadowMapSize, SunOptions.ClampedSoftness / 100f, 0, 0,
+                CloseReach * 2f / ShadowMapSize, SunOptions.ClampedSoftness / 100f,
+                SunOptions.ClampedCharacterSoftness / 100f, 0,
                 up.X, up.Y, up.Z, 0,
             };
         }

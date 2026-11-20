@@ -128,9 +128,9 @@ namespace DaraletPlayer.Ui {
             }
 
             model.Vertices = new VertexBuffer(typeof(CustomVertex.PositionTextured), vertices.Count, device,
-                Usage.WriteOnly, Format, Pool.Managed);
+                Usage.WriteOnly, Format, ScenePool.Buffers);
             model.Vertices.SetData(vertices.ToArray(), 0, LockFlags.None);
-            model.Indices = new IndexBuffer(typeof(int), all.Count, device, Usage.WriteOnly, Pool.Managed);
+            model.Indices = new IndexBuffer(typeof(int), all.Count, device, Usage.WriteOnly, ScenePool.Buffers);
             model.Indices.SetData(all.ToArray(), 0, LockFlags.None);
             return model;
         }
@@ -144,6 +144,38 @@ namespace DaraletPlayer.Ui {
             var made = (BillboardModels.MakeTexture(device, pixels, width, height), cutOut);
             textures[surfaceId] = made;
             return made;
+        }
+
+        /// <summary>
+        /// Every model but these let go, with any texture no kept model uses (they're shared by surface): kept for every
+        /// model ever seen, as BillboardModels were, each new area's stayed in the game's memory. How many went.
+        /// </summary>
+        public int KeepOnly(HashSet<uint> used) {
+            var gone = models.Keys.Where(id => !used.Contains(id)).ToList();
+
+            foreach (var id in gone) {
+                models[id]?.Vertices?.Dispose();
+                models[id]?.Indices?.Dispose();
+                models.Remove(id);
+            }
+
+            if (gone.Count == 0) {
+                return 0;
+            }
+
+            var inUse = new HashSet<DxTexture>(models.Values.Where(m => m != null)
+                .SelectMany(m => m.Parts).Select(p => p.Texture).Where(t => t != null));
+
+            foreach (var surface in textures.Keys.ToList()) {
+                var texture = textures[surface].Texture;
+
+                if (texture != null && !inUse.Contains(texture)) {
+                    texture.Dispose();
+                    textures.Remove(surface);
+                }
+            }
+
+            return gone.Count;
         }
 
         public void Dispose() {

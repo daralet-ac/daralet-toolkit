@@ -47,6 +47,7 @@ namespace DaraletPlayer.Ui {
             frameRate = new FrameRateWindow(settings);
             // before the shading, so its occlusion darkens the grass too: Decal calls RenderFrame in subscription order
             grass = new Grass(settings);
+            farLand = new FarLand(settings, drawDistance);
             depthShading = new DepthShading(settings);
             testRunner = new TestRunner(settings, drawDistance, Commit);
             CoreManager.Current.RenderFrame += Core_RenderFrame;
@@ -161,6 +162,7 @@ namespace DaraletPlayer.Ui {
 
             try {
                 grass.Dispose();
+                farLand.Dispose();
                 depthShading.Dispose();
                 testRunner.Dispose();
                 frameRate.Dispose();

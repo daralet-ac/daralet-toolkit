@@ -14,6 +14,16 @@ namespace DaraletPlayer.Ui {
         /// <summary>Whether you're in portal space: the far settings wait until you're out.</summary>
         private bool inPortal;
 
+        /// <summary>In portal space, whether or not the draw distance is taken down for it (PortalReload).</summary>
+        private bool inPortalSpace;
+
+        /// <summary>
+        /// In portal space, or just in (logged in or out of a portal, ArrivalQuietSeconds ago at most): the game is loading
+        /// the place, and nothing of the plugin's should load beside it (FarLand waits).
+        /// </summary>
+        public bool Arriving => inPortalSpace
+            || (DateTime.UtcNow - arrivedAt).TotalSeconds < DrawDistanceRamp.ArrivalQuietSeconds;
+
         /// <summary>When the next step up may be taken.</summary>
         private DateTime nextStepAt = DateTime.MinValue;
 
@@ -43,7 +53,7 @@ namespace DaraletPlayer.Ui {
         private DateTime lastLoadAt = DateTime.UtcNow;
 
         /// <summary>How long after a load the next may begin, at least.</summary>
-        private const double LoadQuietSeconds = 2;
+        private const double LoadQuietSeconds = 5;
 
         /// <summary>
         /// Whether a landscape load may begin: LoadQuietSeconds since the last, and a second with no slow frame. Every
@@ -77,14 +87,43 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// Whether portal space takes the draw distance back to the game's (a test run's `set portalreload 0` turns it off,
-        /// to see whether that reload, in the same second as the game's own load of where you're going, is what
-        /// crashed a teleport, November 2026).
+        /// Whether portal space takes the draw distance down (off; a test run's `set portalreload 1` puts it on). It was
+        /// the way at first, so a teleport wouldn't load a far landscape from cold; but that reload comes in the same
+        /// second as the game's own load of where you're going, and the two crashed the game (0x58712F, 0x539153 in
+        /// make_plane) on one teleport in four. Left as it is, ten teleports at Scenery 2, Ground 6, Landscape 18 between
+        /// Holtburg and Yaraq came through clean (November 2026, after the billboards stopped wasting memory).
         /// </summary>
-        internal static bool PortalReload = true;
+        internal static bool PortalReload = false;
 
         private void CharacterFilter_ChangePortalMode(object sender, ChangePortalModeEventArgs e) {
             try {
+                // the far scenery let go for the teleport, so the game has its memory for the new place; made again
+                // once you're out (UpdateBillboards waits while in portal space)
+                inPortalSpace = e.Type == PortalEventType.EnterPortal;
+
+                if (inPortalSpace) {
+                    ReleaseFarScenery();
+                    highestCostHere = 0;
+
+                    // the full-detail rings back to the game's for the game's own load of the new place: a code patch,
+                    // no reload, so nothing to collide with it. Out of a dungeon nothing outdoors is loaded, and with the
+                    // rings at 6 that whole cold load crashed the game in its unpacking (0x526A8A, November 2026, with
+                    // 2.5 GB free); the rings step back up in place once you're there, as at login
+                    if (patchedRadius > DrawDistanceOptions.GameSceneryRadius && !broken
+                        && PatchRings(DrawDistanceOptions.GameSceneryRadius)) {
+                        PluginCore.LogFile($"[draw-distance] portal space: full detail {patchedRadius} -> "
+                            + $"{DrawDistanceOptions.GameSceneryRadius} for the game's load, no reload");
+                        patchedRadius = DrawDistanceOptions.GameSceneryRadius;
+                    }
+                }
+                else {
+                    // arrived: the same gentle start as at login before the rings step back up
+                    cacheFlushWanted = "a teleport";
+                    arrivedAt = DateTime.UtcNow;
+                    nextStepAt = arrivedAt.AddSeconds(DrawDistanceRamp.CautiousWaitSeconds);
+                    Soon();
+                }
+
                 if (!PortalReload) {
                     PluginCore.LogFile("[draw-distance] portal space: left as it is (portal reload off)");
                     return;
@@ -114,6 +153,11 @@ namespace DaraletPlayer.Ui {
             var goingUp = targetScenery > scenery || targetLandscape > landscape;
             var now = DateTime.UtcNow;
 
+            // nothing goes up during a teleport: the game is loading the new place
+            if (goingUp && inPortalSpace) {
+                return (Math.Min(scenery, targetScenery), Math.Min(landscape, targetLandscape));
+            }
+
             // login: the moment the character's in, the same gentle start as out of a portal
             var loggedIn = CoreManager.Current.CharacterFilter.LoginStatus == 3;
 
@@ -124,6 +168,14 @@ namespace DaraletPlayer.Ui {
             }
 
             wasLoggedIn = loggedIn;
+
+            // just in (logged in, or out of a portal): nothing changes either way while the game's own load runs. The cut
+            // from the game's landscape 15 to a lower one went through 4 seconds after login, a reload in the middle of
+            // the game's own, and 10 seconds later the game crashed emptying its cache (0x58712F, November 2026)
+            if (loggedIn && !inPortalSpace && (now - arrivedAt).TotalSeconds < DrawDistanceRamp.ArrivalQuietSeconds) {
+                return (scenery, landscape);
+            }
+
             var cautious = (now - arrivedAt).TotalSeconds < DrawDistanceRamp.CautiousSeconds;
 
             // the last step's loading done: its time gone by, and a second without a slow frame

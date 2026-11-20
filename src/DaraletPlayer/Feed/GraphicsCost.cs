@@ -91,6 +91,33 @@ namespace DaraletPlayer.Feed {
             return new Item("Far buildings", on ? Blocks(landscape) * 0.02 : 0, on ? 0.1 : 0);
         }
 
+        /// <summary>
+        /// Far land (Ui/FarLand.cs), the blocks from the game's last ring out: its geometry in the game's memory, about
+        /// 6.5 KB a block (1,960 blocks were 10.4 MB, the lists to build it a little more); its pictures are on the
+        /// graphics card. The frame rate barely moved (90 fps against 93 at landscape 5, rings to 24).
+        /// </summary>
+        public static Item FarLand(int rings, int landscape) {
+            if (rings <= 0) {
+                return new Item("Far land", 0, 0);
+            }
+
+            var blocks = Blocks(landscape + rings) - Blocks(landscape - 1);
+            return new Item("Far land", blocks * 0.007, 0.4);
+        }
+
+        /// <summary>
+        /// Billboards standing on the far land: 133,000 of them past landscape 5 took about 50 MB with video memory on
+        /// (fresh restarts, 1,786 MB free without, 1,736 with), the frame rate unmoved.
+        /// </summary>
+        public static Item FarLandBillboards(bool billboards, int rings, int landscape) {
+            if (!billboards || rings <= 0) {
+                return new Item("Billboards on far land", 0, 0);
+            }
+
+            var blocks = Blocks(landscape + rings) - Blocks(landscape);
+            return new Item("Billboards on far land", blocks * 0.025, 0.2);
+        }
+
         /// <summary>Detail: every object out to it keeps finer models; the game's is 50 m.</summary>
         public static Item Detail(int meters) {
             var past = Math.Max(0, meters - 50);
@@ -118,12 +145,18 @@ namespace DaraletPlayer.Feed {
         /// <summary>The draw distance's costs for its settings, the landscape the game's when theirs is 0.</summary>
         public static List<Item> DrawDistance(DrawDistanceOptions o, int gameLandscape) {
             var items = new List<Item>();
+            var landscape = o.ClampedLandscapeRadius > 0 && o.On ? o.ClampedLandscapeRadius : gameLandscape;
+
+            // far land works with the draw distance off, as the fog does
+            if (o.ClampedFarLand > 0) {
+                items.Add(FarLand(o.ClampedFarLand, landscape));
+            }
 
             if (!o.On) {
                 return items;
             }
 
-            var landscape = o.ClampedLandscapeRadius > 0 ? o.ClampedLandscapeRadius : gameLandscape;
+            items.Add(FarLandBillboards(o.Billboards, o.ClampedFarLand, landscape));
             items.Add(Landscape(landscape, gameLandscape));
             items.Add(Ground(o.ClampedGroundRadius, o.ClampedSceneryRadius));
             items.Add(Scenery(o.ClampedSceneryRadius, o.ClampedSceneryDensity));

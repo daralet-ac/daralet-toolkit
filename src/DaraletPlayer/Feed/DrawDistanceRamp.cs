@@ -20,8 +20,12 @@ namespace DaraletPlayer.Feed {
         /// </summary>
         public const int SceneryStep = 1;
 
-        /// <summary>Landscape rings added a step: the ground is lighter than its trees and buildings.</summary>
-        public const int LandscapeStep = 3;
+        /// <summary>
+        /// Landscape rings added a step: all of them, in one reload. It was 3, but each step is a whole reload, and the fifth
+        /// in 12 seconds (5 to 18 after a teleport) crashed the game at 0x58712F, in the game's emptying of a hash table it
+        /// had left inconsistent, with 2.4 GB free (November 2026); every crash there came after two reloads close together.
+        /// </summary>
+        public const int LandscapeStep = DrawDistanceOptions.MaxLandscapeRadius;
 
         /// <summary>
         /// One thing raised a step, never both: with the landscape and the scenery both going up, the landscape goes first
@@ -41,11 +45,14 @@ namespace DaraletPlayer.Feed {
         /// </summary>
         public const double CautiousWaitSeconds = 4;
 
+        /// <summary>Seconds after logging in or leaving portal space before the draw distance changes at all, down too.</summary>
+        public const double ArrivalQuietSeconds = 12;
+
         public const double CautiousSeconds = 38;
 
         public const int CautiousSceneryStep = 1;
 
-        public const int CautiousLandscapeStep = 3;
+        public const int CautiousLandscapeStep = DrawDistanceOptions.MaxLandscapeRadius;
 
         /// <summary>The least seconds between steps.</summary>
         public const double StepSeconds = 1.5;

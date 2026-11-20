@@ -10,14 +10,14 @@ namespace DaraletPlayer.Ui {
     /// that adjusts as you change it, and two bars at the top with your budget for each"). Every setting's cost is
     /// GraphicsCost's estimate, worked out for what the sliders show, a held one included, so both bars move before
     /// anything loads. Memory: the estimate against what the game has free now plus what these settings already hold,
-    /// less 800 MB kept spare (the draw distance's own guard stops at less). Frame rate: the game's own cost where you
+    /// less 1.4 GB kept spare (the draw distance's own guard keeps the same). Frame rate: the game's own cost where you
     /// stand (the last few seconds' frame time less the estimate for what's on) plus the estimate for what's shown,
     /// against a target frame rate. Both are taken only while the draw distance has finished loading, so a load half
     /// done doesn't skew them. Presets (GraphicsPresets) sit above, lit when the settings are one. Untested in the game
     /// when written.
     /// </summary>
     internal sealed partial class OptionsPanel {
-        private const double SpareMb = 800;
+        private const double SpareMb = 1400;
 
         private static readonly (string Value, string Label)[] TargetFps = {
             ("60", "60 fps"), ("100", "100 fps"), ("144", "144 fps"),
@@ -36,6 +36,7 @@ namespace DaraletPlayer.Ui {
             o.DetailDistance = draggingDetail ?? o.DetailDistance;
             o.LowDetailDistance = draggingFar ?? o.LowDetailDistance;
             o.FarTrees = draggingFarTrees ?? o.FarTrees;
+            o.FarLand = draggingFarLand ?? o.FarLand;
             return o;
         }
 
@@ -79,7 +80,8 @@ namespace DaraletPlayer.Ui {
             if (budgetMb.HasValue) {
                 var fraction = budgetMb.Value <= 0 ? 1 : wanted.Mb / budgetMb.Value;
                 BudgetBar(fraction, $"Memory: about {wanted.Mb:N0} of {Math.Max(0, budgetMb.Value):N0} MB",
-                    "These settings' memory against what the game has free, keeping 800 MB spare. Over it, the "
+                    "These settings' memory against what the game has free, keeping 1.4 GB spare for teleports. "
+                    + "Over it, the "
                     + "draw distance won't load.");
             }
 

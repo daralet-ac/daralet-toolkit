@@ -11,7 +11,11 @@ namespace DaraletPlayer.Ui {
         private int? draggingSunStrength;
         private int? draggingSunDistance;
         private int? draggingSunSoftness;
+        private int? draggingCharacterSoftness;
         private int? draggingLampStrength;
+        private int? draggingNightDarkness;
+        private int? draggingNightGlow;
+        private int? draggingLampReach;
 
         private void RenderShading() {
             var options = ShadingSettings;
@@ -72,6 +76,40 @@ namespace DaraletPlayer.Ui {
                 Changed();
             }
 
+            ImGui.SameLine();
+
+            if (ImGui.Checkbox("In the game's place##lamps-replace", ref options.Replace)) {
+                Changed();
+            }
+
+            Widgets.Tip("The game's own lamp light off, the plugin's alone: it stops at walls and comes out of open doors. "
+                + "Needs shadows.");
+            Form.Label("Reach", "How far the lamps reach, against the game's own.");
+            var reach = draggingLampReach ?? options.ClampedReach;
+
+            if (DragSlider("##lamps-reach", ref reach, 100, 300, "%d%%", ref draggingLampReach)) {
+                options.Reach = reach;
+                Changed();
+            }
+
+            Form.Label("Night", "Outdoors at night everything is darker (ground, objects, characters, sky) and the lamps "
+                + "stronger, so torches and campfires stand out. Follows the sun: none by day.");
+            var darkness = draggingNightDarkness ?? options.ClampedNightDarkness;
+
+            if (DragSlider("##lamps-night", ref darkness, 0, Feed.LampLightOptions.MostNightDarkness,
+                darkness == 0 ? "The game's" : "%d%% darker", ref draggingNightDarkness)) {
+                options.NightDarkness = darkness;
+                Changed();
+            }
+
+            Form.Label("Night lamps", "How much stronger the lamps are at night.");
+            var glow = draggingNightGlow ?? options.ClampedNightGlow;
+
+            if (DragSlider("##lamps-night-glow", ref glow, 100, 400, "%d%%", ref draggingNightGlow)) {
+                options.NightGlow = glow;
+                Changed();
+            }
+
             ImGui.EndDisabled();
         }
 
@@ -109,6 +147,17 @@ namespace DaraletPlayer.Ui {
                 softness == 0 ? "Sharp" : "%d cm",
                 ref draggingSunSoftness)) {
                 options.Softness = softness;
+                Changed();
+            }
+
+            Form.Label("Character softness", "How soft your character's own shadow is: sharper than the trees' shows "
+                + "arms and legs.");
+            var characterSoftness = draggingCharacterSoftness ?? options.ClampedCharacterSoftness;
+
+            if (DragSlider("##sun-shadows-character-softness", ref characterSoftness, 0,
+                Feed.SunShadowOptions.MaxSoftness, characterSoftness == 0 ? "Sharp" : "%d cm",
+                ref draggingCharacterSoftness)) {
+                options.CharacterSoftness = characterSoftness;
                 Changed();
             }
 

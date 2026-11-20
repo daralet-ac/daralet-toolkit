@@ -320,6 +320,12 @@ namespace DaraletPlayer {
         /// <summary>Escape closes the /dap, Inventory, Bank, Character and Quests windows (EscapeCloses).</summary>
         [DataMember(Name = "escapeClosesWindows")] public bool EscapeClosesWindows;
 
+        /// <summary>
+        /// Whether the plugin reads Windows' crash records for the game at start (Ui/SessionLog.cs): the game's own
+        /// "Application Error" and "Application Hang" entries, into log.txt. Off to start: opt in (the user's call).
+        /// </summary>
+        [DataMember(Name = "readCrashRecords")] public bool ReadCrashRecords;
+
         /// <summary>A window being dragged snaps to the screen's and other windows' edges (WindowSnap).</summary>
         [DataMember(Name = "snapWindows")] public bool SnapWindows;
 
@@ -623,6 +629,7 @@ namespace DaraletPlayer {
             InventoryHotbarMarks = true;
             LfgChatLinks = true;
             EscapeClosesWindows = true;
+            ReadCrashRecords = false;
             SnapWindows = true;
             SnapResize = true;
             SnapResizeGrid = true;

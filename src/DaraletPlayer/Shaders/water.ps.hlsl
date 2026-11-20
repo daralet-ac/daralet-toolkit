@@ -89,7 +89,15 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
 
     float wet = tex2Dlod(waterMap, float4(mapUv, 0, 0)).r;
 
-    if (wet < 0.45) {
+    // where the water starts: the map is a value a 24 m vertex, so near you the reflection begins well inside the
+    // water and fades in (soft shores); far off that left the last 12 m before every shore the game's darker raw water,
+    // a few pixels wide, a hard dark line along the far bank (seen in the game, November 2026), so further away it
+    // reaches the shoreline and fades over more of the map
+    float farOff = saturate((z - 60) / 240);
+    float shoreFrom = lerp(0.45, 0.2, farOff);
+    float shoreWidth = lerp(0.5, 0.3, farOff);
+
+    if (wet < shoreFrom) {
         return float4(0, 0, 0, 0);
     }
 
@@ -142,7 +150,11 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
 
         float sceneZ = SceneZ(at);
 
-        if (q.z > sceneZ && q.z - sceneZ < max(1.5, stepLength * 2)) {
+        // what it hits must stand above the water: skimming the water far off, the march took the water surface
+        // further out for a hit and reflected the game's dark raw water, a hard dark band along the far bank (seen in
+        // the game, November 2026)
+        if (q.z > sceneZ && q.z - sceneZ < max(1.5, stepLength * 2)
+            && ToWorld(ViewPlace(at, sceneZ)).y > world.y + 0.4) {
             // narrowed down between the last step and this one
             float3 back = q - ray * stepLength;
 
@@ -196,7 +208,7 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
     }
 
     if (extras.z > 0.5) {
-        amount *= saturate((wet - 0.45) / 0.5);
+        amount *= saturate((wet - shoreFrom) / shoreWidth);
     }
 
     if (extras.x > 0.5 && sun.w > 0) {
@@ -204,6 +216,11 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
         colour += glint * sky.w;
         amount = max(amount, saturate(glint));
     }
+
+    // faded out before the water map's edge (4 landblocks round the camera's, so at least 768 m off): stopping there
+    // left a step in the water's tone far off (seen in the game, November 2026)
+    float away = length(world.xz - eye.xz);
+    amount *= saturate((740 - away) / 290);
 
     return float4(colour, saturate(amount));
 }

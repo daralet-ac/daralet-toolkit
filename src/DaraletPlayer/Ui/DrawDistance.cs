@@ -40,6 +40,9 @@ namespace DaraletPlayer.Ui {
         private const uint SetMidRadiusAddress = 0x4531C0;
         private const int SmartBoxLScape = 0xB0;
         private const uint GameLandscapeRadius = 0x81FFB4;
+
+        /// <summary>The landscape radius held through portal space (the game's least preset is 3).</summary>
+        private const int PortalLandscape = 5;
         private const uint DegradeDistance = 0x81FC68;
         private const uint PageExecuteReadWrite = 0x40;
 
@@ -164,6 +167,9 @@ namespace DaraletPlayer.Ui {
                 ApplyLowDetail(options.ClampedLowDetailDistance);
                 ApplyFog(options.ClampedFog);
 
+                FollowVideoMemory();
+                MaybeFlushCache();
+
                 // the billboards still follow you: after a teleport with memory short, they never came back
                 var box = *(IntPtr*)SmartBoxPointer;
                 var held = box == IntPtr.Zero ? IntPtr.Zero : *(IntPtr*)((byte*)box + SmartBoxLScape);
@@ -190,7 +196,11 @@ namespace DaraletPlayer.Ui {
             treeRadius = aiming ? options.ClampedSceneryRadius : DrawDistanceOptions.MaxSceneryRadius;
             var targetScenery = aiming && !densityChanging ? options.ClampedGroundRadius
                 : DrawDistanceOptions.GameSceneryRadius;
-            var targetLandscape = aiming ? wantedLandscape : gameLandscape;
+            // in portal space, well under the game's own: a teleport loads a whole new landscape while the old one is still
+            // held, and with Landscape 18 the two crashed or froze the game every time, even with 1.1 GB free (November
+            // 2026). Small, the old place is mostly let go before the new one loads, and the steps bring it back after
+            var targetLandscape = aiming ? wantedLandscape
+                : far && inPortal ? Math.Min(gameLandscape, PortalLandscape) : gameLandscape;
             var loadedLandscape = lscape != IntPtr.Zero ? *(int*)lscape : targetLandscape;
 
             // the most the landscape wanted allows, so stepping up aims no higher
@@ -258,6 +268,10 @@ namespace DaraletPlayer.Ui {
             // what's loaded now, a step on the way or all of it, for the memory estimate and the way back
             var cost = Cost(Math.Min(scenery, treeRadius), appliedDensity, scenery, landscape);
 
+            if (cost < costBefore - 0.5) {
+                cacheFlushWanted = "the draw distance lowered";
+            }
+
             if (aiming && scenery == targetScenery && landscape == targetLandscape) {
                 NoteLoaded(options.ClampedSceneryRadius, options.ClampedSceneryDensity, options.ClampedLandscapeRadius,
                     cost);
@@ -283,6 +297,8 @@ namespace DaraletPlayer.Ui {
                 GrowTrees(lscape);
             }
 
+            FollowVideoMemory();
+            MaybeFlushCache();
             ApplyDetail(on ? options.ClampedDetailDistance : 0);
             ApplyLowDetail(on ? options.ClampedLowDetailDistance : 0);
             ApplyFog(broken ? 100 : options.ClampedFog);
@@ -368,6 +384,7 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.RenderFrame -= Core_RenderFrame;
             WorldPass.Remove(billboardsInWorldPass);
             DisposeProgress();
+            DisposeVideoMemory();
             StopListeningForPortals();
 
             // the game's own back, whatever the reason this is going: a hot reload, the plugin turned off. The landscape is

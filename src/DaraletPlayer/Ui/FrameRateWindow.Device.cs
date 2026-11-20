@@ -100,7 +100,7 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>The address space's free room, its largest piece, both in bytes, and its pieces of 1 MB or more.</summary>
-        private static (long Free, long Largest, int Pieces) FreePieces() {
+        internal static (long Free, long Largest, int Pieces) FreePieces() {
             long free = 0;
             long largest = 0;
             var pieces = 0;

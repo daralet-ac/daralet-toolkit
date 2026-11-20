@@ -14,6 +14,36 @@ namespace DaraletPlayer.Ui {
     /// </summary>
     internal static unsafe class RenderOrigin {
         private const int CameraCell = 0x81FF10 + 4;
+        private const int CameraOrigin = 0x81FF10 + 0x3C;
+
+        /// <summary>
+        /// Whether the device holds the camera with its second and third axes swapped, as it does while some effects draw
+        /// (CombatProjection.IsSwapped). Told by where the view puts the camera against the game's own camera: the first
+        /// way, by how far your character is from the camera each way, guessed wrong wherever your height and your north
+        /// differed by about 6 meters, and the far land, billboards, 3D trees and grass vanished on the spot (seen in the
+        /// game, November 2026, by Holtburg). The old way only when the game's camera can't tell them apart.
+        /// </summary>
+        public static bool Swapped(Matrix view) {
+            var cell = *(uint*)CameraCell;
+
+            if (cell != 0) {
+                var origin = (float*)CameraOrigin;
+                var camera = Vector3.TransformCoordinate(new Vector3(0, 0, 0), Matrix.Invert(view));
+                // the game's camera in the device's frame (east, height, north), and where a swapped view puts it
+                var offUpright = (camera - new Vector3(origin[0], origin[2], origin[1])).Length();
+                var offSwapped = (camera - new Vector3(origin[0], origin[1], origin[2])).Length();
+
+                if (System.Math.Abs(offUpright - offSwapped) > 0.5f && System.Math.Min(offUpright, offSwapped) < 2) {
+                    return offSwapped < offUpright;
+                }
+            }
+
+            var you = Player();
+            return CombatProjection.IsSwapped(new[] {
+                view.M11, view.M12, view.M13, view.M14, view.M21, view.M22, view.M23, view.M24,
+                view.M31, view.M32, view.M33, view.M34, view.M41, view.M42, view.M43, view.M44,
+            }, you.X, you.Z, you.Y);
+        }
 
         /// <summary>The camera's landblock (0xXXYY), or your character's while the game has no camera.</summary>
         public static uint Landblock {

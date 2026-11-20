@@ -57,7 +57,7 @@ namespace DaraletPlayer.Ui {
             }
 
             farTreeInstances = new VertexBuffer(typeof(FarTreeInstance), all.Count, device, Usage.WriteOnly,
-                VertexFormats.None, Pool.Managed);
+                VertexFormats.None, ScenePool.Buffers);
             farTreeInstances.SetData(all.ToArray(), 0, LockFlags.None);
             farTreeCount = all.Count;
             var triangles = farTreeBatches.Sum(b => (long)b.Count * b.Model.Parts.Sum(p => p.Triangles));

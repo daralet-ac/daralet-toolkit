@@ -78,6 +78,28 @@ namespace DaraletPlayer.Feed {
         /// </summary>
         [DataMember(Name = "farBuildings")] public bool FarBuildings;
 
+        /// <summary>
+        /// The far scenery's buffers and pictures in video memory only (Ui/ScenePool.cs), not also in the game's 4 GB;
+        /// let go and made again at a device reset.
+        /// </summary>
+        [DataMember(Name = "videoMemory")] public bool VideoMemory;
+
+        /// <summary>
+        /// Rings of landblocks past the game's landscape whose ground the plugin draws itself, at full detail, where the
+        /// game drew nothing (Ui/FarLand.cs); 0 for none. Works with Draw Distance off, as the fog does.
+        /// </summary>
+        [DataMember(Name = "farLand")] public int FarLand;
+
+        public const int MaxFarLand = 32;
+
+        /// <summary>
+        /// The far land also takes over the game's own low-detail rings (Ui/FarLand.Takeover.cs): the game skips those
+        /// blocks and the plugin draws them in full detail.
+        /// </summary>
+        [DataMember(Name = "farLandNear")] public bool FarLandNear;
+
+        public int ClampedFarLand =>FarLand < 0 ? 0 : FarLand > MaxFarLand ? MaxFarLand : FarLand;
+
         /// <summary>Whether anything stands for the trees past the real scenery: billboards, 3D trees or both.</summary>
         public bool FarScenery => Billboards || ClampedFarTrees > 0 || FarBuildings;
 
@@ -132,8 +154,11 @@ namespace DaraletPlayer.Feed {
 
         /// <summary>The settings in a line, for the Frame Rate window's marks: "Scenery 5, landscape 24, ...".</summary>
         public string Summary() {
+            var farLand = ClampedFarLand > 0
+                ? $", far land {ClampedFarLand}" + (FarLandNear ? " with the near rings" : "") : "";
+
             if (!On) {
-                return "Draw distance off";
+                return "Draw distance off" + farLand + (ClampedFog < 100 ? $", fog {ClampedFog}%" : "");
             }
 
             return $"Scenery {ClampedSceneryRadius} at {ClampedSceneryDensity}%, "
@@ -143,7 +168,8 @@ namespace DaraletPlayer.Feed {
                 + $", far {ClampedLowDetailDistance} m" + (Billboards ? ", billboards" : "")
                 + (ClampedFarTrees > 0 ? $", 3D trees {ClampedFarTrees} rings" : "")
                 + (FarBuildings ? ", far buildings" : "")
-                + (ClampedFog < 100 ? $", fog {ClampedFog}%" : "");
+                + (VideoMemory ? ", video memory" : "")
+                + (ClampedFog < 100 ? $", fog {ClampedFog}%" : "") + farLand;
         }
 
         [OnDeserializing]
@@ -162,7 +188,10 @@ namespace DaraletPlayer.Feed {
             Billboards = false;
             FarTrees = 0;
             FarBuildings = false;
+            VideoMemory = false;
             Fog = 100;
+            FarLand = 0;
+            FarLandNear = false;
         }
     }
 }

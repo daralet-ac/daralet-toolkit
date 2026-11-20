@@ -8,16 +8,20 @@ namespace DaraletPlayer.Ui {
     /// <summary>
     /// Lamp shadows from cube shadow maps (the user's call, November 2026: the first lamp shadows, marched through the
     /// depth buffer, "look awkward, of the character and especially whatever is making that shadow on the wall": a march
-    /// on screen only knows what's on screen, and guesses how thick it is). The two lamps nearest you that cast shadows
-    /// get a cube map each, six 90-degree faces of 512 by 512, 32-bit float, every face the distance from the lamp to the
-    /// nearest thing that way, over its reach (Shaders/lampshadow.vs.hlsl, lampshadow.ps.hlsl), drawn from the game's own
+    /// on screen only knows what's on screen, and guesses how thick it is). The six lamps nearest you that cast shadows
+    /// get a cube map each, kept from frame to frame (a new lamp's drawn at once, and two of the kept in turn each
+    /// frame, for whoever walks by), six 90-degree faces of 512 by 512, 32-bit float, every face the distance from the
+    /// lamp to the nearest thing that way, over its reach (Shaders/lampshadow.vs.hlsl, lampshadow.ps.hlsl), drawn from the game's own
     /// world draws (ShadowCasters, the same the sun's maps use: the hooks are in while either wants them) placed within
     /// the lamp's reach and a margin, leaves cut out. Shaders/lamps.ps.hlsl compares a place's distance from the lamp with
     /// the map's that way. One depth surface is shared by every face. All in the default pool, let go before a reset.
     /// </summary>
     internal sealed partial class DepthShading {
         private const int LampMapSize = 512;
-        private const int LampsWithShadows = 2;
+        private const int LampsWithShadows = 6;
+
+        /// <summary>How many lamps' kept maps are drawn again each frame, besides new ones.</summary>
+        private const int LampRedrawsAFrame = 2;
 
         /// <summary>Draws placed this far past a lamp's reach are still made into its map: a big thing reaches in.</summary>
         private const float LampCasterMargin = 15;
@@ -27,7 +31,10 @@ namespace DaraletPlayer.Ui {
         /// the first cube maps left every pixel in a lamp's shadow). So nothing nearer the light than this counts (the
         /// faces' near plane), and a draw placed within LampOwnModel of it (the lantern itself) isn't made into its map.
         /// </summary>
-        private const float LampNear = 0.35f;
+        // 1 m, not the first 0.35: a beam beside the Holtburg tavern's lantern hid the wall below it from the light, so the
+        // wall went dark wherever that lamp had a shadow map, and lit again where it didn't (the user saw the lights go off
+        // and on walking about the room, November 2026)
+        private const float LampNear = 1.0f;
 
         private const float LampOwnModel = 0.75f;
 
@@ -41,6 +48,10 @@ namespace DaraletPlayer.Ui {
         };
 
         private readonly CubeTexture[] lampCubes = new CubeTexture[LampsWithShadows];
+
+        /// <summary>Which lamp (its place) each map was last drawn for.</summary>
+        private readonly Vector3?[] cubeLamp = new Vector3?[LampsWithShadows];
+        private int lampRedrawTurn;
         private Surface lampCubeDepth;
         private IntPtr lampShadowVertexShader;
         private IntPtr lampShadowPixelShader;
@@ -52,7 +63,12 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         private float[] DrawLampShadows(Device device, IList<(Vector3 Place, float Reach, bool Casts)> chosen,
             Vector3 you) {
-            var which = new[] { -1f, -1f };
+            var which = new float[LampsWithShadows];
+
+            for (var k = 0; k < which.Length; k++) {
+                which[k] = -1;
+            }
+
             var picked = chosen.Select((l, i) => (Light: l, Index: i))
                 .Where(c => c.Light.Casts && c.Light.Reach >= 2)
                 .OrderBy(c => (c.Light.Place - you).LengthSq())
@@ -64,6 +80,51 @@ namespace DaraletPlayer.Ui {
             }
 
             EnsureLampCubes(device);
+
+            // each lamp keeps the map it had (lamps don't move): a new one takes a map no lamp picked now holds
+            var cubeOf = new int[picked.Count];
+            var taken = new bool[LampsWithShadows];
+
+            for (var p = 0; p < picked.Count; p++) {
+                cubeOf[p] = -1;
+
+                for (var k = 0; k < LampsWithShadows; k++) {
+                    if (!taken[k] && cubeLamp[k].HasValue
+                        && (cubeLamp[k].Value - picked[p].Light.Place).LengthSq() < 0.01f) {
+                        cubeOf[p] = k;
+                        taken[k] = true;
+                        break;
+                    }
+                }
+            }
+
+            var toDraw = new List<int>();
+
+            for (var p = 0; p < picked.Count; p++) {
+                if (cubeOf[p] >= 0) {
+                    continue;
+                }
+
+                for (var k = 0; k < LampsWithShadows; k++) {
+                    if (!taken[k]) {
+                        cubeOf[p] = k;
+                        taken[k] = true;
+                        cubeLamp[k] = picked[p].Light.Place;
+                        toDraw.Add(p);
+                        break;
+                    }
+                }
+            }
+
+            // and a couple of the kept ones each frame, in turn, so a character walking by shows in them
+            for (var n = 0; n < LampRedrawsAFrame && toDraw.Count < picked.Count; n++) {
+                lampRedrawTurn = (lampRedrawTurn + 1) % picked.Count;
+
+                if (!toDraw.Contains(lampRedrawTurn)) {
+                    toDraw.Add(lampRedrawTurn);
+                }
+            }
+
             var oldTarget = device.GetRenderTarget(0);
             var oldDepth = device.DepthStencilSurface;
             var made = 0;
@@ -71,9 +132,12 @@ namespace DaraletPlayer.Ui {
             try {
                 PrepareLampShadowDrawing(device);
 
-                for (var k = 0; k < picked.Count; k++) {
-                    made += DrawCube(device, lampCubes[k], picked[k].Light.Place, picked[k].Light.Reach);
-                    which[k] = picked[k].Index;
+                foreach (var p in toDraw) {
+                    made += DrawCube(device, lampCubes[cubeOf[p]], picked[p].Light.Place, picked[p].Light.Reach);
+                }
+
+                for (var p = 0; p < picked.Count; p++) {
+                    which[cubeOf[p]] = picked[p].Index;
                 }
             }
             finally {
@@ -84,9 +148,13 @@ namespace DaraletPlayer.Ui {
             }
 
             if (DateTime.UtcNow >= nextLampShadowReport) {
-                nextLampShadowReport = DateTime.UtcNow.AddSeconds(30);
-                PluginCore.LogFile($"[lamps] {picked.Count} lamps with cube shadow maps, {made} draws made into them "
-                    + $"this frame, of {ShadowCasters.Count} noted");
+                nextLampShadowReport = DateTime.UtcNow.AddSeconds(10);
+                PluginCore.LogFile($"[lamps] {picked.Count} lamps with cube shadow maps, {toDraw.Count} drawn, "
+                    + $"{made} draws made into them "
+                    + $"this frame, of {ShadowCasters.Count} noted; left out since: {ShadowCasters.OtherStride} of another "
+                    + $"vertex size ({ShadowCasters.LastOtherStride}), {ShadowCasters.NotManaged} not managed");
+                ShadowCasters.OtherStride = 0;
+                ShadowCasters.NotManaged = 0;
             }
 
             return which;
@@ -196,6 +264,7 @@ namespace DaraletPlayer.Ui {
             for (var k = 0; k < LampsWithShadows; k++) {
                 lampCubes[k]?.Dispose();
                 lampCubes[k] = null;
+                cubeLamp[k] = null;
             }
 
             lampCubeDepth?.Dispose();

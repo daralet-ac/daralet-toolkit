@@ -24,7 +24,7 @@ namespace DaraletPlayer.Ui {
         private const long LowMemoryMegabytes = 512;
 
         /// <summary>Less than this and nothing that draws more is loaded.</summary>
-        private const long RaiseMemoryMegabytes = 1024;
+        private const long RaiseMemoryMegabytes = 1400;
 
         /// <summary>
         /// The landscape's own cost next to a landblock of scenery: about 1 MB a block, measured in the game (November
@@ -47,8 +47,75 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         private const double MegabytesPerCost = 8;
 
-        /// <summary>What has to be left free after a load, by the estimate: the game needs room for everything else.</summary>
-        private const long HeadroomMegabytes = 768;
+        /// <summary>
+        /// The most the learned rate goes to: 8 at first, but the full-detail rings at Drudge Temple took 12 to 15 MB a unit,
+        /// the guard counted 8, and the game was left too little for a teleport (November 2026).
+        /// </summary>
+        private const double MaxLearnedPerCost = 16;
+
+        /// <summary>
+        /// The MB a unit the guard goes by: MegabytesPerCost at first, then learned from each load up of 10 units or more
+        /// (its use a quarter over what was measured, half old and half new, between 2 and MaxLearnedPerCost). The fixed 8 dated from
+        /// before the billboards were made lean: after it, a step up measured 1.8 to 2.4 MB a unit while the guard
+        /// counted 8, and refused at Holtburg settings that fit with a gigabyte to spare (November 2026).
+        /// </summary>
+        private double megabytesPerCost = MegabytesPerCost;
+
+        /// <summary>
+        /// The costliest settings loaded since the last teleport (or start): going back up to them needs little more
+        /// memory, the game keeping what they read. Forgotten in portal space, the next place's being another matter.
+        /// </summary>
+        private double highestCostHere;
+
+        /// <summary>Why the game's cache is to be trimmed once loading has settled, or null (GameCache).</summary>
+        private string cacheFlushWanted;
+
+        private DateTime lastCacheFlush = DateTime.MinValue;
+
+        /// <summary>Whether the game's cache is trimmed by itself (off; the test step flushcache still does it).</summary>
+        public static bool AutoFlushCache;
+
+        /// <summary>
+        /// The game's free objects let go (GameCache) once a load has settled, after a teleport or the draw distance
+        /// lowered, or when memory runs low; at most once every 30 seconds, never in portal space or mid-load.
+        /// </summary>
+        private void MaybeFlushCache() {
+            // off: it never gave back a megabyte, and a teleport 8 seconds after one crashed the game in AnimData::UnPack
+            // (0x526A66), unpacking data already let go, the same function as an earlier crash (0x526A8A; November 2026)
+            if (!AutoFlushCache) {
+                cacheFlushWanted = null;
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+
+            if (cacheFlushWanted == null && FreeMegabytes() is var free && free >= 0
+                && free < HeadroomMegabytes + 200 && (now - lastCacheFlush).TotalSeconds >= 60) {
+                cacheFlushWanted = "memory low";
+            }
+
+            if (cacheFlushWanted == null || inPortalSpace || !LoadSettled() || (now - lastCacheFlush).TotalSeconds < 30) {
+                return;
+            }
+
+            try {
+                GameCache.FlushFree(cacheFlushWanted);
+            }
+            catch (Exception ex) {
+                PluginCore.LogFile("[cache] " + ex.Message);
+            }
+
+            cacheFlushWanted = null;
+            lastCacheFlush = now;
+        }
+
+        /// <summary>
+        /// What has to be left free after a load, by the estimate: the game needs room for everything else, and a teleport
+        /// loads a whole new place. It was 768: with 1.1 GB free at Holtburg (Scenery 2, Ground 6, Landscape 18) a teleport
+        /// to Drudge Cave ran the game out of memory (November 2026). 1.4 GB then; 1.1 GB, once a teleport let go of
+        /// the far scenery and the full-detail rings, crashed a teleport from Drudge Temple with 1.19 GB free.
+        /// </summary>
+        private const long HeadroomMegabytes = 1400;
 
         /// <summary>When to note what the last load took (5 seconds after it), and what was free just before it.</summary>
         private DateTime measureLoadAt = DateTime.MaxValue;
@@ -156,6 +223,8 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>Whether settings costing this may be loaded now: always if no more than now, else if memory allows.</summary>
         private bool MayLoad(double wanted) {
+            highestCostHere = Math.Max(highestCostHere, loadedCost);
+
             if (wanted <= loadedCost + 0.5) {
                 raiseRefused = null;
                 return true;
@@ -163,6 +232,14 @@ namespace DaraletPlayer.Ui {
 
             string why = null;
             var free = FreeMegabytes();
+
+            // back up to settings already loaded here: the game kept what they read, so lowering freed nothing and going
+            // back takes little more (November 2026: Balanced to Performance took free memory down, not up, and the
+            // guard then refused Balanced again for want of memory it was in fact holding)
+            if (wanted <= highestCostHere + 0.5 && free >= LowMemoryMegabytes + 256) {
+                raiseRefused = null;
+                return true;
+            }
 
             if (ranOutAt > 0 && wanted >= ranOutAt * 0.9) {
                 why = "That's about as much as ran the game out of memory before: turn Scenery, Scenery density or "
@@ -190,7 +267,7 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>About how much more memory loading this would take than what's loaded now.</summary>
         private double NeedsMegabytes(double wanted) {
-            return Math.Max(0, wanted - loadedCost) * MegabytesPerCost;
+            return Math.Max(0, wanted - loadedCost) * megabytesPerCost;
         }
 
         /// <summary>A load is starting: what's free before it, so its cost can be measured a few seconds on.</summary>
@@ -216,6 +293,14 @@ namespace DaraletPlayer.Ui {
             var rate = Math.Abs(units) >= 1 ? $", {(freeBeforeLoad - free) / units:0.0} MB a unit" : "";
             PluginCore.LogFile($"[draw-distance] loaded cost {loadedCost:0} (from {costBeforeLoad:0}): {free} MB free, "
                 + $"from {freeBeforeLoad}{rate}");
+
+            var used = freeBeforeLoad - free;
+
+            if (units >= 10 && used > 0 && free >= 0) {
+                var learned = Math.Max(2, Math.Min(MaxLearnedPerCost, used / units * 1.25));
+                megabytesPerCost = (megabytesPerCost + learned) / 2;
+                PluginCore.LogFile($"[draw-distance] the memory guard now counts {megabytesPerCost:0.0} MB a unit");
+            }
         }
 
         [StructLayout(LayoutKind.Sequential)]

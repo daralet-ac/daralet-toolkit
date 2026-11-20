@@ -58,13 +58,23 @@ namespace DaraletPlayer.Ui {
         internal static DxTexture MakeTexture(Device device, uint[] pixels, int width, int height) {
             var levels = MipChain.Levels(pixels, width, height);
             levels.Insert(0, (pixels, width, height));
-            var texture = new DxTexture(device, width, height, levels.Count, Usage.None, Format.A8R8G8B8, Pool.Managed);
+            // video memory only (ScenePool): a default-pool texture can't be locked, so it's filled in system memory
+            // and copied across, and the system copy let go
+            var pool = ScenePool.VideoOnly ? Pool.SystemMemory : Pool.Managed;
+            var texture = new DxTexture(device, width, height, levels.Count, Usage.None, Format.A8R8G8B8, pool);
 
             for (var level = 0; level < levels.Count; level++) {
                 Fill(texture, level, levels[level].Pixels, levels[level].Width, levels[level].Height);
             }
 
-            return texture;
+            if (!ScenePool.VideoOnly) {
+                return texture;
+            }
+
+            var onCard = new DxTexture(device, width, height, levels.Count, Usage.None, Format.A8R8G8B8, Pool.Default);
+            device.UpdateTexture(texture, onCard);
+            texture.Dispose();
+            return onCard;
         }
 
         private static void Fill(DxTexture texture, int level, uint[] pixels, int width, int height) {
@@ -203,6 +213,22 @@ namespace DaraletPlayer.Ui {
 
         internal static Quaternion Quat(UtilityBelt.Common.Messages.Types.Quaternion q) {
             return new Quaternion(q.X, q.Y, q.Z, q.W);
+        }
+
+        /// <summary>
+        /// Every model but these let go, picture and all: kept for every model ever seen, each new area's added to the
+        /// game's memory for good (November 2026: the game's private memory grew 50 to 100 MB a few teleports, the
+        /// pictures being in Direct3D's managed pool, outside the plugin's heap). How many went.
+        /// </summary>
+        public int KeepOnly(HashSet<uint> used) {
+            var gone = models.Keys.Where(id => !used.Contains(id)).ToList();
+
+            foreach (var id in gone) {
+                models[id]?.Texture.Dispose();
+                models.Remove(id);
+            }
+
+            return gone.Count;
         }
 
         public void Dispose() {

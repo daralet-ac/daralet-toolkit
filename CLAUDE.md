@@ -1311,7 +1311,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`DrawDistanceRamp.Cautious...`): twice a login stepped scenery 1 to 3 and landscape 15 to 18 two and a half seconds
   in, and crashed in `make_plane` (`0x539153`) a second later, the world still streaming in; so no step for 8 seconds
   after logging in (LoginStatus turning 3, a hot reload too) or leaving portal space, then one scenery ring and two
-  landscape rings a step until 38 seconds have gone by. That alone didn't do it (1 to 2 with 15 to 17 crashed the same way): every one of these crashes had the scenery and the landscape go up in the same step, the scenery refreshed in place and the landscape reloaded whole straight after, while either alone never crashed. So **one goes up a step, never both** (`DrawDistanceRamp.OneAtATime`: the landscape first), and the scenery a ring at a time (`SceneryStep` 1). Untested in the game when written. **Faster, with a loading bar** (the user's call: "a bad UX how long it takes to load"): the wait after login or a portal is 4 seconds, landscape steps are 3 rings even then, and while stepping up it's looked at four times a second, not once, so a step follows the last as soon as it's settled; a bar at the top of the screen (`DrawDistance.Progress.cs`, a NoInputs hud of its own) says what's loading and how far along, then Done for a moment.
+  landscape rings a step until 38 seconds have gone by. That alone didn't do it (1 to 2 with 15 to 17 crashed the same way): every one of these crashes had the scenery and the landscape go up in the same step, the scenery refreshed in place and the landscape reloaded whole straight after, while either alone never crashed. So **one goes up a step, never both** (`DrawDistanceRamp.OneAtATime`: the landscape first), and the scenery a ring at a time (`SceneryStep` 1). Untested in the game when written. **Faster, with a loading bar** (the user's call: "a bad UX how long it takes to load"): the wait after login or a portal is 4 seconds, landscape steps are 3 rings even then, and while stepping up it's looked at four times a second, not once, so a step follows the last as soon as it's settled; a bar at the top of the screen (`DrawDistance.Progress.cs`, a NoInputs hud of its own) says what's loading and how far along, then Done for a moment. **Teleports** (November 2026, the teleport test: round trips between Holtburg, Landscape 18, and Yaraq with `chat /telepoi Yaraq` and the overlook's `/teleloc`): taking the draw distance down in portal space (`PortalReload`, now off; `set portalreload 1` for a test) crashed one teleport in four, its reload in the same second as the game's own load of the new place (`0x58712F`, `0x539153`); dropping to 5 (`PortalLandscape`) instead of the game's 15 didn't help. Left as it is, 10 of 10 came through. `0x58712F` is the game emptying a hash table (`0x5870F0`) whose count says it holds something while every bucket is empty: every crash there came after two landscape reloads close together, so the landscape goes up in one reload (`LandscapeStep` all of it; five steps of 3 in 12 seconds crashed there with 2.4 GB free) and no reload comes within 5 seconds of the last (`LoadQuietSeconds`). The memory guard learns its MB a unit from each load of 10 units or more (`megabytesPerCost`, a quarter over what was measured, between 2 and 8): its fixed 8 refused settings that fit by a gigabyte once the billboards were lean.
   Seen
   at scenery 14, 12%: 1.3 GB free in one piece of 1.15 GB, so the address space isn't in pieces, and the device
   stayed fine. Tried in the game: login to scenery 14 at 12% stepped up with four short hangs (0.3 s
@@ -2326,6 +2326,14 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   where it's under 12 pixels on screen (`RippleSlope`'s `metersPerPixel`, slanted by the view), the waves are
   1.7 to 6.3 m and gentler, the reflection takes the hue of the water under it half way, Fresnel's lift is 1.3,
   and Strength starts at 35%. The large river by Cragstone, from the hill above town, is the other place to tune it.
+  The reflection fades out from 450 to 740 m from the camera, inside the water map's 4 landblocks: it used to stop at
+  the map's edge, a step in the water's tone far off (seen in the game, November 2026).
+  **Hits must stand above the water** (`water.ps.hlsl`, the march): looking across a river from its bank, the rays
+  skimmed the water and the march took the water surface further out for a hit, reflecting the game's dark raw water:
+  a hard dark band along the far bank and dark dashes across the far water (the user's eye, November 2026; told from
+  the plugin's land and the soft shores by shots with each off). A hit now counts only where the scene there is 0.4 m
+  over the water's height. And far off the reflection reaches nearer the shore (`shoreFrom` 0.45 near you to 0.2 past
+  300 m), so the game's raw water left before each shore is narrower.
 - **Image: anti-aliasing and sharpening** (`Ui/DepthShading.Image.cs`, `Shaders/antialias.ps.hlsl`,
   `Shaders/sharpen.ps.hlsl`, `Feed/ImageOptions.cs`, `SettingsData.Image`, `image`, off to start; the Graphics tab's
   Image section, `OptionsPanel.Image.cs`; test steps `set antialias|sharpen`; the user's call, November 2026). The
@@ -2458,6 +2466,38 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   buildings start past the full-detail ring, where the game's stop. Tried in the game (a desert overlook, Scenery 4):
   Ground 4 to 8 stepped up in 12 s, the road ran on to the horizon, 132 fps to 91 and 336 MB (`GroundBlockCost`
   0.2). Walking toward far blocks untested when written. `[ground]` lines in log.txt.
+- **Memory for teleports** (November 2026, the test suite below): a teleport loads a whole new place while the old is
+  still held, so the memory guard keeps 1.4 GB free (`HeadroomMegabytes`, `RaiseMemoryMegabytes`, and the budget bar's
+  `SpareMb`): 768 MB let a teleport from Holtburg (Scenery 2, Ground 6, Landscape 18, 1.1 GB free) run the game "OUT OF
+  MEMORY" (its own error box), and 1.1 GB crashed one from Drudge Temple in `make_plane`. In portal space the far
+  scenery is let go (`ReleaseFarScenery`: buffers, every block's worked-out scenery, a full collection) and the
+  full-detail rings go back to the game's 1, a code patch with no reload (out of a dungeon nothing outdoors is loaded,
+  and with the rings at 6 that cold load crashed the game in its unpacking, `0x526A8A`, with 2.5 GB free); they step
+  back up in place once you're there, nothing stepping while in portal space (`inPortalSpace`). The guard learns its MB
+  a unit up to 16 (`MaxLearnedPerCost`: the rings at Drudge Temple took 12 to 15) and remembers the costliest settings
+  loaded since the last teleport (`highestCostHere`): lowering the draw distance frees nothing (the game keeps what it
+  read), so going back up to them is let through. Presets to fit: Performance 1/6/15, Balanced 2/6/16, Quality 2/7/16.
+  The game alone, at its own Landscape 15 at Holtburg, uses about 2.6 GB of its 4 GB: memory, not the plugin's extras
+  (billboards about 25 MB, 3D trees about 1, far buildings 4, the screen passes none measurable), is what limits the
+  presets, which is what plugin-drawn far land (SESSION-HANDOFF.md) is for.
+  **Models no longer in sight are let go** (`BillboardModels.KeepOnly`, `FarTreeModels.KeepOnly`, after each build from
+  `usedModels`): every model ever seen was kept, in Direct3D's managed pool outside the plugin's heap, and the game's
+  free memory fell 60 to 100 MB every six teleports; after, a leak loop of 8 round trips held flat (1,867 to 1,850 MB,
+  the plugin's heap 117 MB throughout). **The game's cache** (`Ui/GameCache.cs`): `DBCache::FlushFreeObjects`
+  (`0x4144E0`, thiscall on `[0x837BAC]`, 0 for every object cache in its table at `0x81860C`; the game calls it so
+  itself at `0x411BD0`) is called once loading has settled after a teleport, the draw distance lowered, or memory low
+  (`MaybeFlushCache`); in every test it gave back 0 MB, so whether the free lists are empty or the call misses them is
+  open. `0x58712F`, the earlier crash, is `0x5870F0` emptying a hash table inside that cache code (`0x415098`).
+  **Video memory only** (`DrawDistanceOptions.VideoMemory`, `videoMemory`, off to start; `Ui/ScenePool.cs`,
+  `DrawDistance.VideoMemory.cs`; the user's call: a setting of its own): the billboards' and 3D trees' buffers in the
+  default pool and their pictures filled in system memory then copied across (`device.UpdateTexture`), let go before a
+  device reset (a hidden hud's `OnDestroyTextures`) and made again; tried in the game: switched both ways cleanly,
+  about 35 MB saved at Holtburg. **Test tools**: steps `memory label` (free, largest piece, private, managed after a full
+  collection) and `flushcache`, `set videomemory|portalreload|ground`; a run.txt is read the moment it appears, so write
+  it to a temp file and move it in. The suite (random places from locations.xml with `/tele 37s,67w`, dungeons by name
+  with `/teledungeon <name>`, wilderness runs, settings churn, memory snapshots at the Holtburg overlook between) and a
+  watcher (crash and error boxes closed, a game frozen 15 s ended so Auto relaunch restarts it, a silent plugin log
+  flagged) are scripts kept outside the repo (SESSION-HANDOFF.md says what they do).
 - **Far buildings** (`Ui/DrawDistance.FarBuildings.cs`, `DrawDistanceOptions.FarBuildings`, `farBuildings`, off to start; the
   Far buildings row under 3D trees; test step `set farbuildings 1`; the user's call, November 2026: a town two
   landblocks off vanished with a step back). The game makes a block's buildings and the dats' placed objects only in
@@ -2466,6 +2506,67 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (the game's own models, instanced), turned by the yaw of its quaternion (2 atan2(z, w)), size 1, raised or lowered
   by the coarse ground's distance from the true ground under its origin. Models under 2 m are left out. `[far-buildings]`
   lines in log.txt. Untested in the game when written.
+- **Far land** (`Ui/FarLand.cs`, `Shaders/farland.vs.hlsl`, `farland.ps.hlsl`, `DrawDistanceOptions.FarLand`, `farLand`,
+  rings past the game's landscape, 0 to start, 32 at most, working with Draw Distance off as the fog does; no row on the
+  page yet; test step `set farland N`; the user's call, November 2026: keep the game's landscape low, its blocks cost
+  about 1 MB each, and draw the land beyond for a few MB). Stage 1 of SESSION-HANDOFF.md's plan. Every block from the
+  game's last loaded ring (`LScape::mid_radius`, the LScape at `[0x8456F0]`, `+0`) out: its 81 heights through the
+  region's LandHeightTable, cells split by `SceneryLayout.SplitNwSe`, normals from the heights, each vertex its
+  terrain's texture averaged (a road vertex terrain 0x20's), a 30 m skirt down each edge; read from the cell dat's file
+  bytes (`GetReaderForFile`, then `CellLandblock.Unpack`), not `ReadFromDat`, whose FileCache keeps every file for
+  good; 3 ms a frame of reading, nearest first; one managed buffer, 32-bit indices, built round your landblock and
+  shifted into the camera's. **Drawn only where the game drew nothing**, in WorldPass: the game's projection ends near
+  3.3 km, so the land has its own (the game's with the far plane at 60 km, near 10 m), and its depths can't mix with
+  the game's. A screen quad at depth 1 (LessEqual) sets the stencil's top bit where the depth is still the cleared 1.0
+  and clears it elsewhere (only that bit: `StencilWriteMask` 0x80); the land is drawn there alone, depth tested and
+  written with its own depths; then a quad puts depth 1.0 back there, so billboards and the game's see-through things
+  test as before. Lit as the game's ground: ambient plus the sun on the normal, times 0.88 (`GroundLight`), measured
+  where the far land meets the game's ground with the red test tint (`set farlanddebug 1`): Grass's 1.15 came out 1.31
+  times as bright as the game's (86, 88, 39 against 66, 67, 31; after, 67, 68, 31), a bright band past that line that
+  the player saw first on a tan island in the river; the game's fog.
+  Tried in the game (the Holtburg overlook, landscape 11, fog 10%): rings 11 to 24, 1,960 blocks, 376,320 triangles,
+  10.4 MB, built in 49 ms; the far snow-capped mountains showed where there had been sky, 90 fps, free memory 90 MB
+  less (the buffers' system copies and the build's lists, not collected yet). `[far-land]` lines in log.txt.
+  Water terrains (0x10 to 0x14) are their own blue textures (0x10 `234C6E`, 0x11 teal `154450`, 0x12 to 0x14 darker),
+  lit as the ground (with water reflections off, 25, 57, 77 against the game's 27, 57, 74). A fixed
+  blue came first, taken for right because the vertex colours had averaged narrow rivers with the grass beside them
+  into olive.
+  **Billboards on the far land** (`FarLandBillboardRings`: with Billboards
+  and far land both on): `UpdateBillboards` takes blocks out to the far land's edge, those past the game's landscape
+  (`billboardLandscape`) standing on the true ground (the far land is full detail), with no 3D trees or far buildings,
+  in runs of their own after the rest (`farLandBatches`), which `FarLand` draws inside its pass with its camera
+  (`DrawFarLandBillboards`, the state block taking the projection back). Tried in the game, fresh restarts at the
+  overlook, far land to ring 24, video memory on: landscape 5, 1,736 MB free, 91 fps; landscape 11, 1,626 MB free,
+  89 fps; the two look all but the same (135,559 billboards, 133,294 on the far land at 5). So a game block cost about
+  0.27 MB here, not the 1 MB measured before, and lowering the landscape saves less than hoped at Holtburg.
+  **Textures** (`Ui/FarLand.Textures.cs`): one R5G6B5 atlas in the default pool (4096 square, 7 levels, about 43 MB
+  of video memory, none of the game's 4 GB), 64 pixels a block, each block at its landblock x and y mod 64 so filtering
+  across an edge reads the neighbour; each pixel the four corner terrains' textures (each shrunk to 8 pixels a cell,
+  one copy a cell as the game lays them) laid as the game lays them: `Feed/TerrainBlend.cs` ports the client's rules
+  (ACE's TexMerge: the palette code, the base terrain and up to three overlays by corner set, road codes, the alpha map
+  picked by a hash of the code), and `Ui/FarLand.Shapes.cs` reads the region's corner, side and road alpha maps (some
+  surface textures' first picture isn't in the portal dat: the first one it has is taken), shrunk to a cell's 8 pixels in
+  each of four turns, each turn the one whose solid corners are the set's. The maps hold how much of the layer under
+  shows (every one's solid corners were its code's complement), so they're inverted; their turns then run 8, 1, 2, 4
+  for a corner map, the client's own order. Seen in the game: subtle at a distance (the user's call, November 2026,
+  for the same edges as the game's). Baked 4 ms
+  a frame into a system-memory texture and copied in (`UpdateSurface`, level by level); the buffers are made only once
+  their blocks are baked. A set of blocks wanted mid-bake (the landscape changing) has to queue its bakes again, or its
+  new blocks stayed black (the default pool starts zeroed): seen in the game. A hidden hud lets the atlas go before a
+  device reset; vertex colours are drawn until it's baked again.
+  **Taking over the game's coarse rings** (`Ui/FarLand.Takeover.cs`, `DrawDistanceOptions.FarLandNear`, `farLandNear`,
+  off to start; test step `set farlandnear 1`; the user's call, November 2026: distant water and rivers lose their
+  shape in the rings the game draws from every 2nd, 4th or 8th point, and Ground detail costs too much memory there).
+  `RenderDeviceD3D::DrawBlock` (`0x5A28D0`, thiscall, the CLandBlock, `ret 4`) draws one block's ground (its cells'
+  DrawLandCell, vtable `+0x54`, then sort cells, `+0x58`), called through the device's vtable, slot `0x7E6638`, which
+  is pointed at the plugin while on (checked to hold `0x5A28D0` first). A block under full detail (`+0x48` under 8,
+  its id at `+0x28`) that the far land has built is skipped; the nearest such ring seen each second is where the far
+  land starts (`nearestCoarseRing`). Those blocks (`wantedNear`, ring up to the landscape) are drawn first, with the
+  game's own camera, real depths and no stencil, so billboards, trees and buildings sort against them; billboards
+  there stand on the full-detail ground (`FarLandTakesOver`). Anything standing in a skipped block's cells (creatures
+  half a kilometer off) isn't drawn. Tried in the game (landscape 8, rings 3 to 8 taken over, 264 blocks): the river
+  keeps its shape, 92 fps, about 6,000 block draws skipped a second. The game still loads those blocks, so this is
+  for looks, not memory.
 - **Memory** (`Ui/FrameRateWindow.Memory.cs`, `Feed/MemoryHistory.cs`, `MemorySample.cs`; the user's call, November 2026:
   "the client's memory leak is my top concern"): the Frame Rate window's Memory section, every 2 s from login whether
   it shows or not: the 32-bit address space used of its total (GlobalMemoryStatusEx; the real limit), private bytes
@@ -2486,13 +2587,13 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   far water looked the same: likely the wavy texture squashed by foreshortening, which filtering can't undo, or the
   terrain's blending stages not taking the setting (not looked into). Kept, off to start; whether it sharpens roads
   and ground far off is unchecked.
-- **Where the device's world is measured from** (`Ui/RenderOrigin.cs`): the camera's landblock, not your character's.
+- **Where the device's world is measured from** (`Ui/RenderOrigin.cs`): the camera's landblock, not your character's. Whether the device's camera is the swapped one some effects use is told the same way (`RenderOrigin.Swapped`: where the view puts the camera against the game's camera); going by how far your character was from it each way guessed wrong wherever your height and north differed by about 6 m, and the far land, billboards, 3D trees and grass vanished there (seen in the game, November 2026).
   The game keeps the camera's Position at `0x81FF10` (cell `+4`, origin `+0x3C`: the device's camera exactly, height and
   north swapped as the device has them; the test step `camera` logs both). A step across a landblock's edge with the
   camera still behind you moved the shadow maps and the far scenery 192 m (the user's screenshots, November 2026). So
   everything drawn in the 3D world measures from `RenderOrigin.Landblock` (billboards, 3D trees, grass, shadow maps,
   the water map, lamps), your place is `RenderOrigin.Player()`, and billboards and 3D trees made for another landblock
-  are drawn shifted by the landblocks between until they're made again, so the far scenery neither jumps nor blinks. They're built round your character's landblock (the game's full-detail ring is round it), and the centre the drawn buffers are shifted from changes only once the new ones are made (`pendingHome`): set at once, the old ones were drawn a landblock off while the new were worked out, and the far forest vanished at an edge and came back a few steps on (seen in the game).
+  are drawn shifted by the landblocks between until they're made again, so the far scenery neither jumps nor blinks. **Their memory** (November 2026): each billboard's 12 vertices are written once, straight into the locked buffer (`WriteBillboards`), from a reused list of placements (`billboardPlaces`); the build once grew a list of vertices per model, copied them into one array and that into the buffer, three large copies in the large object heap on every landblock crossed, and kept every block's worked-out scenery ever seen (`ForgetScenerySeen` now drops blocks no longer wanted). At Holtburg with 76,435 billboards a fresh login had 679 MB free before and 1,099 after; the plugin's heap held at about 152 MB through rebuilds. They're built round your character's landblock (the game's full-detail ring is round it), and the centre the drawn buffers are shifted from changes only once the new ones are made (`pendingHome`): set at once, the old ones were drawn a landblock off while the new were worked out, and the far forest vanished at an edge and came back a few steps on (seen in the game).
   The memory panel's time-left warning waits for five minutes of readings and goes by the 15-minute rate: a minute
   holding a landscape load read +105 MB/min.
 - **Lamp light and glow** (the user's call, November 2026: "lighting/shadows from non-sun light sources, and maybe
@@ -2513,13 +2614,32 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   colour times intensity over ten (to one). Seen indoors at Holtburg: the wall and stones by a lantern warmer, 164 fps.
   **Lamp shadows from cube maps** (`Ui/DepthShading.LampShadows.cs`, `Shaders/lampshadow.vs.hlsl`, `lampshadow.ps.hlsl`):
   the first, marched through the depth buffer, "look awkward, of the character and especially whatever is making that
-  shadow on the wall" (the user): a march only knows what's on screen. Now the two lamps nearest you that cast shadows
-  get a cube map each (six 90-degree faces, 512, R32F, distance over reach; one D24S8 surface shared), drawn from the
+  shadow on the wall" (the user): a march only knows what's on screen. Now the six lamps nearest you that cast shadows
+  get a cube map each, kept between frames (a new lamp drawn at once, two kept ones again each frame in turn) (six 90-degree faces, 512, R32F, distance over reach; one D24S8 surface shared), drawn from the
   noted game draws within the lamp's reach and 15 m (the hooks are in while sun or lamp shadows want them), and the
   pass compares a place's distance with the map's that way (five spread samples). The lamp's light sits inside its own
-  lantern, which then hid everything from it (every pixel came out shadowed): nothing within 35 cm counts (the near
-  plane) and draws placed within 75 cm (the lantern) aren't made; the ceiling's beams by a lamp shadowed themselves in
-  stripes until a grazing surface got more allowance. `depthview 4` shows what the first shadowed lamp sees. Seen: your
+  lantern, which then hid everything from it (every pixel came out shadowed): nothing within 1 m counts (the near
+  plane: 35 cm at first, and a beam by the tavern's lantern darkened the wall below) and draws placed within 75 cm (the lantern) aren't made; the ceiling's beams by a lamp shadowed themselves in
+  stripes until a grazing surface was looked up further off it along its normal (a bigger allowance let light past
+  walls' feet onto the ground outside). Each map is looked up once, before the shader's loop over the lights
+  (`MapSeen`, the maps' lamps in c24 to c29): six lookups in the loop ran out of registers. **In the game's place**
+  (`LampLightOptions.Replace`, on to start, with shadows; `Ui/GameLampSwitch.cs`): the device's LightEnable (vtable
+  53) is hooked and refuses point and spot lights, so the game's lamps, which nothing blocks, light nothing, and a lamp
+  with no map lights nothing either: no light through walls or floors, and none of the subtracting shadow pass.
+  **Reach** (`Reach`, 100 to 300% of the game's, 150 to start): the Holtburg tavern's lamps reach 4.5 to 7.5 m, hung
+  9 m in from the west door; at 300% the open door throws a beam outside with your shadow in it (seen in the game,
+  November 2026). Characters lose the game lamps' warm tint. A line of light along the walls' feet was the lookup point on a wall's bottom row: a
+  wall is one sheet, so its outside is as far from a lamp inside as the wall, and the crease's normal pointed up; the
+  point is now also moved 30 cm toward the camera (10 cm fixed walls seen face on, not an angled one), and normals
+  come from the neighbouring pixel on the same surface each way, not the 2x2 block. A pixel also takes the least light any of its
+  four neighbour normals gives (a crease pixel has the wall's among them), and, as the ground outdoors isn't in the
+  maps (a ray just under a wall's lower edge found nothing), a point 30 cm above must be seen too, softly, where
+  something is within half a meter of it (`nearWall`; further, your body cast a second, stepped shadow). Shadows soften with distance
+  from what casts them, the lamp taken as a light 40 cm across (1.5 m washed a beam's shape out; 60 cm left your shadow
+  soft): the blocker nearest the place, found over a wide search first (averaged, the door frame blurred your shadow; from the ray alone, a place just outside a shadow found none and the edge stayed
+  hard), then nine samples spread by how far past them the place is, turned by a hash of the place so the map's
+  texels don't show as steps on the ground and the light fades out as
+  (1 - x squared) squared: the beam outside the door ended in a hard line (the user, November 2026). `depthview 4` shows what the first shadowed lamp sees. Seen: your
   legs' and the table's shadows on the floor, the pillar's far side dark, the wall no longer shadowed for nothing.
   The pass itself:
   **Lamp shadows** (the user's call: player shadows from lamps, as in a room): a shadow pass before the light, the
@@ -2592,7 +2712,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   each way round you, 8 mm texels (the near map's 4 cm left a blob), every caster within 48 m made into it (a tree's
   shadow reaches in), the shader taking it where it covers the pixel; the fixed shadow allowance went from 5 cm to
   2 cm, or the shadow left the feet. Seen in the game: the character shades itself (head on chest, belt, arms) and
-  its ground shadow has crisp edges; 88 fps with trees to 2. **The real trees' cost** (probe at the overlook): to 2
+  its ground shadow has crisp edges; 88 fps with trees to 2. **Your character alone in the close map**
+  (`CharacterReach`, draws placed within 1.5 m of you across the ground; the rest only in the near and far maps), with a
+  softness of its own (`SunShadowOptions.CharacterSoftness`, `characterSoftness`, 2 cm to start; the Character softness
+  row; test step `set charsoftness N`; the user's call, November 2026: characters want other blurring than trees, whose
+  10 cm blunted the character's shadow), the shader taking the darker of the close map and the others
+  (`Shadowed`'s softness argument, `closeTexel.z`). Untested in the game when written (it was night). **The real trees' cost** (probe at the overlook): to 2
   landblocks 3,400 draws and 103,000 triangles a frame at 94 fps, to 3 8,500 and 286,000 at 64: the third ring is
   about 5,100 more draw calls, about a microsecond each, every tree part its own call; nothing in the game's own
   drawing to make cheaper from here. **Softness** (`SunShadowOptions.Softness`, 20 cm to start, 0 to 100; the Softness row; test
@@ -2613,6 +2738,18 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   unless the new one is already there. Only startup does it, so a test that asks `DataFolder` for a path doesn't move
   the developer's real folder. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
   next to the dll (`PluginCore.AssemblyDirectory`).
+- **log.txt for crash reports** (`Ui/SessionLog.cs`, `Feed/CrashReport.cs`, `Feed/GraphicsSummary.cs`; the user's call,
+  November 2026: a player's log.txt alone should be enough to look into a crash). Trimmed past 4 MB into log.old.txt at
+  start. `session.txt` holds the game's process id and the session's start, and a clean shutdown deletes it: one left by
+  another process means the last session didn't end cleanly (a hot reload is the same process). A `[session]` header
+  at login: version, screen, free memory, every graphics setting. The crash itself kills the process where no .NET code
+  can catch it, so its address is only in Windows' Application event log: **opt in** (Config, Troubleshooting, "Read the
+  game's crash records", `SettingsData.ReadCrashRecords`, `readCrashRecords`, off to start; the user's call: reading
+  the event log is normal and read-only, but players may wonder), and after an unclean session the plugin asks it, off
+  the game's thread, for acclient.exe's "Application Error" and "Application Hang" entries since then, each a
+  `[crash]` line with the address (0x400000 plus the fault offset) and the nearest of AcClient.Entrypoint's functions at
+  or below it. Not opted in, the log says how to turn it on. `PluginCore.LogFile` is locked for the other thread.
+  Untested in the game when written.
 - **Settings** (`Settings.cs`, what the file holds in `SettingsData.cs`, each window's in `WindowPlacement.cs`) live in
   `settings.json` there: window positions and visibility, and display options. A DataContract reader skips field initialisers, so new settings
   get their defaults in `SetDefaults`, which runs before a file is read as well. Saved two seconds after the last change.

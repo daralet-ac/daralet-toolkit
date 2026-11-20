@@ -22,7 +22,7 @@ namespace DaraletPlayer.Ui {
     /// </para>
     /// `[test-run]` lines in log.txt too. Nothing happens without a run.txt, so players never see any of it.
     /// </summary>
-    internal sealed class TestRunner : IDisposable {
+    internal sealed partial class TestRunner : IDisposable {
         private const double SettleQuietSeconds = 3;
 
         private static readonly string Folder = DataFolder.For("Test Runs");
@@ -166,10 +166,7 @@ namespace DaraletPlayer.Ui {
                 case "set":
                     Set(step.Field, step.Number);
                     Result($"set {step.Field} {step.Number.ToString(CultureInfo.InvariantCulture)}: "
-                        + settings.Data.DrawDistance.Summary() + "; " + settings.Data.Shading.Summary() + "; "
-                        + settings.Data.Water.Summary() + "; " + settings.Data.Image.Summary() + "; "
-                        + settings.Data.Grass.Summary() + "; " + settings.Data.SunShadows.Summary() + "; "
-                        + settings.Data.LampLight.Summary());
+                        + GraphicsSummary.Of(settings.Data));
                     return true;
                 case "option": {
                     var option = uint.Parse(step.Field);
@@ -184,6 +181,46 @@ namespace DaraletPlayer.Ui {
                         + (set ? $"now {ClientOptions.Get(option)}" : "couldn't be set"));
                     return true;
                 }
+                case "usedoor": {
+                    // the nearest door within 15 m used, as a click on it would (opening or closing it)
+                    var you = CoreManager.Current.Actions;
+                    Decal.Adapter.Wrappers.WorldObject nearest = null;
+                    var best = 15.0;
+
+                    foreach (var o in CoreManager.Current.WorldFilter.GetLandscape()) {
+                        if (o.ObjectClass != Decal.Adapter.Wrappers.ObjectClass.Door) {
+                            continue;
+                        }
+
+                        // Decal's distance is in map units (a degree of the map, 240 m)
+                        var d = CoreManager.Current.WorldFilter.Distance(CoreManager.Current.CharacterFilter.Id, o.Id) * 240;
+
+                        if (d < best) {
+                            best = d;
+                            nearest = o;
+                        }
+                    }
+
+                    if (nearest == null) {
+                        Result("usedoor: no door within 15 m");
+                    }
+                    else {
+                        you.UseItem(nearest.Id, 0);
+                        Result($"usedoor: {nearest.Name} {best:0.0} m off");
+                    }
+
+                    return true;
+                }
+                case "facesaved":
+                    CoreManager.Current.Actions.FaceHeading(pendingFace, true);
+                    Result($"face {pendingFace:0} (saved)");
+                    return true;
+                case "gowaterside":
+                    GoWaterside((int)step.Number);
+                    return true;
+                case "gohighest":
+                    GoHighest((int)step.Number);
+                    return true;
                 case "chat":
                     Result("chat: " + step.Words);
                     noteChatUntil = DateTime.Now.AddSeconds(2);
@@ -248,6 +285,21 @@ namespace DaraletPlayer.Ui {
                         + $"{actions.LocationY:0.00} {actions.LocationZ:0.00}, heading {actions.Heading:0}");
                     return true;
                 }
+                case "memory": {
+                    // for leaks: the address space free (what runs the game out), its largest piece, what Windows counts
+                    // for the game, and the managed heap after a full collection, so only what's still held counts
+                    var (free, largest, pieces) = FrameRateWindow.FreePieces();
+                    var process = System.Diagnostics.Process.GetCurrentProcess();
+                    var managed = GC.GetTotalMemory(true) >> 20;
+                    Result($"memory {step.Text}: {free >> 20} MB free, largest piece {largest >> 20} MB in {pieces}, "
+                        + $"private {process.PrivateMemorySize64 >> 20} MB, managed {managed} MB, handles "
+                        + $"{process.HandleCount}; {drawDistance.Loaded}; landcell "
+                        + $"{unchecked((uint)CoreManager.Current.Actions.Landcell):X8}");
+                    return true;
+                }
+                case "flushcache":
+                    Result($"flushcache: {GameCache.FlushFree("a test run")} MB given back");
+                    return true;
                 case "compare":
                     Result(drawDistance.CompareScenery());
                     return true;
@@ -292,6 +344,10 @@ namespace DaraletPlayer.Ui {
                     CoreManager.Current.Actions.FaceHeading(step.Number, true);
                     Result($"face {step.Number:0}");
                     return true;
+                case "walkshots":
+                    walkShotsTaken = 0;
+                    CoreManager.Current.Actions.SetAutorun(true);
+                    return true;
                 case "walk":
                     // the game's autorun, stopped once the time is up (Finished)
                     CoreManager.Current.Actions.SetAutorun(true);
@@ -322,6 +378,26 @@ namespace DaraletPlayer.Ui {
 
                     Result("probe: " + DrawProbe.Finish());
                     return true;
+                case "walkshots": {
+                    var shots = int.Parse(step.Field);
+
+                    // one due every span / shots seconds, the first at once
+                    if (walkShotsTaken < shots && elapsed >= walkShotsTaken * step.Number / shots) {
+                        walkShotsTaken++;
+                        var path = Path.Combine(Folder, "shots", $"{DateTime.Now:yyyy-MM-dd HH-mm-ss} walk-{walkShotsTaken:00}.png");
+                        var problem = GameScreenshot.Save(path);
+                        var a = CoreManager.Current.Actions;
+                        Result($"walk shot {walkShotsTaken}: {(problem ?? "saved")}, landcell {unchecked((uint)a.Landcell):X8} at "
+                            + $"{a.LocationX:0.00} {a.LocationY:0.00}");
+                    }
+
+                    if (elapsed < step.Number || walkShotsTaken < shots) {
+                        return false;
+                    }
+
+                    CoreManager.Current.Actions.SetAutorun(false);
+                    return true;
+                }
                 case "walk": {
                     if (elapsed < step.Number) {
                         return false;
@@ -473,6 +549,9 @@ namespace DaraletPlayer.Ui {
                 case "glow":
                     settings.Data.Image.Glow = (int)value;
                     break;
+                case "charsoftness":
+                    settings.Data.SunShadows.CharacterSoftness = (int)value;
+                    break;
                 case "sunsoftness":
                     settings.Data.SunShadows.Softness = (int)value;
                     break;
@@ -491,6 +570,9 @@ namespace DaraletPlayer.Ui {
                 case "ground":
                     options.GroundRadius = (int)value;
                     break;
+                case "videomemory":
+                    options.VideoMemory = value != 0;
+                    break;
                 case "portalreload":
                     DrawDistance.PortalReload = value != 0;
                     break;
@@ -499,6 +581,36 @@ namespace DaraletPlayer.Ui {
                     break;
                 case "farbuildings":
                     options.FarBuildings = value != 0;
+                    break;
+                case "lampreplace":
+                    settings.Data.LampLight.Replace = value != 0;
+                    break;
+                case "lampreach":
+                    settings.Data.LampLight.Reach = (int)value;
+                    break;
+                case "walkmode":
+                    WalkMode(value != 0);
+                    break;
+                case "timeofday":
+                    TimeOfDay.Pin(number);
+                    break;
+                case "night":
+                    settings.Data.LampLight.NightDarkness = (int)value;
+                    break;
+                case "nightglow":
+                    settings.Data.LampLight.NightGlow = (int)value;
+                    break;
+                case "lighttrace":
+                    DepthShading.Trace = value != 0;
+                    break;
+                case "farlanddebug":
+                    FarLand.Debug = value != 0;
+                    break;
+                case "farlandnear":
+                    options.FarLandNear = value != 0;
+                    break;
+                case "farland":
+                    options.FarLand = (int)value;
                     break;
             }
 
@@ -581,7 +693,7 @@ namespace DaraletPlayer.Ui {
 
             // stopped mid-walk, the character would run on by itself
             try {
-                if (steps != null && index < steps.Count && steps[index].Kind == "walk") {
+                if (steps != null && index < steps.Count && (steps[index].Kind == "walk" || steps[index].Kind == "walkshots")) {
                     CoreManager.Current.Actions.SetAutorun(false);
                 }
             }

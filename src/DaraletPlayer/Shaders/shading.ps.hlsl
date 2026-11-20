@@ -20,7 +20,7 @@ float4 sunShadow : register(c9);  // strength (0-1, 0 for none), 1 / the map's d
 float4 sunLight : register(c10);  // the game's ambient, its sun on ground facing it (grey levels), far map on, a far texel (m)
 float4 farShadow[4] : register(c11); // rows: view space to the far shadow map
 float4 closeShadow[4] : register(c15); // rows: view space to the close shadow map, the few meters round you
-float4 closeTexel : register(c19);    // the close map's texel (m), the edges' softness (m)
+float4 closeTexel : register(c19);    // the close map's texel (m), the edges' softness (m), your character's (m)
 float4 upView : register(c20);       // which way is up, in view space
 
 float ViewZ(float d) {
@@ -53,9 +53,8 @@ static const float2 Disc[16] = {
 // a 3 by 3 texel filter blended by where the place falls between texels (16 samples), a smooth ramp (hard steps showed
 // each 6 cm texel as a block at the camera's feet). A place sits behind what the map saw by some allowance and still
 // counts as lit: more for a slanting surface, whose texel (and disc) covers a longer stretch of it.
-float Shadowed(sampler map, float4 s, float facing, float texelMeters, float spin) {
+float Shadowed(sampler map, float4 s, float facing, float texelMeters, float spin, float softness) {
     float2 at = float2(s.x * 0.5 + 0.5, 0.5 - s.y * 0.5);
-    float softness = closeTexel.y;
     float bias = (0.02 + texelMeters * (1.5 + 3 * (1 - facing)) + softness * 0.5 * (1 - facing)) * sunShadow.y;
     float radius = softness * sunShadow.w / texelMeters;
 
@@ -232,7 +231,7 @@ float4 main(float2 uv : TEXCOORD0, float2 pixel : VPOS) : COLOR {
                 float farEdge = 1 - max(abs(f.x), abs(f.y));
 
                 if (farEdge > 0) {
-                    shadowed = Shadowed(farMap, f, biasFacing, sunLight.w, spin);
+                    shadowed = Shadowed(farMap, f, biasFacing, sunLight.w, spin, closeTexel.y);
                     covered = saturate(farEdge * 6);
                 }
             }
@@ -240,26 +239,28 @@ float4 main(float2 uv : TEXCOORD0, float2 pixel : VPOS) : COLOR {
             if (nearEdge > 0) {
                 // all near inside its last tenth, then the far map takes over
                 float nearShare = saturate(nearEdge * 10);
-                shadowed = lerp(shadowed, Shadowed(shadowMap, s, biasFacing, sunShadow.z, spin), nearShare);
+                shadowed = lerp(shadowed, Shadowed(shadowMap, s, biasFacing, sunShadow.z, spin, closeTexel.y), nearShare);
                 covered = lerp(covered, sunLight.z > 0.5 ? 1 : saturate(nearEdge * 6), nearShare);
             }
 
-            // the close map round you, 8 mm a texel, where it covers the pixel: a character's arms and legs
+            float hidden = shadowed * covered;
+
+            // the close map round you, 8 mm a texel, where it covers the pixel: your character alone (its arms and legs),
+            // with its own softness; everything else is in the near and far maps, so the darker of the two is the shade
             float3 pc = p + n * (closeTexel.x * lift);
             float4 c = pc.x * closeShadow[0] + pc.y * closeShadow[1] + pc.z * closeShadow[2] + closeShadow[3];
             float closeEdge = 1 - max(abs(c.x), abs(c.y));
 
             if (closeEdge > 0) {
                 float closeShare = saturate(closeEdge * 10);
-                shadowed = lerp(shadowed, Shadowed(closeMap, c, biasFacing, closeTexel.x, spin), closeShare);
-                covered = lerp(covered, 1, closeShare);
+                hidden = max(hidden, Shadowed(closeMap, c, biasFacing, closeTexel.x, spin, closeTexel.z) * closeShare);
             }
 
             // in shadow a surface keeps the game's ambient and loses the sun: the game's own light, ambient plus the sun
             // on it, as the ground is lit (the grass matched it in the game)
             float lit = sunLight.x + sunLight.y * lightFacing;
             float dark = sunLight.x / max(lit, 0.001);
-            light *= lerp(1, dark, shadowed * covered * sunShadow.x);
+            light *= lerp(1, dark, hidden * sunShadow.x);
         }
     }
 

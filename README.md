@@ -167,8 +167,12 @@ on the other end.
   works.
 - **Lines starting with `DAP2|` (or `DAP1|`) show up in chat:** those are messages from the server to the plugin, and the plugin
   normally hides them. Report it, and include `log.txt` from `Documents\Decal Plugins\Daralet Toolkit`.
-- **Anything else:** errors are written to `log.txt` in `Documents\Decal Plugins\Daralet Toolkit`. Include that file when you
-  report a problem.
+- **The game crashes:** in the Config tab, under Troubleshooting, turn on **Read the game's crash records**, then play
+  until it happens again. At the next start the plugin reads Windows' own record of the crash (only acclient.exe's
+  crashes and hangs, nothing else in the Windows log) and writes where it crashed to `log.txt`. It's off unless you turn
+  it on, and nothing is sent anywhere: send `log.txt` with your report.
+- **Anything else:** errors are written to `log.txt` in `Documents\Decal Plugins\Daralet Toolkit` (past 4 MB the older
+  part moves to `log.old.txt`). Include that file when you report a problem.
 
 ## Uninstalling
 

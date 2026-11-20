@@ -21,13 +21,13 @@ namespace DaraletPlayer.Tests {
 
         [TestMethod]
         public void PresetsKeepWithinTheMemoryBudgetAndRiseInCost() {
-            // about 2.2 GB free at login, 800 MB kept spare: the estimate is a forest's, and Quality comes close to it
+            // about 2.2 GB free at login, 1.4 GB kept spare: the estimate is a forest's, and Quality comes close to it
             // (a desert took far less: Scenery 4, Ground 8, Landscape 18 left 1.7 GB free)
             var last = (Mb: 0.0, Ms: 0.0);
 
             foreach (var preset in GraphicsPresets.All) {
                 var cost = CostOf(preset);
-                Assert.IsTrue(cost.Mb <= 1600, $"{preset.Name}: {cost.Mb:0} MB");
+                Assert.IsTrue(cost.Mb <= 1000, $"{preset.Name}: {cost.Mb:0} MB");
                 Assert.IsTrue(cost.Mb >= last.Mb && cost.Ms >= last.Ms, preset.Name);
                 last = cost;
             }

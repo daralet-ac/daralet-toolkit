@@ -59,6 +59,7 @@ namespace DaraletPlayer.Ui {
 
             foreach (var b in buildings) {
                 var model = farTreeModels.Get(b.Model, portal, device);
+                usedModels.Add(b.Model);
 
                 if (model == null) {
                     continue;

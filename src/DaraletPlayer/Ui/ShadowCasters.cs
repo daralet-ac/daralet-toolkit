@@ -272,6 +272,15 @@ namespace DaraletPlayer.Ui {
             }
 
             if (stride != VertexStride || !IsManaged(stream)) {
+                // counted for the lamps' report: what of the world the maps can't be drawn from
+                if (stride != VertexStride) {
+                    OtherStride++;
+                    LastOtherStride = stride;
+                }
+                else {
+                    NotManaged++;
+                }
+
                 Release(stream);
                 return;
             }
@@ -330,6 +339,11 @@ namespace DaraletPlayer.Ui {
             draw.StartIndex = startIndex;
             draw.Count = primitives;
         }
+
+        /// <summary>Near draws left out since last read: another vertex size (the last one's), or not a managed buffer.</summary>
+        public static int OtherStride;
+        public static int LastOtherStride;
+        public static int NotManaged;
 
         private static bool IsManaged(IntPtr buffer) {
             if (managed.TryGetValue(buffer, out var known)) {

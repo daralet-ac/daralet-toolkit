@@ -13,6 +13,7 @@ namespace DaraletPlayer.Ui {
         private readonly DrawDistance drawDistance;
         private readonly DepthShading depthShading;
         private readonly Grass grass;
+        private readonly FarLand farLand;
         private readonly FrameRateWindow frameRate;
         private readonly TestRunner testRunner;
 
@@ -20,6 +21,7 @@ namespace DaraletPlayer.Ui {
         private int? draggingScenery;
         private int? draggingGround;
         private int? draggingFarTrees;
+        private int? draggingFarLand;
         private int? draggingDensity;
         private int? draggingLandscape;
         private int? draggingDetail;
@@ -185,6 +187,31 @@ namespace DaraletPlayer.Ui {
 
             CostNote(GraphicsCost.Ground(shown.ClampedGroundRadius, shown.ClampedSceneryRadius));
             ImGui.EndDisabled();
+
+            // far land works with the draw distance off, as the fog does
+            Form.Label("Far land", "How many landblocks past Landscape the plugin draws the land itself, in full detail: "
+                + "far hills, rivers and shores for a few MB. Billboards stand on it too.");
+            var farLand = draggingFarLand ?? options.ClampedFarLand;
+
+            if (DragSlider("##draw-distance-far-land", ref farLand, 0, DrawDistanceOptions.MaxFarLand,
+                farLand == 0 ? "None" : "%d landblocks", ref draggingFarLand, SliderWithCost)) {
+                options.FarLand = farLand;
+                Changed();
+            }
+
+            var landscapeNow = shown.On ? drawDistance.LandscapeFor(shown) : drawDistance.GameLandscape;
+            CostNote(GraphicsCost.FarLand(shown.ClampedFarLand, landscapeNow));
+
+            Form.Label("Near land", "Experimental, and has crashed the game on teleports. The plugin draws the game's own "
+                + "low-detail rings in full detail too, so rivers keep "
+                + "their shape. What stands in those rings (a creature far off) isn't drawn.");
+            ImGui.BeginDisabled(options.ClampedFarLand == 0);
+
+            if (ImGui.Checkbox("Full detail inside Landscape##draw-distance-far-land-near", ref options.FarLandNear)) {
+                Changed();
+            }
+
+            ImGui.EndDisabled();
         }
 
         /// <summary>The game's trees, and what stands in for them further out.</summary>
@@ -251,6 +278,13 @@ namespace DaraletPlayer.Ui {
             }
 
             CostNote(GraphicsCost.FarBuildings(options.FarBuildings, landscapeShown));
+
+            Form.Label("Video memory", "Keeps the far scenery's buffers and pictures on the graphics card only, not also in "
+                + "the game's memory. They're made again after alt-tab in full screen or a resolution change.");
+
+            if (ImGui.Checkbox("Video memory only##draw-distance-video-memory", ref options.VideoMemory)) {
+                Changed();
+            }
             ImGui.EndDisabled();
         }
 

@@ -135,6 +135,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 EnsureShaders(device);
+                tracePath = "game frame";
                 Draw(device, true, false);
 
                 // the frame's shadow replays are done: the game's buffers the noted draws held go back (ShadowCasters)
@@ -174,6 +175,8 @@ namespace DaraletPlayer.Ui {
                 }
 
                 FollowSunShadows(device);
+                // the game's own lamps off while the plugin lights them with shadows (Ui/GameLampSwitch.cs)
+                GameLampSwitch.Follow(DeviceComPointer(device), LampOptions.On && LampOptions.Replace && LampOptions.Shadows);
                 ApplyAnisotropy(device);
 
                 var needsDepth = Options.On || settings.Data.Water.On || SunOptions.On || LampOptions.On;
@@ -194,6 +197,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 Frame(device, needsDepth, image);
+                NoteTrace();
 
                 // nothing of the game's held from one frame to the next: a device reset comes between frames
                 ShadowCasters.ReleaseNoted();
@@ -230,6 +234,10 @@ namespace DaraletPlayer.Ui {
             if (drewInWorldPass) {
                 depthReady = false;
                 drewInWorldPass = false;
+            }
+
+            if (depthReady) {
+                tracePath = "render frame";
             }
 
             if (depthReady || image) {
@@ -364,6 +372,8 @@ namespace DaraletPlayer.Ui {
                     // the sun's shadow map first, while this frame's noted draws are fresh (DepthShading.Shadows.cs)
                     var sunReady = depthReady && sunUp > 0.05f && DebugView != 1
                         && DrawShadowMap(device, Vector3.Normalize(toSunWorld));
+                    traceSunReady = sunReady;
+                    traceSunUp = sunUp;
 
                     if (depthReady) {
                         device.DepthStencilSurface = gameDepth;
@@ -459,7 +469,11 @@ namespace DaraletPlayer.Ui {
                     device.SetTexture(0, null);
                     device.SetTexture(1, null);
                     device.SetTexture(2, null);
-                    device.SetTexture(3, null);
+                    // up to six lamp maps from 1: nothing of ours left bound, or the device can't reset
+                    for (var stage = 3; stage <= 6; stage++) {
+                        device.SetTexture(stage, null);
+                    }
+
                     savedState.Apply();
                     savedState.Dispose();
                     savedState = null;
@@ -559,6 +573,8 @@ namespace DaraletPlayer.Ui {
             disposed = true;
             CoreManager.Current.RenderFrame -= Core_RenderFrame;
             WorldPass.Remove(inWorldPass);
+
+            GameLampSwitch.Release();
 
             // the game's own texture filtering back (DepthShading.Anisotropy.cs)
             try {

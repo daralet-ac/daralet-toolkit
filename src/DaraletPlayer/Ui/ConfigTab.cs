@@ -135,6 +135,22 @@ namespace DaraletPlayer.Ui {
                 launcher.RenderWindowRow();
                 ImGui.EndTable();
             }
+
+            Form.Section("Troubleshooting");
+
+            if (Form.BeginForm("config-troubleshooting")) {
+                Form.Label("Crash records", "For reporting a crash: written to log.txt, in the plugin's folder in "
+                    + "Documents.");
+
+                if (ImGui.Checkbox("Read the game's crash records##read-crash-records",
+                    ref settings.Data.ReadCrashRecords)) {
+                    settings.Changed();
+                }
+
+                Widgets.Tip("At start, reads Windows' records of the game crashing or hanging (acclient.exe only) and "
+                    + "writes where it crashed to log.txt. Nothing is sent anywhere.");
+                ImGui.EndTable();
+            }
         }
 
         /// <summary>
