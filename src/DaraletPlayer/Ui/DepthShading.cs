@@ -112,7 +112,8 @@ namespace DaraletPlayer.Ui {
             hud.OnDestroyTextures += Hud_OnDestroyTextures;
             CoreManager.Current.RenderFrame += Core_RenderFrame;
             inWorldPass = DrawInWorldPass;
-            WorldPass.Add(inWorldPass);
+            WorldPass.Add(inWorldPass, () => !failed
+                && (Options.On || settings.Data.Water.On || SunOptions.On || LampOptions.On));
         }
 
         private ShadingOptions Options => settings.Data.Shading;

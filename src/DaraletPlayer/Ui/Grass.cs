@@ -81,7 +81,7 @@ namespace DaraletPlayer.Ui {
             this.settings = settings;
             CoreManager.Current.RenderFrame += Core_RenderFrame;
             inWorldPass = DrawInWorldPass;
-            WorldPass.Add(inWorldPass);
+            WorldPass.Add(inWorldPass, () => !failed && buffer != null && Options.On);
         }
 
         private GrassOptions Options => settings.Data.Grass;

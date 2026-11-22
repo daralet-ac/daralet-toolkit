@@ -119,7 +119,8 @@ namespace DaraletPlayer.Ui {
                 Changed();
             }
 
-            Form.Label("Distance", "How far from you things cast shadows. Further costs frame rate.");
+            Form.Label("Distance", "How far from you things cast shadows. Further costs frame rate, and past 400 m "
+                + "the far shadows are coarser.");
             var distance = draggingSunDistance ?? options.ClampedDistance;
 
             if (DragSlider("##sun-shadows-distance", ref distance, Feed.SunShadowOptions.MinDistance,

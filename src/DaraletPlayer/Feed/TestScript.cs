@@ -28,7 +28,7 @@ namespace DaraletPlayer.Feed {
                 "depthview", "water", "waterstrength", "ripples", "ripplesize", "fresnel", "glints", "blur",
                 "softshore", "antialias", "sharpen", "grass", "grassdensity", "grassdistance", "grassheight", "reeds",
                 "keptnear", "wind", "sunshadows", "sunstrength", "sundistance", "sunreplay", "fartrees", "farbuildings",
-                "ground", "portalreload", "lamps", "lampstrength", "lampshadows", "glow", "sunsoftness", "charsoftness", "farland", "farlandnear", "farlanddebug", "farlandfine", "lighttrace", "night", "nightglow", "timeofday", "walkmode", "worldpasshook",
+                "ground", "portalreload", "portalrings", "lamps", "lampstrength", "lampshadows", "glow", "sunsoftness", "charsoftness", "farland", "farlandnear", "farlanddebug", "farlandfine", "lighttrace", "night", "nightglow", "timeofday", "walkmode", "worldpasshook", "objectlog",
                 "lampreach", "firelight", "prelogin" };
 
         /// <summary>Each step in order; a line it can't read is a step of kind "bad", which the run reports and stops on.</summary>
@@ -85,6 +85,17 @@ namespace DaraletPlayer.Feed {
                         ? new TestStep(number, line, kind, parts[1], span, null)
                         : Bad(number, line, "walkshots takes seconds and a number of shots (up to 60)");
                 }
+                case "flicker":
+                    // brightness of the picture sampled for some seconds beside the steps after it (Ui/FlickerMeter.cs)
+                    return Number(rest, out var flickerFor) && flickerFor > 0
+                        ? new TestStep(number, line, kind, null, flickerFor, null)
+                        : Bad(number, line, "flicker takes a number of seconds");
+                case "hooks":
+                    // the plugin's hooks on the game's appraisals and drags out (0) or back in (1), to tell the game's own
+                    // crashes from the plugin's
+                    return Number(rest, out var hooksOn) && (hooksOn == 0 || hooksOn == 1)
+                        ? new TestStep(number, line, kind, null, hooksOn, null)
+                        : Bad(number, line, "hooks takes 0 or 1");
                 case "face":
                     // a heading in degrees, 0 north, 90 east, as the game's
                     return Number(rest, out var heading) && heading >= 0 && heading < 360
@@ -105,6 +116,7 @@ namespace DaraletPlayer.Feed {
                 case "chat":
                 case "log":
                 case "screenshot":
+                case "profile":
                     return rest.Length > 0 ? new TestStep(number, line, kind, null, 0, rest)
                         : Bad(number, line, kind + " takes some text");
                 case "flushcache":

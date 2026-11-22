@@ -37,6 +37,9 @@ namespace DaraletPlayer.Ui {
         private readonly DrawDistance drawDistance;
         private readonly Action changed;
 
+        /// <summary>What the draw distance has loaded, in words; in minimal mode there is none.</summary>
+        private string Loaded => drawDistance?.Loaded ?? "minimal mode";
+
         private List<TestStep> steps;
         private int index;
         private DateTime stepStarted;
@@ -105,6 +108,8 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
+                FlickerMeter.Frame();
+
                 if (steps == null) {
                     LookForRun();
                     return;
@@ -146,7 +151,7 @@ namespace DaraletPlayer.Ui {
             steps = TestScript.Parse(File.ReadAllLines(RunFile));
             index = 0;
             stepStarted = DateTime.MinValue;
-            Result($"started: {steps.Count} steps, {drawDistance.Loaded}, {settings.Data.DrawDistance.Summary()}");
+            Result($"started: {steps.Count} steps, {Loaded}, {settings.Data.DrawDistance.Summary()}");
         }
 
         private void Step() {
@@ -250,6 +255,43 @@ namespace DaraletPlayer.Ui {
                 case "log":
                     Result(step.Words);
                     return true;
+                case "profile": {
+                    // a settings profile for this character, made with every setting as it starts if it isn't there: "Bare"
+                    // has no game panel replaced, no borderless window, no graphics (the game as near its own as the plugin
+                    // can leave it). Kept for later logins too, so a run ends with `profile Default`
+                    var character = CoreManager.Current.CharacterFilter.Name;
+
+                    if (settings.Profiles().Any(p => string.Equals(p, step.Words, StringComparison.OrdinalIgnoreCase))) {
+                        settings.Choose(character, step.Words);
+                    }
+                    else {
+                        settings.Add(step.Words, false, character, out var problem);
+
+                        if (problem != null) {
+                            Result($"profile {step.Words}: {problem}");
+                            return true;
+                        }
+                    }
+
+                    Result($"profile: {settings.Profile} for {character}");
+                    return true;
+                }
+                case "flicker":
+                    FlickerMeter.Start(step.Number, Result);
+                    Result($"flicker: sampling for {step.Number:0} s");
+                    return true;
+                case "hooks":
+                    if (step.Number == 0) {
+                        ClientExamine.Stop();
+                        SpellDrag.Stop();
+                    }
+                    else {
+                        ClientExamine.Start();
+                        SpellDrag.Start();
+                    }
+
+                    Result(step.Number == 0 ? "hooks: appraisals and drags out" : "hooks: appraisals and drags in");
+                    return true;
                 case "find": {
                     // where things of a name are (a test run's way to a place by its NPCs): each nearby object whose name
                     // has the words, with its landcell and place in its landblock, as /teleloc takes them
@@ -314,7 +356,7 @@ namespace DaraletPlayer.Ui {
                     var managed = GC.GetTotalMemory(true) >> 20;
                     Result($"memory {step.Text}: {free >> 20} MB free, largest piece {largest >> 20} MB in {pieces}, "
                         + $"private {process.PrivateMemorySize64 >> 20} MB, managed {managed} MB, handles "
-                        + $"{process.HandleCount}; {drawDistance.Loaded}; landcell "
+                        + $"{process.HandleCount}; {Loaded}; landcell "
                         + $"{unchecked((uint)CoreManager.Current.Actions.Landcell):X8}");
                     return true;
                 }
@@ -322,7 +364,7 @@ namespace DaraletPlayer.Ui {
                     Result($"flushcache: {GameCache.FlushFree("a test run")} MB given back");
                     return true;
                 case "compare":
-                    Result(drawDistance.CompareScenery());
+                    Result(drawDistance?.CompareScenery() ?? "compare: no draw distance in minimal mode");
                     return true;
                 case "camera": {
                     // where the camera is, as the game keeps it (the Position at 0x81FF10: cell +4, origin +0x3C) and as the
@@ -440,7 +482,7 @@ namespace DaraletPlayer.Ui {
                     return true;
                 case "settle":
                     // reached what's set, then a few quiet seconds for the last step's loading
-                    if (drawDistance.AtTarget) {
+                    if (drawDistance == null || drawDistance.AtTarget) {
                         atTargetSince = atTargetSince == DateTime.MaxValue ? now : atTargetSince;
                     }
                     else {
@@ -448,12 +490,12 @@ namespace DaraletPlayer.Ui {
                     }
 
                     if (atTargetSince != DateTime.MaxValue && (now - atTargetSince).TotalSeconds >= SettleQuietSeconds) {
-                        Result($"settled after {elapsed:0} s: {drawDistance.Loaded}");
+                        Result($"settled after {elapsed:0} s: {Loaded}");
                         return true;
                     }
 
                     if (elapsed >= step.Number) {
-                        Result($"didn't settle in {step.Number:0} s: {drawDistance.Loaded}");
+                        Result($"didn't settle in {step.Number:0} s: {Loaded}");
                         return true;
                     }
 
@@ -582,6 +624,9 @@ namespace DaraletPlayer.Ui {
                 case "portalreload":
                     DrawDistance.PortalReload = value != 0;
                     break;
+                case "portalrings":
+                    DrawDistance.NoPortalRings = value == 0;
+                    break;
                 case "fartrees":
                     options.FarTrees = (int)value;
                     break;
@@ -609,13 +654,16 @@ namespace DaraletPlayer.Ui {
                 case "nightglow":
                     settings.Data.LampLight.NightGlow = (int)value;
                     break;
+                case "objectlog":
+                    ObjectWatch.Enable(value != 0);
+                    break;
                 case "worldpasshook":
                     WorldPass.Bare = value >= 2;
                     WorldPass.ProbeFpu = value == 3;
                     WorldPass.Rehook();
 
                     if (value != 0 && !emptyWorldPieceAdded) {
-                        WorldPass.Add(EmptyWorldPiece);
+                        WorldPass.Add(EmptyWorldPiece, () => true);
                         emptyWorldPieceAdded = true;
                     }
                     else if (value == 0 && emptyWorldPieceAdded) {
@@ -641,15 +689,15 @@ namespace DaraletPlayer.Ui {
                     break;
             }
 
-            changed();
+            changed?.Invoke();
         }
 
         private void Measure(double seconds) {
             var frames = FrameRateWindow.Recent(seconds);
             var rate = frames == null ? "no frame rate (Frame Rate window not running)"
                 : $"{frames.Fps:0.0} fps, 1% low {frames.LowFps:0.0}, worst {frames.WorstMs:0} ms, {frames.Hitches} pauses";
-            Result($"measure {seconds:0} s: {rate}; {DrawDistance.FreeMegabytes()} MB free; {drawDistance.Loaded}; "
-                + drawDistance.BillboardState);
+            Result($"measure {seconds:0} s: {rate}; {DrawDistance.FreeMegabytes()} MB free; {Loaded}; "
+                + (drawDistance?.BillboardState ?? ""));
         }
 
         /// <summary>The steps after this one written back for after the relaunch, and the game exited.</summary>
@@ -706,6 +754,8 @@ namespace DaraletPlayer.Ui {
 
             disposed = true;
             CoreManager.Current.RenderFrame -= Core_RenderFrame;
+            FlickerMeter.Stop();
+            ObjectWatch.Enable(false);
 
             if (emptyWorldPieceAdded) {
                 WorldPass.Remove(EmptyWorldPiece);

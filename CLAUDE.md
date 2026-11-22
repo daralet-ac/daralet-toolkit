@@ -2253,6 +2253,68 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   More steps: `screenshot name` (`Ui/GameScreenshot.cs`: the back buffer copied to system memory and saved as PNG in
   `Test Runs\shots`, from Decal's RenderFrame, before the game's UI; works as administrator and with the monitor
   off; Claude reads the PNGs) and `compare` (billboards: the real scenery against `SceneryLayout`, below).
+  `profile <name>` puts the character on a settings profile (made with every setting as it starts if missing: "Bare"
+  has no panel replaced, no borderless window, no graphics), kept for later logins, so a run ends with `profile
+  Default`; `restart` after it logs in that way. `hooks 0|1` takes the appraisal and drag hooks out or puts them back.
+  `flicker S` (`Ui/FlickerMeter.cs`, `Feed/FlickerStats.cs`) samples the picture's brightness in 32 by 18 tiles every
+  frame for S seconds beside the steps after it (a walk), and counts blips (a tile jumping and straight back) and steps
+  (a jump between steady frames): for comparing builds on the same walk, not alone.
+  **The teleport crashes** (November 2026, about 400 test teleports, scripts in `Test Runs\tools`: `overnight.sh` with
+  configs B-bare, D-draw, G-lighting, C-combo, Q-bare, P-panels and seeds `fresh-N`, 40 outdoor places never visited
+  twice, and `repro-N`, round trips): the game crashes on long outdoor-to-outdoor teleports to places it hasn't loaded
+  this session, about one in fifteen even in the Bare profile with the hooks out; never on dungeon teleports (72) or
+  round trips between two loaded places (120). The sites are in the game's own loading (`AnimData::UnPack`,
+  `MotionData::UnPack`, `CPolygon::make_plane`, `CCellStruct::get_portal`, a HashList emptying, `Particle::Init`,
+  `CPartArray::UpdateViewerDistance_`), spread out as memory gone bad earlier would be; the same places recur (Drudge
+  Camp, Drudge Tower, Mountain Retreat, Eastern Nanto Outpost). The dats unpack cleanly (every motion table, animation,
+  setup, model and cell, with UtilityBelt.Common's readers; one small setup, `0x02001C57`, is 4 bytes short). On fresh
+  routes, teleports a crash: Quality's graphics in the Bare profile 10 (8 of 8 routes crashed), bare 26, the panels
+  alone 30, all the plugin's drawing and lighting over Scenery 1, Ground 1, Landscape 6 (C-combo) 45. Raising one of
+  Quality's settings over C-combo, on four routes C-combo came through clean: Scenery 2 crashed all four (about 6),
+  Ground 4 all four (about 12), Landscape 8 two (about 60). So the game's full-detail rings are what crash it, and the
+  presets keep them at 1 (`GraphicsPresets`). Decal's on/off switches are per user (`HKCU\SOFTWARE\Decal`); with every
+  other add-on, Content Override and Daralet Admin off, it still crashes. **The game alone with Decal crashes too, and
+  the plugin isn't shown to add to it** (November 21): **minimal mode** (`Test Runs\minimal.txt`: `PluginCore.Startup`
+  makes only the test runner) crashed 4 in 204 fresh teleports against the bare profile's 9 in 202 (2 in 119 against
+  6 in 68 on the routes both ran); chains of the worst teleports from a fresh game (seeds `chain-N`: Standing Stone,
+  Zaikal Lifestone, Khayyaban, Sawato, Undead Shrine) 1 in 50 against 3 in 49, and minimal mode plus WorldPass's hook
+  alone (`set worldpasshook 2`, calling straight through) 3 in 49. That looked like the hook, so it's now only in while
+  a subscriber has something to draw (`WorldPass.Add(draw, wanted)`, see Drawing inside the game's frame); but the
+  test of that, the bare profile with the hook out (`F-fixbare`) against forced in (`H-barehook`), 20 chains each in
+  turn, came out level: 5 in 70 against 6 in 67 at 16 each. The rate drifts over hours (7 of the first 9 chain trials
+  crashed, then 26 in a row didn't), so short comparisons mislead; only long interleaved ones count.
+  Same addresses in minimal mode (`0x539153`, `0x526A66`, `0x52718B`, `0x58712F`). At **Scenery 2** the chain crashes
+  nearly every trial (Zaikal to Khayyaban most), hook or not, and **as often on one core** (the game pinned to one
+  processor, `tools\pin-one-core.ps1`: 2 in 5 against 2 in 4), so it isn't the main thread racing the game's loading
+  thread (`ThreadedCache`, seen in the dumps' thread lists: its worker loop at `0x678960` runs the cache's requests,
+  the main thread finishes them off for up to 25 ms a frame at `0x678A10`; disk reads are already locked,
+  `CThreadsafeDiskController::LoadDataEx`); more likely memory written past an end or after a free, landing wherever
+  the plugin's own memory leaves room. **Page heap can't find it while Decal is loaded**: full and light page heap
+  alike (`tools\pageheap-on.ps1`, `pageheap-light.ps1`, `pageheap-off.ps1`, run as administrator) stop every game 12 s
+  in at a harmless one-byte read past a picture's buffer in Decal's `Inject.dll` (`+0x30695`: a 24-bit image loop
+  reading 4 bytes a pixel). Windows Error Reporting is off on the test machine, so no dumps are kept; the plugin's
+  test-only `Ui/CrashDumpWriter.cs` (`Test Runs\dumps.txt`) writes one from the last-chance filter or .NET's
+  UnhandledException, though it caught nothing of Decal's crash. **Full dumps** (ProcDump, `tools\debug-service.ps1`
+  run as administrator in procdump mode, switched to it by `tools\pd-run.sh` only after login: a debugger attached at
+  launch, ProcDump or TTD's `-monitor`, keeps Decal out and the game sits at the login screen): the crash is in a dat
+  file's unpack under `AsyncCache::BlockingLoadInto` (`CEnvCell::UnPack` → `DBObj::Get` → ... →
+  `CEnvironment::UnPack` → `CCellStruct::UnPack` → `CPolygon::UnPack` → `make_plane`; or `CMotionTable::UnPack` →
+  `MotionData::UnPack` → `AnimData::UnPack`), and the data it reads is wrong in memory: Environment `0x0D0003CF`'s
+  buffer matched the dat byte for byte but **one dword zeroed** (offset `0xA3C`), the motion table's read ran into a
+  freed, zeroed region. So something writes through a stale pointer into memory just reused as a load buffer, or frees
+  it mid-unpack. Read a dump with `cdbX64.exe -z`, `.load wow64exts`, `!sw`, `r`, `dps esp` (`.ecxr` is WOW64's 64-bit
+  record); `tools\pd-analyse.sh` does it. **Time Travel Debugging can't record it on the live server**: recorded whole
+  the game is too slow and the server drops it mid-teleport; `-module` on an attach records nothing (it starts only on
+  entering the module). **Full page heap can't work for this game at all**: backwards (`PageHeapFlags` 0x13, the guard
+  before each block; the helper sets it from `Test Runs\pageheap.txt`) lets Decal's over-read pass, but every game then
+  stopped in ImGui's font picture (`cimgui.dll+0x1FDF72`, `GetTexDataAsRGBA32`'s loop) or hung behind an ImGui error
+  box. That's page heap's own cost: logged once a second from the plugin's start (`Test Runs\memory-watch.txt`,
+  `CrashDumpWriter.WatchMemory`, from a thread of its own), the 32-bit address space went from 2,027 MB free to 12 MB,
+  no free piece of 1 MB, in 4 seconds, so ImGui's allocation came back empty. `Test Runs\hold-for-debugger.txt`
+  (`CrashDumpWriter.HoldForDebugger`) holds the plugin's start until a debugger attaches, for ProcDump to be in before
+  something that comes seconds after the plugin starts. What's left: page heap on only some allocations (`/size`,
+  `/random`), though the game's cache may use its own allocator (`!heap` didn't know the freed region), or a Time
+  Travel recording on a local server whose timeouts let a slowed game through.
 - **Billboards, stage 1: where far trees would be** (`Feed/SceneryLayout.cs`, `SceneryObject.cs`, `PlacedScenery.cs`,
   `Ui/DrawDistance.Compare.cs`; the user's call, November 2026: real scenery to 4-5 landblocks, billboards beyond).
   Past the scenery radius the game makes no objects, so places come from the dats by the client's rules
@@ -2450,9 +2512,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   what's free plus what these settings hold, less 800 MB spare; frame rate, the last 5 seconds' frame time less the
   estimate for what's on (the game's own cost where you stand) plus the estimate for what's shown, against a target
   (`GraphicsTargetFps`, 60, 100 or 144); both taken only while the draw distance is loaded (`AtTarget`). Presets
-  (Scenery is the cost of both, so it stays at 1 or 2): Retail (off), Performance (Scenery 1, Ground 6, Landscape 16),
-  Balanced (2, 6, 20), Quality (2, 8, 20), each with 3D trees 2 rings, billboards and far buildings; lit when the
-  settings are one, else Custom. **Changes wait for Apply** (`OptionsPanel.Draft.cs`; the user's call: try settings
+  (Scenery and Ground detail always the game's own 1: raised, either alone crashed teleports far sooner, see The
+  teleport crashes): Retail (off), Performance (Landscape 5, far land 19, 3D trees 2 rings), Balanced (6, 18, 3),
+  Quality (8, 24, 4, and the takeover of the game's coarse rings), each with billboards and far buildings; lit when
+  the settings are one, else Custom. **Changes wait for Apply** (`OptionsPanel.Draft.cs`; the user's call: try settings
   until the estimate suits, then apply): the rows edit copies (`DrawDistanceSettings`, `ShadingSettings`...), made
   afresh each frame while nothing's changed; Apply copies their fields into the settings' own objects and does what a
   change did (`Commit`, which the test runner calls directly); Revert drops them. The bars price the copies against
@@ -2482,7 +2545,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   back up in place once you're there, nothing stepping while in portal space (`inPortalSpace`). The guard learns its MB
   a unit up to 16 (`MaxLearnedPerCost`: the rings at Drudge Temple took 12 to 15) and remembers the costliest settings
   loaded since the last teleport (`highestCostHere`): lowering the draw distance frees nothing (the game keeps what it
-  read), so going back up to them is let through. Presets to fit: Performance 1/6/15, Balanced 2/6/16, Quality 2/7/16.
+  read), so going back up to them is let through. (Presets then: Performance 1/6/15, Balanced 2/6/16, Quality 2/7/16;
+  since cut to Scenery and Ground 1, see Budget and presets.)
   The game alone, at its own Landscape 15 at Holtburg, uses about 2.6 GB of its 4 GB: memory, not the plugin's extras
   (billboards about 25 MB, 3D trees about 1, far buildings 4, the screen passes none measurable), is what limits the
   presets, which is what plugin-drawn far land (SESSION-HANDOFF.md) is for.
@@ -2653,7 +2717,16 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   53) is hooked and refuses the point and spot lights at the places of the lamps given maps (`GameLampSwitch.Places`,
   D3DLIGHT9's Position at +52), so those, which the game lights with nothing blocking them, are the plugin's alone, and
   a lamp with no map is left to the game (refusing every lamp left those past the six nearest you lighting nothing);
-  no light through walls or floors near you, and none of the subtracting shadow pass. The light the game hangs round
+  no light through walls or floors near you, and none of the subtracting shadow pass. **Handing a lamp over smoothly**
+  (the user, November 2026: "a lot of flickering with object lighting, while moving around"): lamps crossed the
+  six-nearest line as you walked, and each one's light on characters and furniture jumped between the game's look (per
+  vertex, full strength, through walls) and the plugin's, with a frame of neither or both between (Places was last
+  frame's). Now a lamp holding a map counts as 3 m nearer (`LampStickiness`), keeps its map until its light has faded
+  out of the plugin's hands, and its share eases over half a second (`EaseLampShare`, `lampShares` by place): the
+  plugin's colour times the share, the game's own dimmed by the rest (`GameLampSwitch.Places` carries each lamp's game
+  share; SetLight, vtable 51, is hooked too and keeps each light as the game set it, so LightEnable scales from that and
+  sets it whole again after). A lamp holding a map is always among the eight lit. Untested in the game when written.
+  The light the game hangs round
   you sits about 3.7 m ahead and above: taken for a lamp, it lit everything outside the tavern and leaked under its
   walls, so it's told by being dynamic, faint (intensity under 10) and within 6 m. `depthview 5` colours each pixel
   by the light giving it most, the lights listed once in log.txt (`[lamps] debug light`). **Fires and lamp posts**
@@ -2701,9 +2774,13 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   the whole world, came out in front of the lifestone's crystal (seen in the game, November 2026): the game draws its
   see-through things last, sorted and without writing depth, so they hide nothing behind them. SmartBox::
   RenderNormalMode (`0x453B40`) draws the world, then calls D3DPolyRender::FlushAlphaList (`0x59E3F0`, static cdecl,
-  one int, 0) at `0x453C2B` for the see-through list; that call is hooked while anything's subscribed
-  (`WorldPass.Add`), drawing each subscriber's piece and then the game's list. Each still builds on RenderFrame and
-  draws there only if the hook couldn't be set (`WorldPass.Hooked`). Tried in the game: the crystal now covers the
+  one int, 0) at `0x453C2B` for the see-through list; that call is hooked while a subscriber has something to draw
+  (`WorldPass.Add(draw, wanted)`, `wanted` looked at on every RenderFrame: the depth passes' switches, billboards
+  built, far land built, grass on), drawing each subscriber's piece and then the game's list. Every piece subscribes
+  when it's made, so before this the hook was in with every graphics setting off; now it's out then (done when the
+  hook was suspected in the teleport crashes, which a longer test didn't bear out: see The teleport crashes); it's
+  in for a second at login while the Default profile is
+  still the one in use. Each still builds on RenderFrame and draws there while the hook isn't in (`WorldPass.Hooked`). Tried in the game: the crystal now covers the
   far trees, and grass draws as before. The passes that read depth (water, shading, sun shadows: `DepthShading.
   DrawInWorldPass`) are drawn there too, after the billboards and grass: on RenderFrame they shaded the ground behind
   the crystal onto the crystal (seen in the game, the sun shadows' first build). Ours is the depth buffer then, so the

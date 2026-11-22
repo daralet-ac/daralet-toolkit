@@ -123,7 +123,7 @@ namespace DaraletPlayer.Ui {
             this.settings = settings;
             CoreManager.Current.RenderFrame += Core_RenderFrame;
             inWorldPass = DrawInWorldPass;
-            WorldPass.Add(inWorldPass);
+            WorldPass.Add(inWorldPass, () => !failed && vertices != null && Options.ClampedFarLand > 0);
         }
 
         private DrawDistanceOptions Options => settings.Data.DrawDistance;
@@ -164,6 +164,8 @@ namespace DaraletPlayer.Ui {
                         Clear();
                         blocks.Clear();
                         toRead.Clear();
+                        // the atlases too: off, they held about 130 MB of the card's memory for nothing
+                        LetGoOfAtlas();
                         PluginCore.LogFile("[far-land] off");
                     }
 
@@ -521,9 +523,10 @@ namespace DaraletPlayer.Ui {
             nearTriangleCount = nearTris;
             PluginCore.LogFile($"[far-land] {(atlasReady ? "textured" : "untextured")}: built {written} blocks "
                 + $"({near.Count} near; by tier {runTriangles[0, 0] + runTriangles[1, 0]}, "
-                + $"{runTriangles[0, 1] + runTriangles[1, 1]}, {runTriangles[0, 2] + runTriangles[1, 2]} triangles) round {builtHome:X4}: {triangleCount} triangles, "
-                + $"{MegabytesHeld:0.0} MB, "
+                + $"{runTriangles[0, 1] + runTriangles[1, 1]}, {runTriangles[0, 2] + runTriangles[1, 2]} triangles) "
+                + $"round {builtHome:X4}: {triangleCount} triangles, {MegabytesHeld:0.0} MB, "
                 + $"{clock.ElapsedMilliseconds} ms, {DrawDistance.FreeMegabytes()} MB free");
+            TeleportTimeline.Note("far land");
         }
 
         /// <summary>A block's 81 vertices, its 128 triangles, and a skirt down each edge.</summary>

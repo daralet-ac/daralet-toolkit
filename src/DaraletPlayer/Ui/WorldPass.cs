@@ -13,15 +13,26 @@ namespace DaraletPlayer.Ui {
     /// sorted, without writing depth, so nothing behind them is hidden by them. SmartBox::RenderNormalMode (0x453B40)
     /// draws the world, then calls D3DPolyRender::FlushAlphaList (0x59E3F0, static cdecl, one int, 0 here) at 0x453C2B,
     /// which draws that see-through list; that call is pointed here (AcClient.Hook, as the fog's), which draws each
-    /// subscriber's piece and then the game's list. Hooked while anything's subscribed; taken out when the last goes
-    /// (a hook left in after the plugin's gone would crash the game). Untested in the game when written.
+    /// subscriber's piece and then the game's list. Taken out when the last subscriber goes (a hook left in after the
+    /// plugin's gone would crash the game).
+    /// <para>
+    /// **Only in while a subscriber has something to draw** (each says so, `wanted`, looked at on every RenderFrame):
+    /// every graphics piece subscribes when it's made, so before this the hook was in for everyone, every graphics
+    /// setting off. Done while hunting the teleport crashes (November 21, 2026), when chains of crash-prone teleports
+    /// seemed to show the hook raising them (minimal mode 1 crash in 50 teleports, with this hook alone 3 in 49); a
+    /// longer run the same afternoon, the bare profile with and without it, came out level (5 in 70, 6 in 67), so the
+    /// crashes are the game's own and this only keeps a patch out of its frame that nothing uses.
+    /// </para>
     /// </summary>
     internal static class WorldPass {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void FlushCall(int flags);
 
-        private static readonly List<Action<Device>> drawers = new List<Action<Device>>();
+        private static readonly List<(Action<Device> Draw, Func<bool> Wanted)> drawers =
+            new List<(Action<Device>, Func<bool>)>();
+
         private static AcClient.Hook hook;
+        private static bool watching;
 
         // both kept while the hook is in, so they're never collected while the client can call them
         private static FlushCall flushCall;
@@ -37,12 +48,17 @@ namespace DaraletPlayer.Ui {
         /// <summary>Whether the hook's in: subscribers draw from it, not from RenderFrame.</summary>
         public static bool Hooked => hook != null;
 
-        /// <summary>A piece to draw before the game's see-through things, each frame the world's drawn.</summary>
-        public static void Add(Action<Device> draw) {
-            drawers.Add(draw);
+        /// <summary>
+        /// A piece to draw before the game's see-through things, each frame the world's drawn, while `wanted` says it has
+        /// something to draw. Until the hook's in (the next RenderFrame), the piece draws on RenderFrame as it does when
+        /// the hook can't be set (`Hooked`).
+        /// </summary>
+        public static void Add(Action<Device> draw, Func<bool> wanted) {
+            drawers.Add((draw, wanted));
 
-            if (hook == null && !failedToHook) {
-                Hook();
+            if (!watching) {
+                CoreManager.Current.RenderFrame += Core_RenderFrame;
+                watching = true;
             }
         }
 
@@ -51,16 +67,48 @@ namespace DaraletPlayer.Ui {
             Unhook();
             failedToHook = false;
 
-            if (drawers.Count > 0) {
+            if (AnyWanted()) {
                 Hook();
             }
         }
 
         public static void Remove(Action<Device> draw) {
-            drawers.Remove(draw);
+            drawers.RemoveAll(d => d.Draw == draw);
 
             if (drawers.Count == 0) {
+                if (watching) {
+                    CoreManager.Current.RenderFrame -= Core_RenderFrame;
+                    watching = false;
+                }
+
                 Unhook();
+            }
+        }
+
+        private static bool AnyWanted() {
+            foreach (var drawer in drawers) {
+                if (drawer.Wanted()) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>The hook in while anything wants drawing in the game's frame, out otherwise (see the class).</summary>
+        private static void Core_RenderFrame(object sender, EventArgs e) {
+            try {
+                var wanted = AnyWanted();
+
+                if (wanted && hook == null && !FpuProbe.Installed && !failedToHook) {
+                    Hook();
+                }
+                else if (!wanted && (hook != null || FpuProbe.Installed)) {
+                    Unhook();
+                }
+            }
+            catch (Exception ex) {
+                PluginCore.LogFile("[world-pass] " + ex.Message);
             }
         }
 
@@ -139,8 +187,8 @@ namespace DaraletPlayer.Ui {
                     DrawProbe.Ours = true;
 
                     try {
-                        foreach (var draw in drawers.ToArray()) {
-                            draw(device);
+                        foreach (var drawer in drawers.ToArray()) {
+                            drawer.Draw(device);
                         }
                     }
                     finally {

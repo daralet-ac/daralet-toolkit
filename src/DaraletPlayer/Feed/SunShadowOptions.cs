@@ -8,7 +8,9 @@ namespace DaraletPlayer.Feed {
     [DataContract]
     public class SunShadowOptions {
         public const int MinDistance = 20;
-        public const int MaxDistance = 400;
+        /// <summary>1,000 m (the user's call, November 2026: shadows on things further off); past 400 m the far map's
+        /// texels pass 40 cm, so far shadows are coarser.</summary>
+        public const int MaxDistance = 1000;
 
         [DataMember(Name = "on")] public bool On;
 

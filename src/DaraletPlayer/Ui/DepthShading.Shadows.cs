@@ -31,8 +31,11 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         private const float CloseReach = 8;
 
-        /// <summary>The sun's view starts this far back from you, and the maps' depth runs twice it.</summary>
-        private const float SunBack = 600;
+        /// <summary>
+        /// The sun's view starts this far back from you, and the maps' depth runs twice it: 600 m, or further for a far
+        /// map reaching past 400 m, so far casters with a low sun stay inside its depth.
+        /// </summary>
+        private float SunBack => Math.Max(600, FarReach + 200);
 
         /// <summary>Draws placed this far past a map's edge are still made: a tall thing's shadow reaches in.</summary>
         private const float CasterMargin = 40;
@@ -219,7 +222,7 @@ namespace DaraletPlayer.Ui {
         /// The sun's view and orthographic projection, centred on you, moved in whole texels so the map's edges hold
         /// still as you walk.
         /// </summary>
-        private static Matrix SunMatrix(Vector3 centre, Vector3 toSun, float reach) {
+        private Matrix SunMatrix(Vector3 centre, Vector3 toSun, float reach) {
             var up = Math.Abs(toSun.Y) > 0.99f ? new Vector3(0, 0, 1) : new Vector3(0, 1, 0);
             var view = Matrix.LookAtLH(centre + toSun * SunBack, centre, up);
             var projection = Matrix.OrthoLH(reach * 2, reach * 2, 1, SunBack * 2);

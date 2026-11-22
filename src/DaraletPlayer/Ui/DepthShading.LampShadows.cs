@@ -51,6 +51,60 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>Which lamp (its place) each map was last drawn for.</summary>
         private readonly Vector3?[] cubeLamp = new Vector3?[LampsWithShadows];
+
+        /// <summary>How much nearer a lamp without a map must be to take one from a lamp that has it, in meters.</summary>
+        private const float LampStickiness = 3;
+
+        /// <summary>How long a lamp's light takes to pass between the game and the plugin.</summary>
+        private const float LampFadeSeconds = 0.5f;
+
+        /// <summary>The chosen lamps wanted lit with shadows this frame, nearest first.</summary>
+        private readonly List<int> wantedLamps = new List<int>();
+
+        /// <summary>
+        /// How much of each mapped lamp's light is the plugin's (0 to 1, the rest the game's), by place: eased toward
+        /// all of it while wanted and none once not, so a lamp's look never jumps from the game's to the plugin's.
+        /// </summary>
+        private readonly Dictionary<(int, int, int), float> lampShares = new Dictionary<(int, int, int), float>();
+
+        private static (int, int, int) ShareKey(Vector3 place) {
+            return ((int)Math.Round(place.X * 4), (int)Math.Round(place.Y * 4), (int)Math.Round(place.Z * 4));
+        }
+
+        private float LampShare(Vector3 place) {
+            return lampShares.TryGetValue(ShareKey(place), out var share) ? share : 0;
+        }
+
+        private bool HoldsMap(Vector3 place) {
+            for (var k = 0; k < LampsWithShadows; k++) {
+                if (cubeLamp[k].HasValue && (cubeLamp[k].Value - place).LengthSq() < 0.01f) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void ForgetLampMaps() {
+            for (var k = 0; k < LampsWithShadows; k++) {
+                cubeLamp[k] = null;
+            }
+
+            lampShares.Clear();
+        }
+
+        /// <summary>
+        /// Each mapped lamp's share eased a frame's worth toward all (wanted) or none, by the seconds since the last frame;
+        /// its share for this frame.
+        /// </summary>
+        private float EaseLampShare(Vector3 place, bool wanted, float seconds) {
+            var key = ShareKey(place);
+            lampShares.TryGetValue(key, out var share);
+            var step = seconds / LampFadeSeconds;
+            share = wanted ? Math.Min(1, share + step) : Math.Max(0, share - step);
+            lampShares[key] = share;
+            return share;
+        }
         private int lampRedrawTurn;
         private Surface lampCubeDepth;
         private IntPtr lampShadowVertexShader;
@@ -69,59 +123,91 @@ namespace DaraletPlayer.Ui {
                 which[k] = -1;
             }
 
-            var picked = chosen.Select((l, i) => (Light: l, Index: i))
-                .Where(c => c.Light.Casts && c.Light.Reach >= 2)
-                .OrderBy(c => (c.Light.Place - you).LengthSq())
-                .Take(LampsWithShadows)
-                .ToList();
+            // the lamps wanted lit with shadows: the nearest you that cast them, a lamp holding a map counting as
+            // LampStickiness meters nearer, so two lamps about as near don't take turns as you walk between them
+            wantedLamps.Clear();
 
-            if (picked.Count == 0 || ShadowCasters.Count == 0) {
+            foreach (var c in chosen.Select((l, i) => (Light: l, Index: i))
+                .Where(c => c.Light.Casts && c.Light.Reach >= 2)
+                .OrderBy(c => (c.Light.Place - you).Length() - (HoldsMap(c.Light.Place) ? LampStickiness : 0))
+                .Take(LampsWithShadows)) {
+                wantedLamps.Add(c.Index);
+            }
+
+            if ((wantedLamps.Count == 0 && !cubeLamp.Any(c => c.HasValue)) || ShadowCasters.Count == 0) {
+                ForgetLampMaps();
                 return which;
             }
 
             EnsureLampCubes(device);
 
-            // each lamp keeps the map it had (lamps don't move): a new one takes a map no lamp picked now holds
-            var cubeOf = new int[picked.Count];
-            var taken = new bool[LampsWithShadows];
+            // each map keeps its lamp (lamps don't move) while it's wanted, or until its light has faded out of the
+            // plugin's hands (LampShare): a lamp is never dropped while it still lights. A wanted one without a map takes
+            // a free one, starting from none of its light, and fades in
+            var picked = new List<(int Index, int Cube)>();
+            var holds = new int[LampsWithShadows];
+            var placed = new HashSet<int>();
 
-            for (var p = 0; p < picked.Count; p++) {
-                cubeOf[p] = -1;
+            for (var k = 0; k < LampsWithShadows; k++) {
+                holds[k] = -1;
 
-                for (var k = 0; k < LampsWithShadows; k++) {
-                    if (!taken[k] && cubeLamp[k].HasValue
-                        && (cubeLamp[k].Value - picked[p].Light.Place).LengthSq() < 0.01f) {
-                        cubeOf[p] = k;
-                        taken[k] = true;
+                if (!cubeLamp[k].HasValue) {
+                    continue;
+                }
+
+                for (var i = 0; i < chosen.Count; i++) {
+                    if (!placed.Contains(i) && (chosen[i].Place - cubeLamp[k].Value).LengthSq() < 0.01f) {
+                        if (wantedLamps.Contains(i) || LampShare(chosen[i].Place) > 0.001f) {
+                            holds[k] = i;
+                            placed.Add(i);
+                        }
+
                         break;
                     }
+                }
+
+                if (holds[k] < 0) {
+                    lampShares.Remove(ShareKey(cubeLamp[k].Value));
+                    cubeLamp[k] = null;
                 }
             }
 
             var toDraw = new List<int>();
 
-            for (var p = 0; p < picked.Count; p++) {
-                if (cubeOf[p] >= 0) {
+            foreach (var i in wantedLamps) {
+                if (placed.Contains(i)) {
                     continue;
                 }
 
                 for (var k = 0; k < LampsWithShadows; k++) {
-                    if (!taken[k]) {
-                        cubeOf[p] = k;
-                        taken[k] = true;
-                        cubeLamp[k] = picked[p].Light.Place;
-                        toDraw.Add(p);
+                    if (holds[k] < 0) {
+                        holds[k] = i;
+                        placed.Add(i);
+                        cubeLamp[k] = chosen[i].Place;
+                        lampShares[ShareKey(chosen[i].Place)] = 0;
+                        toDraw.Add(k);
                         break;
                     }
                 }
             }
 
+            for (var k = 0; k < LampsWithShadows; k++) {
+                if (holds[k] >= 0) {
+                    picked.Add((holds[k], k));
+                }
+            }
+
+            if (picked.Count == 0) {
+                return which;
+            }
+
             // and a couple of the kept ones each frame, in turn, so a character walking by shows in them
             for (var n = 0; n < LampRedrawsAFrame && toDraw.Count < picked.Count; n++) {
                 lampRedrawTurn = (lampRedrawTurn + 1) % picked.Count;
+                var cube = picked[lampRedrawTurn].Cube;
 
-                if (!toDraw.Contains(lampRedrawTurn)) {
-                    toDraw.Add(lampRedrawTurn);
+                if (!toDraw.Contains(cube)) {
+                    toDraw.Add(cube);
                 }
             }
 
@@ -132,12 +218,12 @@ namespace DaraletPlayer.Ui {
             try {
                 PrepareLampShadowDrawing(device);
 
-                foreach (var p in toDraw) {
-                    made += DrawCube(device, lampCubes[cubeOf[p]], picked[p].Light.Place, picked[p].Light.Reach);
+                foreach (var k in toDraw) {
+                    made += DrawCube(device, lampCubes[k], chosen[holds[k]].Place, chosen[holds[k]].Reach);
                 }
 
-                for (var p = 0; p < picked.Count; p++) {
-                    which[cubeOf[p]] = picked[p].Index;
+                foreach (var (index, cube) in picked) {
+                    which[cube] = index;
                 }
             }
             finally {
@@ -266,6 +352,8 @@ namespace DaraletPlayer.Ui {
                 lampCubes[k] = null;
                 cubeLamp[k] = null;
             }
+
+            lampShares.Clear();
 
             lampCubeDepth?.Dispose();
             lampCubeDepth = null;

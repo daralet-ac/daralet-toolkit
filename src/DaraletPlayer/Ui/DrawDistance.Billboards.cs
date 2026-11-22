@@ -378,6 +378,7 @@ namespace DaraletPlayer.Ui {
                 + $"{billboardBatches.Count + farLandBatches.Count} runs, "
                 + $"{start / 3} triangles, {FreeMegabytes()} MB free, plugin {GC.GetTotalMemory(false) >> 20} MB, "
                 + $"{blockScenery.Count} blocks' scenery kept");
+            TeleportTimeline.Note("billboards");
         }
 
         /// <summary>Every billboard placed this build, written into the buffer at its model's run.</summary>

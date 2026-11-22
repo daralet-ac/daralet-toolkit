@@ -55,11 +55,13 @@ namespace DaraletPlayer.Ui {
                 PlacedLights.AddTo(all, unchecked((uint)CoreManager.Current.Actions.Landcell) >> 16);
             }
 
+            // a lamp holding a shadow map always among them (it may still be fading out of the plugin's hands), then the
+            // nearest
             var chosen = all
                 .Where(l => (l.Type == 0 || l.Type == 2) && l.Falloff > 0)
                 .Select(l => (Light: l, Distance: (new Vector3(l.East, l.Height, l.North) - camera).Length()))
                 .Where(c => c.Distance < 150)
-                .OrderBy(c => c.Distance)
+                .OrderBy(c => c.Distance - (HoldsMap(new Vector3(c.Light.East, c.Light.Height, c.Light.North)) ? 1000 : 0))
                 .Select(c => c.Light)
                 .Take(MostLamps)
                 .ToList();
@@ -76,7 +78,7 @@ namespace DaraletPlayer.Ui {
             var (night, glow) = Night();
 
             if (chosen.Count == 0 && night <= 0) {
-                GameLampSwitch.Places = new Vector3[0];
+                GameLampSwitch.Places = new (Vector3, float)[0];
                 return;
             }
 
@@ -158,8 +160,28 @@ namespace DaraletPlayer.Ui {
                 }
             }
 
-            // the lamps lit here with shadows, whose own light the game is to leave off (GameLampSwitch); the rest it keeps
-            GameLampSwitch.Places = which.Where(w => w >= 0).Select(w => forShadows[(int)w].Place).ToArray();
+            // each mapped lamp's light eased between the game and the plugin (EaseLampShare): the plugin's colour times its
+            // share here, the game's own dimmed by the rest (GameLampSwitch); the lamps without a map are the game's
+            var now = Environment.TickCount;
+            var seconds = Math.Max(0, Math.Min(0.25f, unchecked(now - lampsEasedAt) / 1000f));
+            lampsEasedAt = now;
+            var places = new List<(Vector3, float)>();
+
+            foreach (var w in which) {
+                if (w < 0) {
+                    continue;
+                }
+
+                var i = (int)w;
+                var share = EaseLampShare(forShadows[i].Place, wantedLamps.Contains(i), seconds);
+                var o = 8 + i * 8;
+                constants[o + 4] *= share;
+                constants[o + 5] *= share;
+                constants[o + 6] *= share;
+                places.Add((forShadows[i].Place, 1 - share));
+            }
+
+            GameLampSwitch.Places = places.ToArray();
 
             // a way in view space to the device's world, for the cube maps, which are laid out in the world
             var inverse = Matrix.Invert(view);
@@ -262,6 +284,7 @@ namespace DaraletPlayer.Ui {
         private bool loggedDebugLamps;
         private bool? loggedNight;
         private int nightEasedAt = Environment.TickCount;
+        private int lampsEasedAt = Environment.TickCount;
 
         /// <summary>Whether the game's current period of the day is a night one.</summary>
         private static unsafe bool GameIsNight() {

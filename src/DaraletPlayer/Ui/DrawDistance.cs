@@ -64,7 +64,7 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.RenderFrame += Core_RenderFrame;
             ListenForPortals();
             billboardsInWorldPass = DrawBillboardsInWorldPass;
-            WorldPass.Add(billboardsInWorldPass);
+            WorldPass.Add(billboardsInWorldPass, () => billboardKey != null && !billboardsFailed);
         }
 
         private DrawDistanceOptions Options => settings.Data.DrawDistance;
@@ -111,6 +111,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 NoteFrame();
+                TeleportTimeline.Frame();
                 UpdateProgressHud();
                 PrepareBeforeLogin();
                 QuietNow = Arriving;
@@ -219,6 +220,10 @@ namespace DaraletPlayer.Ui {
 
             // there once this pass is done, with nothing still to step up to and no density change waiting
             AtTarget = scenery == targetScenery && landscape == targetLandscape && !densityChanging;
+
+            if (AtTarget) {
+                TeleportTimeline.Note("full detail");
+            }
 
             // a load only once the last has settled (LoadSettled): every black screen came from two close together
             var loads = scenery != patchedRadius || densityChanging || reload

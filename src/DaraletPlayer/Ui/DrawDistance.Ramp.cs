@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DaraletPlayer.Feed;
 using Decal.Adapter;
 using Decal.Adapter.Wrappers;
@@ -98,6 +99,9 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         internal static bool PortalReload = false;
 
+        /// <summary>A test run's `set portalrings 0`: full detail left as it is for a teleport's load, to compare.</summary>
+        internal static bool NoPortalRings;
+
         /// <summary>The full-detail rings a teleport may load with: the presets' 2 are left as they are.</summary>
         private const int PortalRings = 2;
 
@@ -106,6 +110,28 @@ namespace DaraletPlayer.Ui {
                 // the far scenery let go for the teleport, so the game has its memory for the new place; made again
                 // once you're out (UpdateBillboards waits while in portal space)
                 inPortalSpace = e.Type == PortalEventType.EnterPortal;
+
+                if (inPortalSpace) {
+                    TeleportTimeline.Entered();
+                }
+                else {
+                    var o = Options;
+                    var pieces = new List<string>();
+
+                    if (o.ClampedFarLand > 0) {
+                        pieces.Add("far land");
+                    }
+
+                    if (o.On && (o.Billboards || o.ClampedFarTrees > 0 || o.FarBuildings)) {
+                        pieces.Add("billboards");
+                    }
+
+                    if (o.On) {
+                        pieces.Add("full detail");
+                    }
+
+                    TeleportTimeline.Left(pieces);
+                }
 
                 if (inPortalSpace) {
                     ReleaseFarScenery();
@@ -118,7 +144,7 @@ namespace DaraletPlayer.Ui {
                     // down only past PortalRings (2), and only to it: the presets' 2 are left for the load, so nothing
                     // steps back up after; the patch to 1 and the steps and reloads after it, in the minute after
                     // arriving, were followed by crashes when the next teleport came soon (November 2026)
-                    if (patchedRadius > PortalRings && !broken && PatchRings(PortalRings)) {
+                    if (!NoPortalRings && patchedRadius > PortalRings && !broken && PatchRings(PortalRings)) {
                         PluginCore.LogFile($"[draw-distance] portal space: full detail {patchedRadius} -> "
                             + $"{PortalRings} for the game's load, no reload");
                         patchedRadius = PortalRings;
