@@ -140,8 +140,8 @@ namespace DaraletPlayer.Ui {
                 tracePath = "game frame";
                 Draw(device, true, false);
 
-                // the frame's shadow replays are done: the game's buffers the noted draws held go back (ShadowCasters)
-                ShadowCasters.ReleaseNoted();
+                // the frame's shadow replays are done: the casters seen lately sorted out for the next (ShadowCasters)
+                ShadowCasters.EndFrame();
                 framesDrawn++;
                 drewInWorldPass = true;
             }
@@ -203,8 +203,8 @@ namespace DaraletPlayer.Ui {
                 Frame(device, needsDepth, image);
                 NoteTrace();
 
-                // nothing of the game's held from one frame to the next: a device reset comes between frames
-                ShadowCasters.ReleaseNoted();
+                // the casters seen lately kept for the next frame; let go before a device reset (Hud_OnDestroyTextures)
+                ShadowCasters.EndFrame();
             }
             catch (Exception ex) {
                 failed = true;
@@ -371,6 +371,9 @@ namespace DaraletPlayer.Ui {
                 savedState.Capture();
 
                 try {
+                    // casters kept from before let go if the device's world now measures from another landblock
+                    ShadowCasters.Origin(RenderOrigin.Landblock);
+
                     // the sun's shadow map first, while this frame's noted draws are fresh (DepthShading.Shadows.cs)
                     var sunReady = depthReady && sunUp > 0.05f && DebugView != 1
                         && DrawShadowMap(device, Vector3.Normalize(toSunWorld));
@@ -516,7 +519,7 @@ namespace DaraletPlayer.Ui {
         private void Hud_OnDestroyTextures(object sender, EventArgs e) {
             try {
                 // a reset is coming: nothing of ours in the default pool may be alive, nor any hold on the game's buffer
-                ShadowCasters.ReleaseNoted();
+                ShadowCasters.ReleaseAll();
                 TearDown(UBService.Huds.D3Ddevice);
                 PluginCore.LogFile("[shading] let go of the depth texture for a device reset");
             }

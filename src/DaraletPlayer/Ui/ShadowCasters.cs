@@ -23,8 +23,8 @@ namespace DaraletPlayer.Ui {
     /// hundred draws near you are all that need the rest. `[sun-shadows]` lines in log.txt.
     /// </para>
     /// </summary>
-    internal static unsafe class ShadowCasters {
-        public const int MaxDraws = 20000;
+    internal static unsafe partial class ShadowCasters {
+        public const int MaxDraws = 30000;
 
         private const int BeginSceneSlot = 41;
         private const int SetTransformSlot = 44;
@@ -94,7 +94,10 @@ namespace DaraletPlayer.Ui {
         /// <summary>Each kind of object's Release, by its vtable: a Get call hands back a reference to let go.</summary>
         private static readonly Dictionary<IntPtr, RefCall> releases = new Dictionary<IntPtr, RefCall>();
 
-        /// <summary>Records of this frame's draws, the first `count` in use; kept and filled again each frame.</summary>
+        /// <summary>
+        /// The casters known, the first `count` in use: this frame's draws and those seen lately (ShadowCasters.Kept.cs).
+        /// The records are kept and filled again, not made anew.
+        /// </summary>
         private static readonly List<ShadowDraw> pool = new List<ShadowDraw>();
 
         private static IntPtr* vtable;
@@ -126,7 +129,7 @@ namespace DaraletPlayer.Ui {
 
         public static PointerCall GameSetDeclaration => setDeclaration;
 
-        /// <summary>How many draws this frame has noted so far (At gives each).</summary>
+        /// <summary>How many casters are known: this frame's draws and those kept from lately (At gives each).</summary>
         public static int Count => count;
 
         public static void Hook(Device device) {
@@ -182,7 +185,8 @@ namespace DaraletPlayer.Ui {
             originals.Clear();
             vtable = null;
             ShadowStubs.Recording = false;
-            ReleaseNoted();
+            ReleaseAll();
+            StopFollowingWrites();
             kept.Clear();
             managed.Clear();
             releases.Clear();
@@ -229,8 +233,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private static int BeginScene(IntPtr device) {
-            // each frame's draws start afresh; the records are kept and filled again, not made anew
-            ReleaseNoted();
+            // casters seen lately are kept (ShadowCasters.Kept.cs): the game draws only what's in view
             ShadowStubs.Recording = true;
 
             if (DateTime.UtcNow >= forgetBuffers) {
@@ -249,7 +252,7 @@ namespace DaraletPlayer.Ui {
             int startIndex, int primitives) {
             try {
                 // only a draw near you, while the world is drawn, reaches here (ShadowStubs)
-                if (!DrawProbe.Ours && count < MaxDraws) {
+                if (!DrawProbe.Ours) {
                     TryNote(device, type, baseVertex, minIndex, vertices, startIndex, primitives);
                 }
             }
@@ -304,7 +307,9 @@ namespace DaraletPlayer.Ui {
             getTexture(device, 0, &texture);
             getRenderState(device, AlphaTestEnable, &alphaTest);
 
-            if (indices == IntPtr.Zero || declaration == IntPtr.Zero) {
+            // kept from frame to frame, so only a managed index buffer: a default-pool one may be dynamic geometry,
+            // filled again for something else
+            if (indices == IntPtr.Zero || declaration == IntPtr.Zero || !IsManaged(indices)) {
                 Release(stream);
                 Release(indices);
                 Release(declaration);
@@ -312,22 +317,28 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            // the references the Get calls handed back are kept until the frame's replays are done (ReleaseNoted, at
-            // the next BeginScene): the game can let a buffer go within the frame (something leaving), and a replay of a
-            // draw holding none crashed the game in DrawInto (an AccessViolationException, November 2026)
+            // the references the Get calls handed back are held while the record is kept (ReleaseAll before a device
+            // reset): the game can let a buffer go (something leaving), and a replay of a draw holding none crashed the
+            // game in DrawInto (an AccessViolationException, November 2026)
+            FollowWrites(stream);
+            FollowWrites(indices);
+            var world = ShadowStubs.World;
+            var draw = Record(stream, offset, indices, baseVertex, startIndex, primitives, world);
 
-            if (count == pool.Count) {
-                pool.Add(new ShadowDraw { World = new float[16] });
+            if (draw == null) {
+                Release(stream);
+                Release(indices);
+                Release(declaration);
+                Release(texture);
+                return;
             }
 
-            var draw = pool[count++];
             draw.Stream = stream;
             draw.Offset = offset;
             draw.Indices = indices;
             draw.Texture = texture;
             draw.Declaration = declaration;
             draw.AlphaTest = alphaTest != 0;
-            var world = ShadowStubs.World;
 
             for (var i = 0; i < 16; i++) {
                 draw.World[i] = world[i];
@@ -359,12 +370,12 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// The references every noted draw holds let go, and the records emptied: once the frame's replays are done
-        /// (DepthShading), at the next BeginScene, and before a device reset, which fails while anything holds a
-        /// default-pool resource (some of the game's textures and index buffers are): the game said "Could not initialize
-        /// Direct3D" and stopped (seen in the game, November 2026, when they were held till the next frame).
+        /// The references every kept caster holds let go, and the records emptied: before a device reset, which fails
+        /// while anything holds a default-pool resource (some of the game's textures are): the game said "Could not
+        /// initialize Direct3D" and stopped (seen in the game, November 2026, when draws were held from frame to frame
+        /// with no release before the reset), and when the noting stops.
         /// </summary>
-        public static void ReleaseNoted() {
+        public static void ReleaseAll() {
             for (var i = 0; i < count; i++) {
                 var draw = pool[i];
                 Release(draw.Stream);
@@ -374,6 +385,7 @@ namespace DaraletPlayer.Ui {
             }
 
             count = 0;
+            byKey.Clear();
         }
 
         /// <summary>A reference a Get call handed back let go, through that kind's own Release (kept by vtable).</summary>

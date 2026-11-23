@@ -90,6 +90,12 @@ namespace DaraletPlayer.Ui {
                     SunOptions.On ? (farNoted ? FarReach : Math.Min(NearReach, FarReach)) + CasterMargin : 0);
                 // and out to the furthest shadowed lamp's casters, which use the same draws
                 ShadowCasters.SetArea(you.X, you.Z, Math.Max(reach, lampShadowArea));
+
+                // casters out of view are kept for the maps while within their reach (ShadowCasters.Kept.cs)
+                var sunReach = FarReach > NearReach * 1.25f ? FarReach : Math.Min(NearReach, FarReach);
+                var keep = SunOptions.On ? sunReach + CasterMargin : 0;
+                ShadowCasters.SetKeepArea(you.X, you.Z,
+                    Math.Max(Math.Max(keep, lampShadowArea), 40 + LampCasterMargin));
             }
 
             if (wanted && !ShadowCasters.Hooked) {
@@ -187,11 +193,15 @@ namespace DaraletPlayer.Ui {
                 PluginCore.LogFile($"[sun-shadows] since the last report: {shadowDrawsNoted} draws noted, "
                     + $"{shadowDrawsClose} made into the close map, {shadowDrawsNear} into the near one, "
                     + $"{shadowDrawsFar} into the far one "
-                    + $"({(farUsed ? FarReach + " m" : "not used")}); {noted} this frame");
+                    + $"({(farUsed ? FarReach + " m" : "not used")}); {noted} this frame, "
+                    + $"{ShadowCasters.KeptOutOfView} kept "
+                    + $"out of view, {ShadowCasters.MovingMeshes} meshes moving, {ShadowCasters.DroppedWritten} let go "
+                    + "for buffers written again");
                 shadowDrawsNoted = 0;
                 shadowDrawsClose = 0;
                 shadowDrawsNear = 0;
                 shadowDrawsFar = 0;
+                ShadowCasters.DroppedWritten = 0;
             }
 
             return true;
