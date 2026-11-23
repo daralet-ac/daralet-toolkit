@@ -73,16 +73,23 @@ namespace DaraletPlayer.Ui {
         private float FarReach => Math.Max(NearReach, SunOptions.ClampedDistance);
 
         /// <summary>The hooks that note the game's draws, in while sun shadows are on.</summary>
-        private void FollowSunShadows(Device device) {
+        private unsafe void FollowSunShadows(Device device) {
             // the game's draws are noted for the sun's maps and the lamps' cube maps alike
             var lampShadows = LampOptions.On && LampOptions.Shadows;
             var wanted = SunOptions.On || lampShadows;
 
             if (wanted) {
-                // only draws that could cast into a map are noted (ShadowCasters.SetArea); the lamps near you, within 40 m
+                // only draws that could cast into a map are noted (ShadowCasters.SetArea), for the next frame: out to the
+                // far map only when it's to be drawn again then (FarStale), the near map's otherwise; at 516 m every one of
+                // about 3,100 draws a frame was noted, each with calls of its own, for a far map drawn once in 30 frames
                 var you = RenderOrigin.Player();
-                var reach = SunOptions.On ? FarReach + CasterMargin : 40 + LampCasterMargin;
-                ShadowCasters.SetArea(you.X, you.Z, reach);
+                var toSun = new Vector3(*(float*)0x8682C8, *(float*)0x8682D0, *(float*)0x8682CC);
+                farNoted = SunOptions.On && FarReach > NearReach * 1.25f && toSun.LengthSq() > 0
+                    && FarStale(you, Vector3.Normalize(toSun));
+                var reach = Math.Max(40 + LampCasterMargin,
+                    SunOptions.On ? (farNoted ? FarReach : Math.Min(NearReach, FarReach)) + CasterMargin : 0);
+                // and out to the furthest shadowed lamp's casters, which use the same draws
+                ShadowCasters.SetArea(you.X, you.Z, Math.Max(reach, lampShadowArea));
             }
 
             if (wanted && !ShadowCasters.Hooked) {
@@ -113,24 +120,57 @@ namespace DaraletPlayer.Ui {
 
             EnsureShadowMap(device);
             var centre = RenderOrigin.Player();
+            var origin = RenderOrigin.Landblock;
             var nearReach = Math.Min(NearReach, FarReach);
-            nearMatrix = SunMatrix(centre, toSunWorld, nearReach);
             farUsed = FarReach > NearReach * 1.25f;
-            farMatrix = farUsed ? SunMatrix(centre, toSunWorld, FarReach) : nearMatrix;
             closeMatrix = SunMatrix(centre, toSunWorld, CloseReach);
+
+            // the near and far maps drawn again only when they need it (MapStale): drawn every frame, the far one at
+            // 516 m took about 3,100 of the game's draws a frame and the near one 560, most of the lighting's cost in
+            // Hebian-to's square (20 to 35 fps, the user, November 2026). Between, each keeps the matrix it was drawn
+            // with, so its shadows stay where they are
+            var redrawNear = MapStale(ref nearDrawn, centre, toSunWorld, nearReach, origin, NearMoveShare, NearMostFrames);
+            // the far map as decided at the end of the last frame (FollowSunShadows), which noted the far draws for it
+            var redrawFar = farUsed && farNoted;
+
+            if (farUsed && !redrawFar) {
+                farDrawn.Age++;
+            }
+
+            if (redrawNear) {
+                nearMatrix = SunMatrix(centre, toSunWorld, nearReach);
+            }
+
+            if (!farUsed) {
+                farMatrix = nearMatrix;
+            }
+            else if (redrawFar) {
+                farMatrix = SunMatrix(centre, toSunWorld, FarReach);
+            }
 
             var oldTarget = device.GetRenderTarget(0);
             var oldDepth = device.DepthStencilSurface;
 
             try {
                 PrepareShadowDrawing(device);
-                // your character alone in the close map, the rest in the near and far ones: each map's edges have a
-                // softness of their own, and the trees' blunted the character's (the user's call, November 2026)
+                // your character alone in the close map, every frame, the rest in the near and far ones: each map's edges
+                // have a softness of their own, and the trees' blunted the character's (the user's call, November 2026)
                 shadowDrawsClose += DrawInto(device, closeSurface, closeMatrix, noted, centre, CloseReach, true);
-                shadowDrawsNear += DrawInto(device, nearSurface, nearMatrix, noted, centre, nearReach, false);
 
-                if (farUsed) {
+                if (redrawNear) {
+                    shadowDrawsNear += DrawInto(device, nearSurface, nearMatrix, noted, centre, nearReach, false);
+                    nearDrawn = (centre, toSunWorld, nearReach, origin, 0, true);
+                }
+
+                if (redrawFar) {
                     shadowDrawsFar += DrawInto(device, farSurface, farMatrix, noted, centre, FarReach, false);
+                    farDrawn = (centre, toSunWorld, FarReach, origin, 0, true);
+                }
+
+                // not drawn yet (made, or let go for a reset): the near map alone till it is
+                if (!farDrawn.Valid) {
+                    farUsed = false;
+                    farMatrix = nearMatrix;
                 }
 
                 shadowDrawsNoted += noted;
@@ -149,11 +189,67 @@ namespace DaraletPlayer.Ui {
                     + $"{shadowDrawsFar} into the far one "
                     + $"({(farUsed ? FarReach + " m" : "not used")}); {noted} this frame");
                 shadowDrawsNoted = 0;
+                shadowDrawsClose = 0;
                 shadowDrawsNear = 0;
                 shadowDrawsFar = 0;
             }
 
             return true;
+        }
+
+        /// <summary>The near map is drawn again past this share of its reach moved (2 m of 40), or this many frames.</summary>
+        private const float NearMoveShare = 0.05f;
+        private const int NearMostFrames = 2;
+
+        /// <summary>The far map: past this share of its reach (15 m at 500 m), or this many frames, for what moves far off.</summary>
+        private const float FarMoveShare = 0.03f;
+        private const int FarMostFrames = 30;
+
+        /// <summary>Whether the next frame draws the far map again, so its draws are noted (FollowSunShadows).</summary>
+        private bool farNoted;
+
+        /// <summary>
+        /// Whether the far map wants drawing again next frame, by the same tests as MapStale, its frame count not yet
+        /// counted: never drawn, another reach or landblock, moved past its share, the sun moved, or too many frames.
+        /// </summary>
+        private bool FarStale(Vector3 centre, Vector3 toSun) {
+            if (!farDrawn.Valid || farDrawn.Reach != FarReach || farDrawn.Origin != RenderOrigin.Landblock
+                || (centre - farDrawn.Centre).Length() > FarReach * FarMoveShare) {
+                return true;
+            }
+
+            var was = farDrawn.Sun;
+            was.Normalize();
+            return Vector3.Dot(was, toSun) < 0.99998f || farDrawn.Age + 1 >= FarMostFrames;
+        }
+
+        /// <summary>Each map as last drawn: where you were, the sun's way, its reach, the landblock, frames since.</summary>
+        private (Vector3 Centre, Vector3 Sun, float Reach, uint Origin, int Age, bool Valid) nearDrawn;
+        private (Vector3 Centre, Vector3 Sun, float Reach, uint Origin, int Age, bool Valid) farDrawn;
+
+        /// <summary>
+        /// Whether a map wants drawing again: never drawn (or let go), another reach or landblock (the device's world is
+        /// measured from the camera's), moved past its share of the reach, the sun moved a third of a degree, or too
+        /// many frames since (things moving in it). Counts a frame otherwise.
+        /// </summary>
+        private static bool MapStale(ref (Vector3 Centre, Vector3 Sun, float Reach, uint Origin, int Age, bool Valid) drawn,
+            Vector3 centre, Vector3 toSun, float reach, uint origin, float moveShare, int mostFrames) {
+            if (!drawn.Valid || drawn.Reach != reach || drawn.Origin != origin
+                || (centre - drawn.Centre).Length() > reach * moveShare) {
+                return true;
+            }
+
+            var was = drawn.Sun;
+            var now = toSun;
+            was.Normalize();
+            now.Normalize();
+
+            if (Vector3.Dot(was, now) < 0.99998f) {
+                return true;
+            }
+
+            drawn.Age++;
+            return drawn.Age >= mostFrames;
         }
 
         private void PrepareShadowDrawing(Device device) {
@@ -179,6 +275,9 @@ namespace DaraletPlayer.Ui {
             DeviceCalls.UseShaders(device, shadowVertexShader, shadowPixelShader);
         }
 
+        /// <summary>What the replays last set on the device (ReplayState), so it isn't set again.</summary>
+        private static readonly ReplayState Replay = new ReplayState();
+
         /// <summary>The draws placed within reach (and the margin) made into one map; how many.</summary>
         private static unsafe int DrawInto(Device device, Surface target, Matrix sun, int noted,
             Vector3 centre, float reach, bool characters) {
@@ -188,7 +287,7 @@ namespace DaraletPlayer.Ui {
             var reachSquared = (reach + CasterMargin) * (reach + CasterMargin);
             var made = 0;
             var constants = new float[16];
-            var cutOut = new float[4];
+            Replay.Reset();
 
             for (var i = 0; i < noted; i++) {
                 var draw = ShadowCasters.At(i);
@@ -204,12 +303,7 @@ namespace DaraletPlayer.Ui {
 
                 Multiply(w, sun, constants);
                 DeviceCalls.VertexConstants(device, 0, constants);
-                cutOut[0] = draw.AlphaTest && draw.Texture != IntPtr.Zero ? 1 : 0;
-                DeviceCalls.PixelConstants(device, 0, cutOut);
-                ShadowCasters.GameSetDeclaration(com, draw.Declaration);
-                ShadowCasters.GameSetStream(com, 0, draw.Stream, draw.Offset, 44);
-                ShadowCasters.GameSetIndices(com, draw.Indices);
-                ShadowCasters.GameSetTexture(com, 0, draw.Texture);
+                Replay.Prepare(device, com, draw);
                 ShadowCasters.GameDrawIndexed(com, draw.Type, draw.BaseVertex, draw.MinIndex, draw.Vertices,
                     draw.StartIndex, draw.Count);
                 made++;
@@ -268,6 +362,8 @@ namespace DaraletPlayer.Ui {
             shadowDepth = device.CreateDepthStencilSurface(ShadowMapSize, ShadowMapSize, DepthFormat.D24S8,
                 MultiSampleType.None, 0, true);
             PluginCore.LogFile($"[sun-shadows] shadow maps made, three of {ShadowMapSize}x{ShadowMapSize}");
+            nearDrawn.Valid = false;
+            farDrawn.Valid = false;
         }
 
         /// <summary>
@@ -304,6 +400,8 @@ namespace DaraletPlayer.Ui {
         }
 
         private void TearDownShadows() {
+            nearDrawn.Valid = false;
+            farDrawn.Valid = false;
             nearSurface?.Dispose();
             nearSurface = null;
             nearTexture?.Dispose();

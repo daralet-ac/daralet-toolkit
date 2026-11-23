@@ -110,9 +110,9 @@ namespace DaraletPlayer.Ui {
                 }
 
                 var device = UBService.Huds.D3Ddevice;
-                var landcell = unchecked((uint)CoreManager.Current.Actions.Landcell);
 
-                if (device == null || (landcell & 0xFFFF) >= 0x100) {
+                // outdoors, or in a building's room that sees out (OutdoorView)
+                if (device == null || !OutdoorView.Now) {
                     return;
                 }
 
@@ -186,9 +186,7 @@ namespace DaraletPlayer.Ui {
             }
 
             try {
-                var actions = CoreManager.Current.Actions;
-
-                if ((unchecked((uint)actions.Landcell) & 0xFFFF) >= 0x100) {
+                if (!OutdoorView.Now) {
                     return;
                 }
 

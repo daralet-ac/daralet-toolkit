@@ -19,6 +19,13 @@ namespace DaraletPlayer.Ui {
             var options = settings.Data.Image;
             var state = device.RenderState;
             state.AlphaBlendEnable = false;
+
+            // what's seen through see-through things given back its look from before the night, before anything reads
+            // the finished frame (DepthShading.SeeThrough.cs)
+            if (seeThroughReady) {
+                DrawSeeThrough(device, back, width, height);
+            }
+
             // glow first, so the anti-aliasing smooths its edges with the rest (DepthShading.Glow.cs)
             if (options.ClampedGlow > 0) {
                 DrawGlow(device, back, width, height);

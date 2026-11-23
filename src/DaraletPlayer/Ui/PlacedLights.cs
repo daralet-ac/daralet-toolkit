@@ -13,13 +13,11 @@ namespace DaraletPlayer.Ui {
     /// Setup carries Lights: a place in the model, a colour, an intensity and a falloff, as the game's own lamps have.
     /// So for the 3x3 landblocks round you each is turned and placed as its object, and joins the lamp pass's lights
     /// (with LampLightOptions.FireLight), unless the game already has a light there. Read once a landblock, on the
-    /// game's thread (the dat readers aren't safe on another), Setups' lights kept by id. Untested in the game when
-    /// written.
+    /// game's thread (the dat readers aren't safe on another), Setups' lights kept by id. Surfaces painted with fire
+    /// (a fireplace's embers) are lights too (PlacedLights.Fires.cs). Untested in the game when written.
     /// </summary>
-    internal static class PlacedLights {
-        private static readonly Dictionary<uint, List<(uint Block, float X, float Y, float Z, uint Colour, float Intensity,
-            float Falloff)>> byBlock = new Dictionary<uint, List<(uint, float, float, float, uint, float, float)>>();
-
+    internal static partial class PlacedLights {
+        private static readonly Dictionary<uint, List<PlacedLight>> byBlock = new Dictionary<uint, List<PlacedLight>>();
         private static readonly Dictionary<uint, SetupModel> setups = new Dictionary<uint, SetupModel>();
         private static bool failed;
         private static int loggedBlocks;
@@ -33,6 +31,23 @@ namespace DaraletPlayer.Ui {
             try {
                 var x0 = (int)(landblock >> 8);
                 var y0 = (int)(landblock & 0xFF);
+                var seconds = (System.Environment.TickCount & 0x3FFFFFFF) / 1000f;
+
+                for (var dx = -1; dx <= 1; dx++) {
+                    for (var dy = -1; dy <= 1; dy++) {
+                        var x = x0 + dx;
+                        var y = y0 + dy;
+
+                        if (x < 0 || y < 0 || x > 0xFE || y > 0xFE) {
+                            continue;
+                        }
+
+                        LightsOf((uint)((x << 8) | y));
+                    }
+                }
+
+                // the blocks' indoor cells, a few a frame, into the lists just made
+                ReadSomeCells();
 
                 for (var dx = -1; dx <= 1; dx++) {
                     for (var dy = -1; dy <= 1; dy++) {
@@ -50,10 +65,13 @@ namespace DaraletPlayer.Ui {
                                 continue;
                             }
 
+                            var flicker = l.Fire ? FireLights.Flicker(l.Seed, seconds) : 1;
                             lights.Add(new GameLight {
                                 Type = 0, Cell = l.Block << 16, East = east, North = north, Height = l.Z,
-                                Red = ((l.Colour >> 16) & 0xFF) / 255f, Green = ((l.Colour >> 8) & 0xFF) / 255f,
-                                Blue = (l.Colour & 0xFF) / 255f, Intensity = l.Intensity, Falloff = l.Falloff,
+                                Red = l.Fire ? FireLights.Red * flicker : ((l.Colour >> 16) & 0xFF) / 255f,
+                                Green = l.Fire ? FireLights.Green * flicker : ((l.Colour >> 8) & 0xFF) / 255f,
+                                Blue = l.Fire ? FireLights.Blue * flicker : (l.Colour & 0xFF) / 255f,
+                                Intensity = l.Intensity, Falloff = l.Falloff,
                             });
                         }
                     }
@@ -79,13 +97,12 @@ namespace DaraletPlayer.Ui {
             return false;
         }
 
-        private static List<(uint Block, float X, float Y, float Z, uint Colour, float Intensity, float Falloff)>
-            LightsOf(uint block) {
+        private static List<PlacedLight> LightsOf(uint block) {
             if (byBlock.TryGetValue(block, out var known)) {
                 return known;
             }
 
-            var found = new List<(uint, float, float, float, uint, float, float)>();
+            var found = new List<PlacedLight>();
             byBlock[block] = found;
             var cells = UBService.CellDat;
             var portal = UBService.PortalDat;
@@ -103,28 +120,32 @@ namespace DaraletPlayer.Ui {
 
             foreach (var placed in info.Objects) {
                 AddLights(found, block, portal, placed.Id, placed.Frame);
+                AddFires(found, block, portal, placed.Id, placed.Frame);
             }
 
             var fromObjects = found.Count;
 
             foreach (var building in info.Buildings) {
                 AddLights(found, block, portal, building.ModelId, building.Frame);
+                AddFires(found, block, portal, building.ModelId, building.Frame);
             }
+
+            QueueCells(block, info.NumCells);
 
             if (found.Count > 0 && loggedBlocks++ < 5) {
                 PluginCore.LogFile($"[lamps] {found.Count} lights of placed objects in landblock {block:X4}, {fromObjects} of them objects', the rest buildings'");
 
                 foreach (var l in found.GetRange(0, Math.Min(8, found.Count))) {
-                    PluginCore.LogFile($"[lamps]   at {l.Item2:0.0} {l.Item3:0.0} {l.Item4:0.0}, colour {l.Item5:X8}, "
-                        + $"intensity {l.Item6:0.##}, falloff {l.Item7:0.#}");
+                    PluginCore.LogFile($"[lamps]   at {l.X:0.0} {l.Y:0.0} {l.Z:0.0}, colour {l.Colour:X8}, "
+                        + $"intensity {l.Intensity:0.##}, falloff {l.Falloff:0.#}{(l.Fire ? ", fire" : "")}");
                 }
             }
 
             return found;
         }
 
-        private static void AddLights(List<(uint, float, float, float, uint, float, float)> found, uint block,
-            DatDatabase portal, uint model, ACE.DatLoader.Entity.Frame frame) {
+        private static void AddLights(List<PlacedLight> found, uint block, DatDatabase portal, uint model,
+            ACE.DatLoader.Entity.Frame frame) {
             if ((model >> 24) != 0x02) {
                 return;
             }
@@ -148,8 +169,10 @@ namespace DaraletPlayer.Ui {
                 var x = v.X + q.W * tx + (q.Y * tz - q.Z * ty);
                 var y = v.Y + q.W * ty + (q.Z * tx - q.X * tz);
                 var z = v.Z + q.W * tz + (q.X * ty - q.Y * tx);
-                found.Add((block, frame.Origin.X + x, frame.Origin.Y + y, frame.Origin.Z + z, light.Color,
-                    light.Intensity, light.Falloff));
+                found.Add(new PlacedLight {
+                    Block = block, X = frame.Origin.X + x, Y = frame.Origin.Y + y, Z = frame.Origin.Z + z,
+                    Colour = light.Color, Intensity = light.Intensity, Falloff = light.Falloff,
+                });
             }
         }
 
@@ -157,6 +180,7 @@ namespace DaraletPlayer.Ui {
         public static void Clear() {
             byBlock.Clear();
             setups.Clear();
+            ClearFires();
         }
     }
 }

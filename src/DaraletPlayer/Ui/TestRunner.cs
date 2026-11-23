@@ -636,6 +636,12 @@ namespace DaraletPlayer.Ui {
                 case "lampreach":
                     settings.Data.LampLight.Reach = (int)value;
                     break;
+                case "lampdistance":
+                    settings.Data.LampLight.Distance = (int)value;
+                    break;
+                case "shadowedlamps":
+                    settings.Data.LampLight.ShadowedLamps = (int)value;
+                    break;
                 case "prelogin":
                     DrawDistance.SetBeforeLogin = value != 0;
                     break;
@@ -656,6 +662,9 @@ namespace DaraletPlayer.Ui {
                     break;
                 case "objectlog":
                     ObjectWatch.Enable(value != 0);
+                    break;
+                case "alphadefer":
+                    WorldPass.DeferEarly = value != 0;
                     break;
                 case "worldpasshook":
                     WorldPass.Bare = value >= 2;

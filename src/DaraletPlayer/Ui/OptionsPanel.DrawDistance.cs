@@ -54,20 +54,33 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>
         /// The Config tab's Graphics sub tab (the user's call, November 2026: every graphics setting the plugin adds in
-        /// one place, as well as on the Options window's Config page): the same rows, in sections.
+        /// one place, as well as on the Options window's Config page): the same rows, in sections. The budget, presets
+        /// and Apply stay at the top, and the sections scroll under them in an area of their own (the user's call: the
+        /// budget always in sight while a setting's changed).
         /// </summary>
         public void RenderGraphics() {
             RefreshDraft();
             Form.Section("Budget");
             RenderBudget();
             RenderApplyRow();
+            ImGui.Separator();
 
+            if (Widgets.BeginChild("graphics-sections", new System.Numerics.Vector2(0, 0), false)) {
+                RenderGraphicsSections();
+            }
+
+            Widgets.EndChild();
+        }
+
+        /// <summary>Every section under the budget: frame rate, view distance, trees, lighting, water, grass, image.</summary>
+        private void RenderGraphicsSections() {
             if (Form.BeginForm("graphics-frame-rate")) {
                 RenderFrameRateRow();
                 ImGui.EndTable();
             }
 
             Form.Section("View Distance");
+            RenderLandscapePresets();
 
             if (RenderDistanceSwitch() && Form.BeginForm("graphics-view")) {
                 RenderViewRows();
@@ -83,6 +96,7 @@ namespace DaraletPlayer.Ui {
             }
 
             Form.Section("Lighting");
+            RenderLightingPresets();
 
             if (Form.BeginForm("graphics-lighting")) {
                 RenderShading();

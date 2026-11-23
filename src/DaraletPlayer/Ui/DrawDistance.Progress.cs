@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
+using DaraletPlayer.Feed;
 using Decal.Adapter;
 using ImGuiNET;
 using UtilityBelt.Service;
@@ -10,8 +12,13 @@ namespace DaraletPlayer.Ui {
     /// A loading bar while the draw distance steps up (the user's call, November 2026: "it's a bad UX how long it takes to
     /// load"): at the top of the screen, how far the landscape and scenery have come from where the step-up began, with
     /// what's loading in words; it says Done for a moment once there, then goes. Drawn from a hud of its own that takes no
-    /// mouse (NoInputs), as CombatText's. Hidden with the plugin's windows (Hide game UI). Untested in the game when
-    /// written.
+    /// mouse (NoInputs), as CombatText's. Hidden with the plugin's windows (Hide game UI).
+    /// <para>
+    /// It also waits for the plugin's own pieces made after arriving (Feed/LoadPieces.cs: the far land with its pictures,
+    /// the trees and buildings past the game's), on logging in and after every teleport, with or without steps: it said
+    /// Done 8 to 11 seconds before they were in (the user's eye, November 2026). With steps, they're the first 60% of the
+    /// bar and the pieces the rest. Untested in the game when written.
+    /// </para>
     /// </summary>
     internal sealed partial class DrawDistance {
         private const ImGuiWindowFlags ProgressFlags = ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoTitleBar
@@ -32,14 +39,53 @@ namespace DaraletPlayer.Ui {
         private int progressTargetLandscape;
         private DateTime doneAt = DateTime.MinValue;
 
+        /// <summary>The share of the bar the steps take when pieces are waited for after them.</summary>
+        private const float StepShare = 0.6f;
+
+        /// <summary>Whether this load had steps, so the pieces fill only the bar's last part.</summary>
+        private bool stepsInThisLoad;
+
+        /// <summary>Whether the bar has been waiting for pieces, so their end is its Done.</summary>
+        private bool piecesShown;
+
+        private bool barLoggedIn;
+
+        /// <summary>
+        /// On arriving (logging in, out of portal space): the pieces to wait for, as they're on. Indoors or switched off,
+        /// each says at once that nothing's coming.
+        /// </summary>
+        private void ExpectPieces() {
+            var options = Options;
+            var pieces = new List<string>();
+
+            if (options.ClampedFarLand > 0) {
+                pieces.Add(LoadPieces.FarLand);
+            }
+
+            if (options.On && options.FarScenery && !billboardsFailed) {
+                pieces.Add(LoadPieces.Trees);
+            }
+
+            LoadPieces.Expect(pieces, DateTime.UtcNow);
+
+            // a load with no steps (a teleport): the bar is the pieces alone
+            if (!stepping) {
+                stepsInThisLoad = false;
+            }
+        }
+
         /// <summary>From Apply: what's loaded now against what it's stepping up to.</summary>
         private void NoteProgress(int scenery, int landscape, int targetScenery, int targetLandscape, bool there) {
             if (there) {
                 if (stepping) {
                     stepping = false;
-                    doneAt = DateTime.UtcNow;
                     progressScenery = targetScenery;
                     progressLandscape = targetLandscape;
+
+                    // Done once the pieces after the steps are in too (UpdateProgressHud)
+                    if (LoadPieces.Waiting(DateTime.UtcNow) == 0) {
+                        doneAt = DateTime.UtcNow;
+                    }
                 }
 
                 return;
@@ -59,6 +105,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 stepping = true;
+                stepsInThisLoad = true;
                 doneAt = DateTime.MinValue;
             }
 
@@ -70,8 +117,33 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>From RenderFrame: the bar's hud made once, shown while there's something to show.</summary>
         private void UpdateProgressHud() {
-            var showing = (stepping || (DateTime.UtcNow - doneAt).TotalSeconds < DoneSeconds)
-                && !HideGameUi.PluginWindowsHidden && CoreManager.Current.CharacterFilter.LoginStatus == 3;
+            var now = DateTime.UtcNow;
+            var loggedIn = CoreManager.Current.CharacterFilter.LoginStatus == 3;
+
+            // logging in (a hot reload too): everything's made afresh
+            if (loggedIn && !barLoggedIn) {
+                ExpectPieces();
+            }
+
+            barLoggedIn = loggedIn;
+            var waiting = LoadPieces.Waiting(now);
+
+            if (waiting > 0) {
+                if (!piecesShown) {
+                    piecesShown = true;
+                    doneAt = DateTime.MinValue;
+                }
+            }
+            else if (piecesShown) {
+                piecesShown = false;
+
+                if (!stepping) {
+                    doneAt = now;
+                }
+            }
+
+            var showing = (stepping || waiting > 0 || (now - doneAt).TotalSeconds < DoneSeconds)
+                && !HideGameUi.PluginWindowsHidden && loggedIn;
 
             if (progressHud == null) {
                 if (!showing) {
@@ -109,11 +181,21 @@ namespace DaraletPlayer.Ui {
                 var total = Math.Max(0, progressTargetScenery - startScenery)
                     + Math.Max(0, progressTargetLandscape - startLandscape);
                 var done = Math.Max(0, progressScenery - startScenery) + Math.Max(0, progressLandscape - startLandscape);
-                var fraction = !stepping ? 1f : total <= 0 ? 0f : Math.Min(1f, (float)done / total);
-                var text = !stepping ? "Draw distance loaded"
-                    : done == 0 ? "Draw distance: waiting for the area to load..."
-                    : $"Loading draw distance: landscape {progressLandscape} of {progressTargetLandscape}, "
-                        + $"scenery {progressScenery} of {progressTargetScenery}";
+                var stepFraction = !stepping ? 1f : total <= 0 ? 0f : Math.Min(1f, (float)done / total);
+                var expected = LoadPieces.Expected;
+                var waiting = LoadPieces.Waiting(DateTime.UtcNow);
+                var pieceFraction = expected == 0 ? 1f : (float)(expected - waiting) / expected;
+                // with pieces still to come the steps are the bar's first part, without them all of it
+                var stepShare = !stepsInThisLoad ? 0f : waiting > 0 ? StepShare : 1f;
+                var fraction = waiting == 0 && !stepping ? 1f
+                    : stepShare * stepFraction + (1 - stepShare) * (stepping ? 0f : pieceFraction);
+                var text = stepping
+                    ? done == 0 ? "Draw distance: waiting for the area to load..."
+                        : $"Loading draw distance: landscape {progressLandscape} of {progressTargetLandscape}, "
+                            + $"scenery {progressScenery} of {progressTargetScenery}"
+                    : waiting > 0
+                        ? Arriving ? "Waiting for the area to load..." : $"Loading the {LoadPieces.Describe()}..."
+                    : "Draw distance loaded";
 
                 var screen = ImGui.GetIO().DisplaySize;
                 var line = ImGui.GetTextLineHeight();

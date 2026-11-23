@@ -34,6 +34,43 @@ namespace DaraletPlayer.Ui {
         private static AcClient.Hook hook;
         private static bool watching;
 
+        /// <summary>
+        /// The game's other flushes of its see-through list, inside the world (each drawing it only when the list is three
+        /// quarters full, but PView::DrawCells always, with the camera in a building): DrawBlock after each cell
+        /// (0x5A2B17), DrawBuilding (0x5A041B) and PView::DrawCells before the indoor cells (0x5A5982). Hooked so the
+        /// game's lamps are whole for what they draw (GameLampSwitch.BeginSeeThrough), as for the last flush, and counted.
+        /// </summary>
+        private static readonly int[] EarlyFlushCalls = { 0x5A2B17, 0x5A041B, 0x5A5982 };
+
+        private static readonly List<AcClient.Hook> earlyHooks = new List<AcClient.Hook>();
+        private static FlushCall earlyFlushCall;
+
+        /// <summary>The see-through list's two counts (a ushort each) and its size (3000 entries each; 0x7E6550).</summary>
+        private const int AlphaCountAt = 0x8729BC;
+        private const int AlphaCount2At = 0x8729C0;
+        private const float AlphaListSize = 3000;
+
+        /// <summary>
+        /// The fraction of the list the game's own guard waits for (DrawBlock's, the float at 0x821EE0): the early
+        /// flushes draw only at that, so a full list can't drop what comes next.
+        /// </summary>
+        private const float OverflowGuard = 0.75f;
+
+        /// <summary>
+        /// The game's early flushes wait until the list is three quarters full (OverflowGuard), as DrawBlock's does,
+        /// instead of drawing whatever is queued: DrawBuilding flushes before every building, so in a town nearly every
+        /// see-through thing was drawn before the plugin's passes (the log: none left at the last flush, hundreds of
+        /// early draws a second, Hebian-to), under the night's darkening and the billboards. Drawn at the end, they're
+        /// tested against the whole world's depth, which is also right for one in front of a building drawn after it.
+        /// A test run's `set alphadefer 0` puts the game's way back, for comparing.
+        /// </summary>
+        public static bool DeferEarly = true;
+
+        // the flushes that drew before the world was done, and the most queued at the last flush, for the log line
+        private static int earlyDraws;
+        private static int mostQueued;
+        private static DateTime nextReport = DateTime.MinValue;
+
         // both kept while the hook is in, so they're never collected while the client can call them
         private static FlushCall flushCall;
         private static FlushCall gameFlush;
@@ -140,6 +177,7 @@ namespace DaraletPlayer.Ui {
 
                 hook = hooked;
                 PluginCore.LogFile("[world-pass] drawing before the game's see-through things");
+                HookEarlyFlushes(entry);
             }
             catch (Exception ex) {
                 failedToHook = true;
@@ -166,8 +204,120 @@ namespace DaraletPlayer.Ui {
                 PluginCore.LogFile("[world-pass] " + ex);
             }
 
+            UnhookEarlyFlushes();
             hook = null;
             flushCall = null;
+        }
+
+        private static void HookEarlyFlushes(int entry) {
+            earlyFlushCall = EarlyFlush;
+            var hooked = 0;
+
+            foreach (var call in EarlyFlushCalls) {
+                try {
+                    var early = new AcClient.Hook(entry, call);
+
+                    if (early.Setup(earlyFlushCall)) {
+                        earlyHooks.Add(early);
+                        hooked++;
+                    }
+                    else {
+                        PluginCore.LogFile($"[world-pass] couldn't hook the game's early see-through flush at 0x{call:X8}");
+                    }
+                }
+                catch (Exception ex) {
+                    PluginCore.LogFile($"[world-pass] early flush at 0x{call:X8}: {ex.Message}");
+                }
+            }
+
+            PluginCore.LogFile($"[world-pass] {hooked} of the game's early see-through flushes hooked");
+        }
+
+        private static void UnhookEarlyFlushes() {
+            foreach (var early in earlyHooks) {
+                try {
+                    early.Remove();
+                }
+                catch (Exception ex) {
+                    PluginCore.LogFile("[world-pass] " + ex.Message);
+                }
+            }
+
+            earlyHooks.Clear();
+            earlyFlushCall = null;
+        }
+
+        /// <summary>
+        /// One of the game's flushes inside the world: the lamps whole for what it draws, then the game's own. The
+        /// fraction is a float's bits, handed on as they are; the list is drawn when either count reaches that much of its
+        /// size (FlushAlphaList's own test), which is counted for the log.
+        /// </summary>
+        private static unsafe void EarlyFlush(int fraction) {
+            if (Bare) {
+                gameFlush(fraction);
+                return;
+            }
+
+            // DrawBlock calls this after every cell, hundreds of times a frame, and the game draws nothing until the list
+            // is full enough: only then are the lamps swapped
+            var draws = true;
+
+            try {
+                var share = BitConverter.ToSingle(BitConverter.GetBytes(fraction), 0);
+
+                // a flush of whatever's queued (DrawBuilding's, PView::DrawCells') made an overflow guard (DeferEarly)
+                if (DeferEarly && share < OverflowGuard) {
+                    share = OverflowGuard;
+                    fraction = BitConverter.ToInt32(BitConverter.GetBytes(OverflowGuard), 0);
+                }
+
+                var queued = Math.Max(*(ushort*)AlphaCountAt, *(ushort*)AlphaCount2At);
+                draws = queued > 0 && queued >= share * AlphaListSize;
+
+                if (draws) {
+                    earlyDraws++;
+                }
+            }
+            catch (Exception) {
+                // drawn with the lamps swapped, to be safe
+            }
+
+            if (!draws) {
+                gameFlush(fraction);
+                return;
+            }
+
+            GameLampSwitch.BeginSeeThrough();
+
+            try {
+                gameFlush(fraction);
+            }
+            finally {
+                GameLampSwitch.EndSeeThrough();
+            }
+        }
+
+        /// <summary>How full the see-through list got and how often the game drew it early, every 10 seconds.</summary>
+        private static unsafe void NoteQueued() {
+            try {
+                mostQueued = Math.Max(mostQueued, Math.Max(*(ushort*)AlphaCountAt, *(ushort*)AlphaCount2At));
+
+                if (DateTime.UtcNow < nextReport) {
+                    return;
+                }
+
+                if (nextReport != DateTime.MinValue) {
+                    PluginCore.LogFile($"[world-pass] the game's see-through list: up to {mostQueued} of "
+                        + $"{AlphaListSize:0} at the last flush, {earlyDraws} drawn early in 10 s");
+                }
+
+                nextReport = DateTime.UtcNow.AddSeconds(10);
+                mostQueued = 0;
+                earlyDraws = 0;
+            }
+            catch (Exception) {
+                // only for the log line
+            }
         }
 
         private static void Flush(int flags) {
@@ -202,7 +352,18 @@ namespace DaraletPlayer.Ui {
             }
 
             DrawProbe.SeeThrough();
-            gameFlush(flags);
+            NoteQueued();
+
+            // the game's see-through things (glows, crystals, lamp halos) are drawn now, after the plugin's lamp light,
+            // with whatever lights are on: the game's own lamps whole for them (GameLampSwitch.BeginSeeThrough)
+            GameLampSwitch.BeginSeeThrough();
+
+            try {
+                gameFlush(flags);
+            }
+            finally {
+                GameLampSwitch.EndSeeThrough();
+            }
         }
     }
 }

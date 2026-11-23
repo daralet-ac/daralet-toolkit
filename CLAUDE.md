@@ -1315,7 +1315,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`DrawDistanceRamp.Cautious...`): twice a login stepped scenery 1 to 3 and landscape 15 to 18 two and a half seconds
   in, and crashed in `make_plane` (`0x539153`) a second later, the world still streaming in; so no step for 8 seconds
   after logging in (LoginStatus turning 3, a hot reload too) or leaving portal space, then one scenery ring and two
-  landscape rings a step until 38 seconds have gone by. That alone didn't do it (1 to 2 with 15 to 17 crashed the same way): every one of these crashes had the scenery and the landscape go up in the same step, the scenery refreshed in place and the landscape reloaded whole straight after, while either alone never crashed. So **one goes up a step, never both** (`DrawDistanceRamp.OneAtATime`: the landscape first), and the scenery a ring at a time (`SceneryStep` 1). Untested in the game when written. **Faster, with a loading bar** (the user's call: "a bad UX how long it takes to load"): the wait after login or a portal is 4 seconds, landscape steps are 3 rings even then, and while stepping up it's looked at four times a second, not once, so a step follows the last as soon as it's settled; a bar at the top of the screen (`DrawDistance.Progress.cs`, a NoInputs hud of its own) says what's loading and how far along, then Done for a moment. **Teleports** (November 2026, the teleport test: round trips between Holtburg, Landscape 18, and Yaraq with `chat /telepoi Yaraq` and the overlook's `/teleloc`): taking the draw distance down in portal space (`PortalReload`, now off; `set portalreload 1` for a test) crashed one teleport in four, its reload in the same second as the game's own load of the new place (`0x58712F`, `0x539153`); dropping to 5 (`PortalLandscape`) instead of the game's 15 didn't help. Left as it is, 10 of 10 came through. `0x58712F` is the game emptying a hash table (`0x5870F0`) whose count says it holds something while every bucket is empty: every crash there came after two landscape reloads close together, so the landscape goes up in one reload (`LandscapeStep` all of it; five steps of 3 in 12 seconds crashed there with 2.4 GB free) and no reload comes within 5 seconds of the last (`LoadQuietSeconds`). The memory guard learns its MB a unit from each load of 10 units or more (`megabytesPerCost`, a quarter over what was measured, between 2 and 8): its fixed 8 refused settings that fit by a gigabyte once the billboards were lean.
+  landscape rings a step until 38 seconds have gone by. That alone didn't do it (1 to 2 with 15 to 17 crashed the same way): every one of these crashes had the scenery and the landscape go up in the same step, the scenery refreshed in place and the landscape reloaded whole straight after, while either alone never crashed. So **one goes up a step, never both** (`DrawDistanceRamp.OneAtATime`: the landscape first), and the scenery a ring at a time (`SceneryStep` 1). Untested in the game when written. **Faster, with a loading bar** (the user's call: "a bad UX how long it takes to load"): the wait after login or a portal is 4 seconds, landscape steps are 3 rings even then, and while stepping up it's looked at four times a second, not once, so a step follows the last as soon as it's settled; a bar at the top of the screen (`DrawDistance.Progress.cs`, a NoInputs hud of its own) says what's loading and how far along, then Done for a moment. It also waits for the plugin's own pieces made after arriving (`Feed/LoadPieces.cs`: the far land with its pictures, and the billboards, 3D trees and far buildings, built together), at login and after every teleport, steps or not: it said Done 8 to 11 seconds before they were in (the user's eye). Each says when it's built or won't be (off, indoors, failed), and one silent for 60 s is given up on. **Teleports** (November 2026, the teleport test: round trips between Holtburg, Landscape 18, and Yaraq with `chat /telepoi Yaraq` and the overlook's `/teleloc`): taking the draw distance down in portal space (`PortalReload`, now off; `set portalreload 1` for a test) crashed one teleport in four, its reload in the same second as the game's own load of the new place (`0x58712F`, `0x539153`); dropping to 5 (`PortalLandscape`) instead of the game's 15 didn't help. Left as it is, 10 of 10 came through. `0x58712F` is the game emptying a hash table (`0x5870F0`) whose count says it holds something while every bucket is empty: every crash there came after two landscape reloads close together, so the landscape goes up in one reload (`LandscapeStep` all of it; five steps of 3 in 12 seconds crashed there with 2.4 GB free) and no reload comes within 5 seconds of the last (`LoadQuietSeconds`). The memory guard learns its MB a unit from each load of 10 units or more (`megabytesPerCost`, a quarter over what was measured, between 2 and 8): its fixed 8 refused settings that fit by a gigabyte once the billboards were lean.
   Seen
   at scenery 14, 12%: 1.3 GB free in one piece of 1.15 GB, so the address space isn't in pieces, and the device
   stayed fine. Tried in the game: login to scenery 14 at 12% stepped up with four short hangs (0.3 s
@@ -2330,7 +2330,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `+0x48`, origin `+0x3C`): 121 blocks, 13,037 real, 12,942 predicted, 90.5% within 1 m, heights exact. The slope
   and building rules brought the count from 3% over to 1% under; the 10% unmatched are placed in both, more than
   1 m apart, which billboards far off won't show.
-- **Graphics** (the Config tab's Graphics sub tab, `OptionsPanel.RenderGraphics`; the user's call, November 2026):
+- **Graphics** (the Config tab's Graphics sub tab, `OptionsPanel.RenderGraphics`; the user's call, November 2026): the
+  Budget section (presets, the two bars, Apply) pinned at the top and the rest scrolling under it in a child area of its
+  own (`RenderGraphicsSections`; the user's call, so the budget stays in sight while a setting's changed);
   every graphics setting the plugin adds in one place, in sections Frame Rate, Draw Distance, Fog, Lighting, Water, Grass and Image, as
   well as on the Options window's Config page (`RenderDrawDistance`); both draw the same rows (`RenderFrameRateRow`,
   `RenderDistanceRows`, `RenderFogRow`, `RenderShading`), so a change shows in both.
@@ -2447,7 +2449,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   scales; every colour format a dat can hold decoded, `TextureDecode.Decode`, so a season's new trees draw too: Daralet
   changes season by a new dat set, and nothing of the billboards is kept between sessions, so they follow it; clip-map surfaces cut out below half alpha) into a 128-pixel-tall
   A8R8G8B8 texture (managed pool); models under 2 m (the ground scatter) get none. Every block within the landscape
-  radius outside the full-detail ring has its scenery worked out by `SceneryLayout` (6 blocks a frame), and each object
+  radius outside the full-detail ring has its scenery worked out by `SceneryLayout` (4 ms a frame, `WorkOutBudgetMs`: it was 6 blocks a frame, and a block takes only 0.05 to 0.07 ms, measured on the dats round Hebian-to, so 3,300 blocks waited about 9 seconds for 0.2 seconds of work; a disk cache of the worked-out blocks, the first plan, would have read about as slowly as the work it saved, November 2026), and each object
   becomes two crossed upright quads turned by its yaw and sized by its scale, in one vertex buffer grouped by model,
   made again when you cross a landblock or a setting changes. Drawn inside the game's frame (`Ui/WorldPass.cs`, below), after the solid world and
   before its see-through things (on Decal's RenderFrame if that can't be hooked), so the world's depth buffer hides them behind hills: world identity, the device's own View and
@@ -2515,7 +2517,16 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (Scenery and Ground detail always the game's own 1: raised, either alone crashed teleports far sooner, see The
   teleport crashes): Retail (off), Performance (Landscape 5, far land 19, 3D trees 2 rings), Balanced (6, 18, 3),
   Quality (8, 24, 4, and the takeover of the game's coarse rings), each with billboards and far buildings; lit when
-  the settings are one, else Custom. **Changes wait for Apply** (`OptionsPanel.Draft.cs`; the user's call: try settings
+  the settings are one, else Custom. Those are the **Landscape** presets, at the top of View Distance; the **Lighting**
+  presets (`Feed/LightingPresets.cs`, the same four names) are at the top of Lighting, setting what costs: shading,
+  sun shadows and lamp light on (Retail: all off), occlusion 40/60/70, sun shadows to 120/250/400 m, lamps lit to
+  100/200/300 m with the 4/8/12 nearest shadowed, leaving the look (darkness, softness, brightness, reach, night)
+  alone; and the **overall** row at the top, under Budget, sets both of a name, lit while both are it (the user's call,
+  November 2026). The lighting's costs scale with its settings (the user's call, November 2026; they were on or
+  off, a fixed guess each): sun shadows 0.8 ms plus 0.6 ms each 150 m of Distance (1.4 ms at 150 m, the one measured),
+  lamp light 0.2 ms, plus 0.015 ms a lamp lit (Distance over 10 m, up to 32), plus with shadows 0.3 ms for the maps'
+  redraws and 0.06 ms each shadowed lamp (no more than the card's shader has, `LampCost`); all but the 150 m sun figure
+  rough ("~"), shown beside those sliders too. The presets come to about 2.5, 3.4 and 4.4 ms of lighting. **Changes wait for Apply** (`OptionsPanel.Draft.cs`; the user's call: try settings
   until the estimate suits, then apply): the rows edit copies (`DrawDistanceSettings`, `ShadingSettings`...), made
   afresh each frame while nothing's changed; Apply copies their fields into the settings' own objects and does what a
   change did (`Commit`, which the test runner calls directly); Revert drops them. The bars price the copies against
@@ -2587,12 +2598,28 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   terrain's texture averaged (a road vertex terrain 0x20's), a 30 m skirt down each edge; read from the cell dat's file
   bytes (`GetReaderForFile`, then `CellLandblock.Unpack`), not `ReadFromDat`, whose FileCache keeps every file for
   good; 3 ms a frame of reading, nearest first; one managed buffer, 32-bit indices, built round your landblock and
-  shifted into the camera's. **Drawn only where the game drew nothing**, in WorldPass: the game's projection ends near
+  shifted into the camera's. **Written a slice a frame** (`FarLand.Building.cs`; the user's eye, November 2026: a
+  jumpy hang at every landblock edge): each crossing rewrote all 4,216 blocks in one frame, about 180 ms, for 66 new
+  ones; now the blocks are listed in the buffers' order, new buffers made, and each frame writes what fits in 4 ms, the
+  old buffers drawn until the new are whole. Each triangle was a three-int array (about 1.9 million a rebuild), now
+  added straight. The billboards, 3D trees and far buildings are placed the same way (`DrawDistance.Placing.cs`): their
+  placing took 123 ms in one frame at a crossing and 1,358 ms on an area's first build (each model's picture made as
+  it's first met), now as many blocks a frame as fit in 4 ms, the old ones drawn till all are placed (they share one
+  home, so they swap together), restarted if another crossing comes first; the build's log line gives each step's
+  time (placing, 3D trees, buffer, writing). **Drawn only where the game drew nothing**, in WorldPass: the game's projection ends near
   3.3 km, so the land has its own (the game's with the far plane at 60 km, near 10 m), and its depths can't mix with
   the game's. A screen quad at depth 1 (LessEqual) sets the stencil's top bit where the depth is still the cleared 1.0
   and clears it elsewhere (only that bit: `StencilWriteMask` 0x80); the land is drawn there alone, depth tested and
   written with its own depths; then a quad puts depth 1.0 back there, so billboards and the game's see-through things
-  test as before. Lit as the game's ground: ambient plus the sun on the normal, times 0.88 (`GroundLight`), measured
+  test as before. **Drawn as background** (`FarLand.Background.cs`; the user's screenshots, November 2026: the far skyline
+  covered the lower half of lifestones' crystals, some characters and big see-through crystals): drawn after the game's
+  world, those objects, drawn without writing depth, looked empty to it. So it's drawn from LScape's draw (`0x506D90`:
+  the sky's pieces, `0x507A50` with 0, then the landblocks, `0x5069E0`, thiscall, called at `0x506DAB`, then the
+  sky's after-world pieces), reached from `SmartBox::RenderNormalMode` (`0x453BED`) with the camera outdoors and from
+  the render device's indoor drawing (`0x5A5950`, at `0x5A597B`) with the camera in a building: that call is hooked,
+  the far land drawn first (the same drawing, sun shadows' noting paused), then the game's landblocks, so everything
+  the game draws lands on top. The world pass draws it as before when the hook can't be set or the landscape draw
+  didn't come. Found with a throwaway Iced disassembler. Untested in the game when written. Lit as the game's ground: ambient plus the sun on the normal, times 0.88 (`GroundLight`), measured
   where the far land meets the game's ground with the red test tint (`set farlanddebug 1`): Grass's 1.15 came out 1.31
   times as bright as the game's (86, 88, 39 against 66, 67, 31; after, 67, 68, 31), a bright band past that line that
   the player saw first on a tan island in the river; the game's fog.
@@ -2622,9 +2649,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   each of four turns, each turn the one whose solid corners are the set's. The maps hold how much of the layer under
   shows (every one's solid corners were its code's complement), so they're inverted; their turns then run 8, 1, 2, 4
   for a corner map, the client's own order. Seen in the game: subtle at a distance (the user's call, November 2026,
-  for the same edges as the game's). Baked 4 ms
-  a frame into a system-memory texture and copied in (`UpdateSurface`, level by level); the buffers are made only once
-  their blocks are baked. A set of blocks wanted mid-bake (the landscape changing) has to queue its bakes again, or its
+  for the same edges as the game's). Baked on up to three threads of their own
+  (`FarLand.Baking.cs`: each picture, its smaller copies and their R5G6B5 pixels are pure arithmetic on tables made
+  once; the user's call, November 2026: baked on the game's thread at 4 ms a frame, 3.9 s of work for 4,784 blocks took
+  10.2 s after a teleport), at most 192 blocks out at once, and copied in on the game's thread within 4 ms a frame
+  through a system-memory texture (`UpdateSurface`, level by level); a new set of blocks raises a generation, and
+  pictures baked for an older one are dropped. The buffers are made only once their blocks are baked. A set of blocks wanted mid-bake (the landscape changing) has to queue its bakes again, or its
   new blocks stayed black (the default pool starts zeroed): seen in the game. A hidden hud lets the atlas go before a
   device reset; vertex colours are drawn until it's baked again.
   **Fine rings at the seam** (`FarLand.Textures.cs`; the user's call, November 2026: a line across the hills where
@@ -2676,6 +2706,21 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   far water looked the same: likely the wavy texture squashed by foreshortening, which filtering can't undo, or the
   terrain's blending stages not taking the setting (not looked into). Whether it sharpened roads far off was
   never checked.
+- **Built once after arriving** (`DrawDistance.HoldBuilds`, `Feed/WorkTimer.cs`): the far scenery (billboards, 3D
+  trees, far buildings, the far land) isn't built while the draw distance is still stepping up (not `AtTarget`, held
+  30 s at most). On arriving it was built for the game's own landscape (3 rings, 2,796 blocks at Hebian-to), then all
+  again for the setting's (8, 3,631 blocks), and the first build's hitches held back the step, whose frames must run
+  smooth first: 19 seconds in log.txt (the user, November 2026: "the loading bar is important"). Each stage logs its
+  totals once done, for what loading waits on: `[billboards] blocks worked out:`, `[far-land] blocks read:` and
+  `[far-land] block pictures baked:` (items, time spent, frames used, seconds from first to last). Untested in the
+  game when written.
+- **Outdoors, or a room that sees out** (`Ui/OutdoorView.cs`): the far land, billboards and 3D trees, water reflections
+  and grass are drawn while your character's cell or the camera's is outdoors (under 0x100) or an indoor cell the dats
+  mark as seeing outside (the EnvCell's flag `SeenOutside`, 0x1: a building's rooms and doorways; no dungeon cell has
+  it, checked on five dungeons). They went by the cell number alone, so a building counted as a dungeon (the user's
+  eye, November 2026): in a doorway cell, standing on the grass, the horizon was gone, and stepping out rebuilt every
+  far tree and billboard, a second's hang each time. Each cell is read once from its file (not the dat's cache) and
+  remembered. The night darkening still goes by the cell number: switched, it would darken building interiors too.
 - **Where the device's world is measured from** (`Ui/RenderOrigin.cs`): the camera's landblock, not your character's. Whether the device's camera is the swapped one some effects use is told the same way (`RenderOrigin.Swapped`: where the view puts the camera against the game's camera); going by how far your character was from it each way guessed wrong wherever your height and north differed by about 6 m, and the far land, billboards, 3D trees and grass vanished there (seen in the game, November 2026).
   The game keeps the camera's Position at `0x81FF10` (cell `+4`, origin `+0x3C`: the device's camera exactly, height and
   north swapped as the device has them; the test step `camera` logs both). A step across a landblock's edge with the
@@ -2711,7 +2756,45 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   plane: 35 cm at first, and a beam by the tavern's lantern darkened the wall below) and draws placed within 75 cm (the lantern) aren't made; the ceiling's beams by a lamp shadowed themselves in
   stripes until a grazing surface was looked up further off it along its normal (a bigger allowance let light past
   walls' feet onto the ground outside). Each map is looked up once, before the shader's loop over the lights
-  (`MapSeen`, the maps' lamps in c24 to c29): six lookups in the loop ran out of registers. **In the game's place**
+  (`MapSeen`, the maps' lamps in c24 to c29): six lookups in the loop ran out of registers. **Every lamp within the
+  Distance setting, and up to twelve shadowed** (the user's call, November 2026: "so much flickering" on trees and
+  buildings, whole objects gaining or losing light at a distance as you walked): the game lights only its eight
+  nearest lamps with Direct3D's fixed lights, and the plugin took over only the six nearest of those, so a lamp leaving
+  the game's eight took its light off a whole building at once. Now every lamp within `LampLightOptions.Distance` (200 m
+  to start, 50 to 400, a slider) is the plugin's, up to 32 lit and 8 more fading out (`MostLit`, `MostDrawn`; lamps whose reach touches the view first, `InView`, then the rest: by
+  distance alone, lamps behind you and inside houses took the 32 places in Hebian-to, and one across the square in
+  plain view stayed dark, the user's screenshot; the 10-second `[lamps]` line says how many are in range and in view; the
+  shader's `MOST_LIT` 40), each easing in over half a second as it comes into range (`EaseLampShare`, now every lamp's
+  presence) and fading over the last fifth of the distance, the game's own light of each dimmed by the plugin's share
+  (`GameLampSwitch.Places`, every lamp but the light round you). While the game draws its see-through things (`GameLampSwitch.BeginSeeThrough`
+  and `EndSeeThrough`, round every flush of its list, see Drawing inside the game's frame), its lamps are whole: those come after the plugin's lamp light, which can't light
+  them, and dimmed with the rest the spire's glow, the crystals' flames and the lamps' halos in Hebian-to went dark
+  unless the light round you reached them (the user's screenshots, November 2026). **The night** (Night, the lamp pass's
+  darkening outdoors after dark) **spares what's bright already** (`spare` in lamps.ps.hlsl, from a copy of the frame
+  so far on sampler 13, `beforeLamps` in `DepthShading.LampCopies.cs`): brightest channel 0.55 to 0.9 eases it off, so the lamps' glass,
+  portals and the moon, drawn self-lit, keep their glow; at 80% night a lamp's glass measured 141 against 255 without
+  (test shots in Hebian-to's square, November 2026). The crystals' flames, being see-through and drawn after, were never
+  darkened (203 against 215); their halos over a night sky are only darker by the sky behind. Untested in the game when
+  written. **What shows through see-through things isn't darkened** (`Ui/DepthShading.SeeThrough.cs`,
+  seethrough.ps.hlsl): the crystals are partly see-through and drawn after the night pass, over ground it had
+  darkened, so up close they went faint and the gold one nearly clear (the user's screenshots; tried in the game from
+  the same spot with each part off in turn: only the night made the difference, not the lamp light, the game's lamps,
+  shading or where the passes are drawn). After the frame's done, before Glow, each pixel that differs from the copy
+  made just after the lamp pass (something drawn over it since) gets the night's change to what's behind it (before
+  less after) put back, as much as it differs. Untested in the game when written. Lamps without a map light unshadowed, as the game's
+  always did (they lit nothing before). Shadows go to the `ShadowedLamps` nearest you (8 to start, up to 12: the
+  shader's texture slots, s1 to s12, beside the depth), each map's shadow easing in when its lamp takes it and out before
+  it's given up (`lampShadowShares`, the shader's `mapShares`); maps are made as their slots are first used, 6 MB each
+  in the card's memory, three kept ones redrawn a frame. The shader's lamp array was `lamps[i * 2]`: indexed by
+  anything but the loop's counter, ps_3_0 copies a constant array into temporary registers, which 16 entries fitted
+  and 80 didn't (`X4505`), so places and colours are two arrays (c2, c42). About 5,000 instruction slots with twelve
+  maps (the old six-map one 2,600): the user's card refused it ("couldn't make the shader lamps.ps.cso"), which stopped
+  all the shading for the session, so `build.cmd` also makes it with `MAPS` 10, 8 and 6 (4,097, 3,384 and 2,682 slots now;
+  `lamps10.ps.cso`...), `EnsureLampShader` takes the biggest the card accepts (logging the card's
+  `MaxPixelShader30InstructionSlots`). The user's card says 4,096 but took an eight-map shader of 3,458 by fxc's count
+  and refused one of 3,609 (the driver counts its own way), so keep the eight-map one under 3,458: `Seen`'s hash and
+  turn have no sine or cosine for that (eight slots each, twice a map); shadows go to no more lamps than it has, the settings page says "your card: up to
+  N", and a card that takes none keeps the game's lamps with the rest of the shading still on. Test steps `set lampdistance N`, `set shadowedlamps N`. Untested in the game when written. **In the game's place**
   whenever Lamp shadows are on (`Ui/GameLampSwitch.cs`; a switch of its own, `replace`, until November 2026, the user's
   call, since it only worked with shadows): the device's LightEnable (vtable
   53) is hooked and refuses the point and spot lights at the places of the lamps given maps (`GameLampSwitch.Places`,
@@ -2726,6 +2809,16 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   plugin's colour times the share, the game's own dimmed by the rest (`GameLampSwitch.Places` carries each lamp's game
   share; SetLight, vtable 51, is hooked too and keeps each light as the game set it, so LightEnable scales from that and
   sets it whole again after). A lamp holding a map is always among the eight lit. Untested in the game when written.
+  **Dimmed in SetLight only, never switched off** (November 2026): the game puts each of its eight light slots' light
+  on the device with SetLight every time (`Render::enable_active_lights`, `0x54CC90`) but switches a slot through
+  `RenderDeviceD3D::SetFFLightEnable` (`0x5A4230`), which calls LightEnable only when that slot's state changes,
+  remembering it at `+0x4C9` of the RenderDeviceD3D (`[0x870340]`; its Direct3D device at `+0x468`). Switched off in
+  LightEnable, a slot the game still took for on stayed dark for every light it put there after, the sun's too, and
+  which slots were caught changed as you moved: Hebian-to's crystals went see-through and every lamp in view dark at
+  one step and lit at the next (the user's screenshots, cell `0xE74E001E` against `001D`; with Lamp light off they
+  were solid). So only SetLight is hooked: a lamp's colours times the game's share, to black for none, and the slots
+  are switched as the game remembers them when the hook goes in and out (`Resync`). Untested in the game when
+  written.
   The light the game hangs round
   you sits about 3.7 m ahead and above: taken for a lamp, it lit everything outside the tavern and leaked under its
   walls, so it's told by being dynamic, faint (intensity under 10) and within 6 m. `depthview 5` colours each pixel
@@ -2739,16 +2832,33 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `Lights` (a place in the model, colour, intensity, falloff, as the game's lamps have: Hebian-to has 51, warm,
   falloff 4 to 5), turned and placed as their objects, left out where the game has a light already. Both join the
   lamp pass's lights, shadow maps and all. At Reach 300% the posts washed the town orange: 150% suits them.
+  **Fire surfaces** (`Ui/PlacedLights.Fires.cs`, `Ui/PlacedLight.cs`; the user's call, November 2026): Hebian-to's
+  fireplace is no object but the hearth's floor, a polygon of indoor cell `0xE74E0137` painted with the embers picture
+  `0x05000D32`, so every polygon showing one of `FirePictures` (that and the glowing embers `0x050026C6`; lava and
+  flames left out, or a lava dungeon would crowd out the lamps) is gathered into 3 m clusters, each a light half a meter
+  above its middle with FireLights' colour and flicker (`FireLights.Flicker`), reaching 1.5 times its size (4 to 8 m).
+  Looked for in the 3x3 landblocks' indoor cells (`0xXXYY0100` on, `NumCells` of them, read 2 ms a frame from the
+  file's bytes, not `ReadFromDat`, whose cache keeps every file), their static objects, and the outdoor Objects and
+  Buildings' models (worked out once a model). Pictures were picked by eye from a contact sheet of the red ones (a
+  throwaway tool over the dats). `[lamps] a fire surface given light` in log.txt. Untested in the game when written.
   **Reach** (`Reach`, 100 to 300% of the game's, 150 to start): the Holtburg tavern's lamps reach 4.5 to 7.5 m, hung
   9 m in from the west door; at 300% the open door throws a beam outside with your shadow in it (seen in the game,
   November 2026). How a face turns counts for little (`turned` in lamps.ps.hlsl, 0.35 to 0.85, faded to none for faces
   turned well away): the depth only gives each triangle's own normal, where the game lights a character smoothly
-  between its corners', and armour showed every facet (the user, November 2026); and lamp colours are deepened
+  between its corners', and armour showed every facet (the user, November 2026); and **the way a surface faces is
+  smoothed** (`SmoothNormal`): from places about 6 cm off each way (a pixel to 16 of them; past a few meters, the
+  next pixel), each side counted as far as it lies on the pixel's own facet (`SameSurface`), so a face and armour by a
+  bonfire no longer showed each triangle as a hard-edged patch (the user's screenshot, November 2026). How far off the
+  facet a side is goes against how far to the side it was looked (6 cm), not against its own distance: so judged,
+  something in front of the ground (a sword, an arm) passed, being off mostly along the line of sight, and the
+  ground's way tilted round it, a dark outline round the character and the weapon (seen in the game); untested in the
+  game since; and lamp colours are deepened
   (`Warmth`, each channel to the power 1.6), so lit characters keep the game lamps' warm look. A line of light along the walls' feet was the lookup point on a wall's bottom row: a
   wall is one sheet, so its outside is as far from a lamp inside as the wall, and the crease's normal pointed up; the
   point is now also moved 30 cm toward the camera (10 cm fixed walls seen face on, not an angled one), and normals
   come from the neighbouring pixel on the same surface each way, not the 2x2 block. A pixel also takes the least light any of its
-  four neighbour normals gives (a crease pixel has the wall's among them), and, as the ground outdoors isn't in the
+  four neighbour normals gives (a crease pixel has the wall's among them), where they disagree by more than about
+  75 degrees (`crease`: a wall's foot, not a character's facets), and, as the ground outdoors isn't in the
   maps (a ray just under a wall's lower edge found nothing), a point 30 cm above must be seen too, softly, where
   something is within half a meter of it (`nearWall`; further, your body cast a second, stepped shadow). Shadows soften with distance
   from what casts them, the lamp taken as a light 40 cm across (1.5 m washed a beam's shape out; 60 cm left your shadow
@@ -2768,7 +2878,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   pass of what glows (from 0.5), a Gaussian blur across and down three quarter-size texels a sample, added (twice the
   strength) onto the screen, after the see-through things and before
   the anti-aliasing. Seen in the game: the lifestone's crystal brighter with a soft halo; the hearth's dim embers don't
-  glow. Teleporting into a building takes the indoor cell and a place in it (`/teleloc 0xA9B40163 [104 39 97]`); a
+  glow. **What the plugin's lamp light made bright doesn't glow** (`Ui/DepthShading.LampCopies.cs`): a house wall lit
+  bright orange bloomed whole (the user's screenshot, November 2026). The frame is copied just before the lamp pass
+  (`beforeLamps`, also the night's sampler 13) and just after it (`afterLamps`), and glowbright.ps.hlsl takes a pixel
+  that still matches the copy after (nothing drawn over it since) as it looked before the lamp light, and one that
+  doesn't (a crystal, a lifestone, a halo, drawn see-through after) as it ends up. Untested in the game when written.
+  Teleporting into a building takes the indoor cell and a place in it (`/teleloc 0xA9B40163 [104 39 97]`); a
   place outside the cell is refused without a word.
 - **Drawing inside the game's frame** (`Ui/WorldPass.cs`): billboards and grass drawn on Decal's RenderFrame, after
   the whole world, came out in front of the lifestone's crystal (seen in the game, November 2026): the game draws its
@@ -2785,7 +2900,25 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   DrawInWorldPass`) are drawn there too, after the billboards and grass: on RenderFrame they shaded the ground behind
   the crystal onto the crystal (seen in the game, the sun shadows' first build). Ours is the depth buffer then, so the
   pass puts the game's in its place while it samples ours and ours back after, for the see-through things to be
-  tested against. The image passes (anti-aliasing, sharpening) stay on RenderFrame, over everything.
+  tested against. The image passes (anti-aliasing, sharpening) stay on RenderFrame, over everything. The far land isn't
+  drawn here but earlier, after the sky (see Far land, Drawn as background), unless that hook can't be set.
+  **That isn't the only flush of the see-through list** (November 2026): `FlushAlphaList(fraction)` keeps two lists
+  of 3000 meshes (counts, a ushort each, at `0x8729BC` and `0x8729C0`; size the float at `0x7E6550`) and draws only
+  when one holds that fraction of its size, the last call passing 0 (always). `DrawBlock` calls it after every cell
+  with the float at `0x821EE0`, 0.75, so in a busy place (Hebian-to's square) the list is drawn part way through the
+  world, before the plugin's passes; `DrawBuilding` calls it at `0x5A041B` and `PView::DrawCells`, with the camera in
+  a building, flushes it whole at `0x5A5982` before the indoor cells. A full list drops what comes after
+  (`AddMeshToAlphaList`, `0x59D240`, returns false and `DrawMesh` goes on), so some guard is needed. Those three
+  calls are hooked (`WorldPass.EarlyFlush`), giving the game's lamps whole to what they draw, and counted:
+  `[world-pass] the game's see-through list` lines every 10 s say how full it got at the last flush and how often it
+  was drawn early. In Hebian-to's square they said none at the last flush and 1,000 to 6,000 early draws in 10 s:
+  `DrawBuilding` flushes whatever's queued before every building (just after setting the next draw's detail texture,
+  `0x81FCB0` and `0x81FCB4` for `ACRender::SetDetailSurfaceInternal`, and `DrawMesh`'s draw-now flag `0x867374`,
+  nothing the queued meshes need), so in a town every see-through thing came before the plugin's passes, darkened by
+  the night and under the billboards. So `DrawBuilding`'s and `PView::DrawCells`' flushes are made the same 0.75
+  overflow guard as `DrawBlock`'s (`WorldPass.DeferEarly`, `OverflowGuard`; `set alphadefer 0` puts the game's way
+  back): the rest waits for the last flush, tested against the whole world's depth, which is also right for a crystal
+  in front of a building drawn after it. Untested in the game when written.
 - **Sun shadows** (`Ui/ShadowCasters.cs`, `Ui/DepthShading.Shadows.cs`, `Shaders/shadow.vs.hlsl`, `shadow.ps.hlsl`,
   `Feed/SunShadowOptions.cs`, `SettingsData.SunShadows`, `sunShadows`, off to start; rows Sun shadows, Darkness and
   Distance under Shading; test steps `set sunshadows|sunstrength|sundistance|sunreplay`, `probe`, `find words`; the user's call, November 2026:
@@ -2852,6 +2985,17 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   lights characters and things evenly all round, so a character's back in a tree's shade went unshaded (seen in the
   game); a surface facing sideways or down (`upView`, c20, the view's up) now loses at least 0.4 of the sun's share in
   shadow whichever way it faces. Seen: the character darker in the pines' shade; dusk hillsides unchanged.
+  **Drawn again only when needed** (the user, November 2026: 20 to 35 fps in Hebian-to's square, settings lowered
+  or not): every frame replayed about 3,100 of the game's draws into the far map (at 516 m), 560 into the near one and
+  1,296 into three lamps' cube maps, each draw seven Direct3D calls, with every draw within the far map's reach noted
+  too. Now the near map is drawn again every second frame or 2 m moved, the far map every 30 frames, 3% of its reach
+  moved or the sun a third of a degree (`MapStale`, `FarStale`), another landblock always; between, each keeps the
+  matrix it was drawn with. The noting area for the next frame (`FollowSunShadows`) reaches the far map only when it
+  will be drawn then (`farNoted`), else the near map's 80 m and the furthest shadowed lamp's casters
+  (`lampShadowArea`). One kept lamp map is drawn again a frame, not three (`LampRedrawsAFrame`). A replayed draw sets
+  only the layout, buffers, texture and cut-out flag that differ from the last one's (`Ui/ReplayState.cs`). The
+  close map's count in the 30-second report was never reset (it was a total since the start). Untested in the game
+  when written.
 - **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet Toolkit` (`DataFolder`): `settings.json`,
   `profiles.json`, `Settings Profiles`, `Settings Exports`, `log.txt`, `Loot Profiles`, `Hotbar Layouts`, `Combat Logs`, `Chat Logs`, `Frame Rate Logs`, `Test Runs`, `world-data`. It was `Decal Plugins\Daralet` before the rename: `PluginCore.Startup` moves
   that folder over first thing (`DataFolder.MoveOldFolder`, `FolderMove.Once`, copying instead if a file's held open),

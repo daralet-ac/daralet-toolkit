@@ -143,6 +143,10 @@ namespace DaraletPlayer.Ui {
 
         private void Core_RenderFrame(object sender, EventArgs e) {
             if (disposed || failed) {
+                if (failed) {
+                    LoadPieces.Ready(LoadPieces.FarLand);
+                }
+
                 return;
             }
 
@@ -155,11 +159,13 @@ namespace DaraletPlayer.Ui {
                 var rings = Options.ClampedFarLand;
                 var landcell = unchecked((uint)CoreManager.Current.Actions.Landcell);
                 var device = UBService.Huds.D3Ddevice;
+                // outdoors, or in a building's room that sees out (OutdoorView), not by the cell number alone
+                var outdoors = OutdoorView.Now;
 
-                nearActive = hooked && rings > 0 && device != null && (landcell & 0xFFFF) < 0x100 && vertices != null;
+                nearActive = hooked && rings > 0 && device != null && outdoors && vertices != null;
                 comDevice = device == null ? IntPtr.Zero : DeviceCom(device);
 
-                if (rings == 0 || device == null || (landcell & 0xFFFF) >= 0x100) {
+                if (rings == 0 || device == null || !outdoors) {
                     if (vertices != null && rings == 0) {
                         Clear();
                         blocks.Clear();
@@ -171,6 +177,11 @@ namespace DaraletPlayer.Ui {
 
                     if (rings == 0) {
                         wantedKey = null;
+                    }
+
+                    // off or indoors: nothing coming for the loading bar to wait for
+                    if (device != null) {
+                        LoadPieces.Ready(LoadPieces.FarLand);
                     }
 
                     return;
@@ -198,6 +209,8 @@ namespace DaraletPlayer.Ui {
             // building at the moment of a teleport, beside the game's own load, came before crashes in its cache with
             // little memory free (November 2026); the old place's land isn't drawn meanwhile
             if (drawDistance.Arriving) {
+                AbortBuild();
+
                 if (vertices != null) {
                     Clear();
                     PluginCore.LogFile("[far-land] let go while the game loads the place");
@@ -205,8 +218,13 @@ namespace DaraletPlayer.Ui {
 
                 wantedKey = null;
                 toRead.Clear();
-                toBake.Clear();
+                ForgetBakes();
                 bakesQueued = false;
+                return;
+            }
+
+            // built once, for the landscape stepped up to, not first for the game's own (DrawDistance.HoldBuilds)
+            if (drawDistance.HoldBuilds && vertices == null) {
                 return;
             }
 
@@ -251,11 +269,14 @@ namespace DaraletPlayer.Ui {
 
             BakeSome(device);
 
-            if (toBuild && toRead.Count == 0 && toBake.Count == 0) {
-                Build(device);
+            // written a slice a frame, the old buffers drawn till the new are whole (FarLand.Building.cs)
+            if (toBuild && toRead.Count == 0 && !BakesPending && !Building) {
+                StartBuild(device);
                 toBuild = false;
                 bakesQueued = false;
             }
+
+            ContinueBuild();
         }
 
         /// <summary>
@@ -338,7 +359,7 @@ namespace DaraletPlayer.Ui {
             bakedTiers = baked;
             marginOnly = margin;
             // the bakes are queued again for the new set once it's read: a set wanted mid-bake left its new blocks black
-            toBake.Clear();
+            ForgetBakes();
             bakesQueued = false;
             toBuild = true;
             PluginCore.LogFile($"[far-land] rings {landscape} to {landscape + rings} round {home:X4}: {keep.Count} blocks, "
@@ -352,11 +373,23 @@ namespace DaraletPlayer.Ui {
 
             var clock = Stopwatch.StartNew();
 
+            var thisFrame = 0;
+
             while (toRead.Count > 0 && clock.Elapsed.TotalMilliseconds < ReadBudgetMs) {
                 var block = toRead.Dequeue();
                 blocks[block] = Read(cells, block) ?? new LandBlock();
+                thisFrame++;
+            }
+
+            readTimer.Add(thisFrame, clock.Elapsed);
+
+            if (toRead.Count == 0 && readTimer.Finish("[far-land] blocks read:") is string done) {
+                PluginCore.LogFile(done);
             }
         }
+
+        /// <summary>The reading's totals, logged once its queue is empty, to see what loading waits on.</summary>
+        private readonly WorkTimer readTimer = new WorkTimer();
 
         /// <summary>A block's heights and terrain, read from its file without the dat keeping it.</summary>
         private static LandBlock Read(DatDatabase cells, uint block) {
@@ -431,102 +464,18 @@ namespace DaraletPlayer.Ui {
         /// game never gets back in one piece (the largest free piece of its memory fell from 1,418 MB to 983 over a
         /// test run, and a teleport then crashed in the game's own cache; November 2026).
         /// </summary>
-        private unsafe void Build(Device device) {
-            var table = region.LandDefs.LandHeightTable;
-            var hx = (int)(wantedHome >> 8);
-            var hy = (int)(wantedHome & 0xFF);
-            var clock = Stopwatch.StartNew();
-            var count = 0;
+        /// <summary>Each edge of a block: its first vertex (x, y) and the step along it.</summary>
+        private static readonly (int, int, int, int)[] SkirtEdges = {
+            (0, 0, 0, 1), (Dim - 1, 0, 0, 1), (0, 0, 1, 0), (0, Dim - 1, 1, 0),
+        };
 
-            foreach (var kv in blocks) {
-                count += kv.Value.Heights != null ? 1 : 0;
-            }
-
-            Clear();
-
-            if (count == 0) {
-                return;
-            }
-
-            // in the card's memory alone with Video memory only (ScenePool), let go before a device reset and built again
-            buffersInDefaultPool = ScenePool.Buffers == Pool.Default;
-            vertices = new VertexBuffer(typeof(LandVertex), count * VerticesABlock, device, Usage.WriteOnly, Format,
-                ScenePool.Buffers);
-            indices = new IndexBuffer(typeof(int), count * IndicesABlock, device, Usage.WriteOnly, ScenePool.Buffers);
-
-            // the near blocks (the game's coarse rings, drawn with its camera) first, then the far ones
-            var near = new HashSet<uint>();
-            var nearTris = 0;
-            var written = 0;
-            var vertexStream = vertices.Lock(0, 0, LockFlags.None);
-            var indexStream = indices.Lock(0, 0, LockFlags.None);
-
-            try {
-                var vertexAt = (LandVertex*)vertexStream.InternalDataPointer;
-                var indexAt = (int*)indexStream.InternalDataPointer;
-
-                // within each, a run a tier (FarLand.Textures.cs), each drawn from its own atlas
-                Array.Clear(runTriangles, 0, runTriangles.Length);
-
-                for (var pass = 0; pass < 2 * TierCount; pass++) {
-                    var nearPass = pass < TierCount;
-                    var tierPass = pass % TierCount;
-                    var passStart = written;
-
-                    foreach (var kv in blocks) {
-                        var land = kv.Value;
-
-                        if (land.Heights == null || marginOnly.Contains(kv.Key) || wantedNear.Contains(kv.Key) != nearPass
-                            || (drawnTier.TryGetValue(kv.Key, out var t) ? t : MidTier) != tierPass) {
-                            continue;
-                        }
-
-                        var bx = (int)(kv.Key >> 8);
-                        var by = (int)(kv.Key & 0xFF);
-                        blockVertices.Clear();
-                        blockIndices.Clear();
-                        AddBlock(blockVertices, blockIndices, kv.Key, land, table, (bx - hx) * BlockSize,
-                            (by - hy) * BlockSize, tierPass);
-                        var baseVertex = written * VerticesABlock;
-
-                        for (var i = 0; i < VerticesABlock; i++) {
-                            vertexAt[baseVertex + i] = blockVertices[i];
-                        }
-
-                        for (var i = 0; i < IndicesABlock; i++) {
-                            indexAt[written * IndicesABlock + i] = baseVertex + blockIndices[i];
-                        }
-
-                        written++;
-
-                        if (nearPass) {
-                            near.Add(kv.Key);
-                        }
-                    }
-
-                    if (nearPass) {
-                        nearTris = written * IndicesABlock / 3;
-                    }
-
-                    runTriangles[nearPass ? 0 : 1, tierPass] = (written - passStart) * IndicesABlock / 3;
-                }
-            }
-            finally {
-                vertices.Unlock();
-                indices.Unlock();
-            }
-
-            vertexCount = written * VerticesABlock;
-            triangleCount = written * IndicesABlock / 3;
-            builtHome = wantedHome;
-            builtNear = near;
-            nearTriangleCount = nearTris;
-            PluginCore.LogFile($"[far-land] {(atlasReady ? "textured" : "untextured")}: built {written} blocks "
-                + $"({near.Count} near; by tier {runTriangles[0, 0] + runTriangles[1, 0]}, "
-                + $"{runTriangles[0, 1] + runTriangles[1, 1]}, {runTriangles[0, 2] + runTriangles[1, 2]} triangles) "
-                + $"round {builtHome:X4}: {triangleCount} triangles, {MegabytesHeld:0.0} MB, "
-                + $"{clock.ElapsedMilliseconds} ms, {DrawDistance.FreeMegabytes()} MB free");
-            TeleportTimeline.Note("far land");
+        /// <summary>
+        /// A triangle's three vertices added: each one an array before, about 1.9 million of them a rebuild.
+        /// </summary>
+        private static void AddTriangle(List<int> tris, int a, int b, int c) {
+            tris.Add(a);
+            tris.Add(b);
+            tris.Add(c);
         }
 
         /// <summary>A block's 81 vertices, its 128 triangles, and a skirt down each edge.</summary>
@@ -567,18 +516,18 @@ namespace DaraletPlayer.Ui {
                 for (var y = 0; y < Dim - 1; y++) {
                     if (SceneryLayout.SplitNwSe(id, x, y)) {
                         // the diagonal from the north-west corner (x, y+1) to the south-east (x+1, y)
-                        tris.AddRange(new[] { V(x, y), V(x, y + 1), V(x + 1, y) });
-                        tris.AddRange(new[] { V(x + 1, y), V(x, y + 1), V(x + 1, y + 1) });
+                        AddTriangle(tris, V(x, y), V(x, y + 1), V(x + 1, y));
+                        AddTriangle(tris, V(x + 1, y), V(x, y + 1), V(x + 1, y + 1));
                     }
                     else {
-                        tris.AddRange(new[] { V(x, y), V(x + 1, y + 1), V(x + 1, y) });
-                        tris.AddRange(new[] { V(x, y), V(x, y + 1), V(x + 1, y + 1) });
+                        AddTriangle(tris, V(x, y), V(x + 1, y + 1), V(x + 1, y));
+                        AddTriangle(tris, V(x, y), V(x, y + 1), V(x + 1, y + 1));
                     }
                 }
             }
 
             // skirts: each edge's vertices again, lowered, and a strip between
-            foreach (var edge in new[] { (0, 0, 0, 1), (Dim - 1, 0, 0, 1), (0, 0, 1, 0), (0, Dim - 1, 1, 0) }) {
+            foreach (var edge in SkirtEdges) {
                 var skirt = verts.Count;
 
                 for (var i = 0; i < Dim; i++) {
@@ -590,8 +539,8 @@ namespace DaraletPlayer.Ui {
                 for (var i = 0; i < Dim - 1; i++) {
                     var a = V(edge.Item1 + edge.Item3 * i, edge.Item2 + edge.Item4 * i);
                     var b = V(edge.Item1 + edge.Item3 * (i + 1), edge.Item2 + edge.Item4 * (i + 1));
-                    tris.AddRange(new[] { a, b, skirt + i });
-                    tris.AddRange(new[] { b, skirt + i + 1, skirt + i });
+                    AddTriangle(tris, a, b, skirt + i);
+                    AddTriangle(tris, b, skirt + i + 1, skirt + i);
                 }
             }
         }
@@ -603,7 +552,15 @@ namespace DaraletPlayer.Ui {
             }
 
             try {
-                if ((unchecked((uint)CoreManager.Current.Actions.Landcell) & 0xFFFF) >= 0x100) {
+                HookBackground();
+
+                // drawn already, after the sky and before the world (FarLand.Background.cs)
+                if (drawnAsBackground) {
+                    drawnAsBackground = false;
+                    return;
+                }
+
+                if (!OutdoorView.Now) {
                     return;
                 }
 
@@ -771,6 +728,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private void Clear() {
+            AbortBuild();
             vertices?.Dispose();
             vertices = null;
             indices?.Dispose();
@@ -799,6 +757,7 @@ namespace DaraletPlayer.Ui {
                 DeviceCalls.Release(pixelShader);
                 DisposeAtlas();
                 Unhook();
+                UnhookBackground();
             }
             catch (Exception ex) {
                 PluginCore.LogFile("[far-land] " + ex);

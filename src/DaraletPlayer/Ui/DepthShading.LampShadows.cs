@@ -8,8 +8,8 @@ namespace DaraletPlayer.Ui {
     /// <summary>
     /// Lamp shadows from cube shadow maps (the user's call, November 2026: the first lamp shadows, marched through the
     /// depth buffer, "look awkward, of the character and especially whatever is making that shadow on the wall": a march
-    /// on screen only knows what's on screen, and guesses how thick it is). The six lamps nearest you that cast shadows
-    /// get a cube map each, kept from frame to frame (a new lamp's drawn at once, and two of the kept in turn each
+    /// on screen only knows what's on screen, and guesses how thick it is). The lamps nearest you that cast shadows
+    /// (up to twelve, LampLightOptions.ShadowedLamps; six until November 2026) get a cube map each, kept from frame to frame (a new lamp's drawn at once, and two of the kept in turn each
     /// frame, for whoever walks by), six 90-degree faces of 512 by 512, 32-bit float, every face the distance from the
     /// lamp to the nearest thing that way, over its reach (Shaders/lampshadow.vs.hlsl, lampshadow.ps.hlsl), drawn from the game's own
     /// world draws (ShadowCasters, the same the sun's maps use: the hooks are in while either wants them) placed within
@@ -18,10 +18,14 @@ namespace DaraletPlayer.Ui {
     /// </summary>
     internal sealed partial class DepthShading {
         private const int LampMapSize = 512;
-        private const int LampsWithShadows = 6;
+        /// <summary>The most lamps with shadow maps: the texture slots the lamp shader has beside the depth.</summary>
+        private const int MostShadowSlots = Feed.LampLightOptions.MostShadowedLamps;
 
         /// <summary>How many lamps' kept maps are drawn again each frame, besides new ones.</summary>
-        private const int LampRedrawsAFrame = 2;
+        // one, not three (the user's call, November 2026): with three maps every one was drawn again every frame, 1,296 of
+        // the game's draws in Hebian-to's square, whatever the Shadowed lamps setting; one a frame, a lamp's shadows of
+        // someone walking by follow a few frames late
+        private const int LampRedrawsAFrame = 1;
 
         /// <summary>Draws placed this far past a lamp's reach are still made into its map: a big thing reaches in.</summary>
         private const float LampCasterMargin = 15;
@@ -47,15 +51,21 @@ namespace DaraletPlayer.Ui {
             (CubeMapFace.NegativeZ, new Vector3(0, 0, -1), new Vector3(0, 1, 0)),
         };
 
-        private readonly CubeTexture[] lampCubes = new CubeTexture[LampsWithShadows];
+        private readonly CubeTexture[] lampCubes = new CubeTexture[MostShadowSlots];
 
         /// <summary>Which lamp (its place) each map was last drawn for.</summary>
-        private readonly Vector3?[] cubeLamp = new Vector3?[LampsWithShadows];
+        private readonly Vector3?[] cubeLamp = new Vector3?[MostShadowSlots];
+
+        /// <summary>How much of each map's shadow shows (0 to 1), eased in and out by DrawLampShadows.</summary>
+        private readonly float[] lampShadowShares = new float[MostShadowSlots];
+
+        /// <summary>How far from you the shadowed lamps' casters reach, for the noting's area (FollowSunShadows).</summary>
+        private float lampShadowArea;
 
         /// <summary>How much nearer a lamp without a map must be to take one from a lamp that has it, in meters.</summary>
         private const float LampStickiness = 3;
 
-        /// <summary>How long a lamp's light takes to pass between the game and the plugin.</summary>
+        /// <summary>How long a lamp's light, or its shadow, takes to ease in or out.</summary>
         private const float LampFadeSeconds = 0.5f;
 
         /// <summary>The chosen lamps wanted lit with shadows this frame, nearest first.</summary>
@@ -76,7 +86,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private bool HoldsMap(Vector3 place) {
-            for (var k = 0; k < LampsWithShadows; k++) {
+            for (var k = 0; k < MostShadowSlots; k++) {
                 if (cubeLamp[k].HasValue && (cubeLamp[k].Value - place).LengthSq() < 0.01f) {
                     return true;
                 }
@@ -86,11 +96,12 @@ namespace DaraletPlayer.Ui {
         }
 
         private void ForgetLampMaps() {
-            for (var k = 0; k < LampsWithShadows; k++) {
-                cubeLamp[k] = null;
-            }
+            lampShadowArea = 0;
 
-            lampShares.Clear();
+            for (var k = 0; k < MostShadowSlots; k++) {
+                cubeLamp[k] = null;
+                lampShadowShares[k] = 0;
+            }
         }
 
         /// <summary>
@@ -112,25 +123,27 @@ namespace DaraletPlayer.Ui {
         private DateTime nextLampShadowReport = DateTime.MinValue;
 
         /// <summary>
-        /// The cube maps of up to two of the chosen lights (their places in the device's world and reaches given), the
-        /// ones that cast shadows nearest you; which of the chosen each map is for, -1 for none.
+        /// The cube maps of the chosen lights that cast shadows nearest you, up to `slots` of them (their places in the
+        /// device's world and reaches given); which of the chosen each map is for, -1 for none. Each map's shadow eases
+        /// in when its lamp takes it and out before it's given up (lampShadowShares), so no lamp's shadows appear or vanish
+        /// at once; a lamp no longer chosen at all (out of range) gives its map up straight away.
         /// </summary>
-        private float[] DrawLampShadows(Device device, IList<(Vector3 Place, float Reach, bool Casts)> chosen,
-            Vector3 you) {
-            var which = new float[LampsWithShadows];
+        private int[] DrawLampShadows(Device device, IList<(Vector3 Place, float Reach, bool Casts)> chosen,
+            Vector3 you, int slots, float seconds) {
+            var which = new int[MostShadowSlots];
 
             for (var k = 0; k < which.Length; k++) {
                 which[k] = -1;
             }
 
-            // the lamps wanted lit with shadows: the nearest you that cast them, a lamp holding a map counting as
+            // the lamps wanted with shadows: the nearest you that cast them, a lamp holding a map counting as
             // LampStickiness meters nearer, so two lamps about as near don't take turns as you walk between them
             wantedLamps.Clear();
 
             foreach (var c in chosen.Select((l, i) => (Light: l, Index: i))
                 .Where(c => c.Light.Casts && c.Light.Reach >= 2)
                 .OrderBy(c => (c.Light.Place - you).Length() - (HoldsMap(c.Light.Place) ? LampStickiness : 0))
-                .Take(LampsWithShadows)) {
+                .Take(slots)) {
                 wantedLamps.Add(c.Index);
             }
 
@@ -141,14 +154,13 @@ namespace DaraletPlayer.Ui {
 
             EnsureLampCubes(device);
 
-            // each map keeps its lamp (lamps don't move) while it's wanted, or until its light has faded out of the
-            // plugin's hands (LampShare): a lamp is never dropped while it still lights. A wanted one without a map takes
-            // a free one, starting from none of its light, and fades in
-            var picked = new List<(int Index, int Cube)>();
-            var holds = new int[LampsWithShadows];
+            // each map keeps its lamp (lamps don't move) while it's wanted, or until its shadow has faded out; a wanted
+            // lamp without one takes a free slot (below `slots`), starting from no shadow, and fades in
+            var holds = new int[MostShadowSlots];
             var placed = new HashSet<int>();
+            var step = seconds / LampFadeSeconds;
 
-            for (var k = 0; k < LampsWithShadows; k++) {
+            for (var k = 0; k < MostShadowSlots; k++) {
                 holds[k] = -1;
 
                 if (!cubeLamp[k].HasValue) {
@@ -157,7 +169,11 @@ namespace DaraletPlayer.Ui {
 
                 for (var i = 0; i < chosen.Count; i++) {
                     if (!placed.Contains(i) && (chosen[i].Place - cubeLamp[k].Value).LengthSq() < 0.01f) {
-                        if (wantedLamps.Contains(i) || LampShare(chosen[i].Place) > 0.001f) {
+                        var wanted = k < slots && wantedLamps.Contains(i);
+                        lampShadowShares[k] = wanted ? Math.Min(1, lampShadowShares[k] + step)
+                            : Math.Max(0, lampShadowShares[k] - step);
+
+                        if (wanted || lampShadowShares[k] > 0.001f) {
                             holds[k] = i;
                             placed.Add(i);
                         }
@@ -167,8 +183,8 @@ namespace DaraletPlayer.Ui {
                 }
 
                 if (holds[k] < 0) {
-                    lampShares.Remove(ShareKey(cubeLamp[k].Value));
                     cubeLamp[k] = null;
+                    lampShadowShares[k] = 0;
                 }
             }
 
@@ -179,21 +195,26 @@ namespace DaraletPlayer.Ui {
                     continue;
                 }
 
-                for (var k = 0; k < LampsWithShadows; k++) {
+                for (var k = 0; k < slots; k++) {
                     if (holds[k] < 0) {
                         holds[k] = i;
                         placed.Add(i);
                         cubeLamp[k] = chosen[i].Place;
-                        lampShares[ShareKey(chosen[i].Place)] = 0;
+                        lampShadowShares[k] = 0;
                         toDraw.Add(k);
                         break;
                     }
                 }
             }
 
-            for (var k = 0; k < LampsWithShadows; k++) {
+            var picked = new List<(int Index, int Cube)>();
+            lampShadowArea = 0;
+
+            for (var k = 0; k < MostShadowSlots; k++) {
                 if (holds[k] >= 0) {
                     picked.Add((holds[k], k));
+                    var lamp = chosen[holds[k]];
+                    lampShadowArea = Math.Max(lampShadowArea, (lamp.Place - you).Length() + lamp.Reach + LampCasterMargin);
                 }
             }
 
@@ -201,7 +222,7 @@ namespace DaraletPlayer.Ui {
                 return which;
             }
 
-            // and a couple of the kept ones each frame, in turn, so a character walking by shows in them
+            // and a few of the kept ones each frame, in turn, so a character walking by shows in them
             for (var n = 0; n < LampRedrawsAFrame && toDraw.Count < picked.Count; n++) {
                 lampRedrawTurn = (lampRedrawTurn + 1) % picked.Count;
                 var cube = picked[lampRedrawTurn].Cube;
@@ -219,11 +240,16 @@ namespace DaraletPlayer.Ui {
                 PrepareLampShadowDrawing(device);
 
                 foreach (var k in toDraw) {
+                    lampCubes[k] = lampCubes[k] ?? new CubeTexture(device, LampMapSize, 1, Usage.RenderTarget, Format.R32F,
+                        Pool.Default);
                     made += DrawCube(device, lampCubes[k], chosen[holds[k]].Place, chosen[holds[k]].Reach);
                 }
 
                 foreach (var (index, cube) in picked) {
-                    which[cube] = index;
+                    // a map made only this frame or before (never one not yet drawn)
+                    if (lampCubes[cube] != null) {
+                        which[cube] = index;
+                    }
                 }
             }
             finally {
@@ -235,7 +261,8 @@ namespace DaraletPlayer.Ui {
 
             if (DateTime.UtcNow >= nextLampShadowReport) {
                 nextLampShadowReport = DateTime.UtcNow.AddSeconds(10);
-                PluginCore.LogFile($"[lamps] {picked.Count} lamps with cube shadow maps, {toDraw.Count} drawn, "
+                PluginCore.LogFile($"[lamps] {traceInRange} lamps in range, {traceInView} lighting what's in view, "
+                    + $"up to {MostLit} lit; {picked.Count} with cube shadow maps (up to {slots}), {toDraw.Count} drawn, "
                     + $"{made} draws made into them "
                     + $"this frame, of {ShadowCasters.Count} noted; left out since: {ShadowCasters.OtherStride} of another "
                     + $"vertex size ({ShadowCasters.LastOtherStride}), {ShadowCasters.NotManaged} not managed");
@@ -291,7 +318,7 @@ namespace DaraletPlayer.Ui {
             }
 
             var constants = new float[36];
-            var cutOut = new float[4];
+            Replay.Reset();
             var toFace = new float[16];
             var made = 0;
 
@@ -311,12 +338,7 @@ namespace DaraletPlayer.Ui {
                         constants[34] = lamp.Z;
                         constants[35] = 1 / reach;
                         DeviceCalls.VertexConstants(device, 0, constants);
-                        cutOut[0] = draw.AlphaTest && draw.Texture != IntPtr.Zero ? 1 : 0;
-                        DeviceCalls.PixelConstants(device, 0, cutOut);
-                        ShadowCasters.GameSetDeclaration(com, draw.Declaration);
-                        ShadowCasters.GameSetStream(com, 0, draw.Stream, draw.Offset, 44);
-                        ShadowCasters.GameSetIndices(com, draw.Indices);
-                        ShadowCasters.GameSetTexture(com, 0, draw.Texture);
+                        Replay.Prepare(device, com, draw);
                         ShadowCasters.GameDrawIndexed(com, draw.Type, draw.BaseVertex, draw.MinIndex, draw.Vertices,
                             draw.StartIndex, draw.Count);
                         made++;
@@ -337,23 +359,21 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            for (var k = 0; k < LampsWithShadows; k++) {
-                lampCubes[k] = new CubeTexture(device, LampMapSize, 1, Usage.RenderTarget, Format.R32F, Pool.Default);
-            }
-
+            // the maps themselves are made as their slots are first used (DrawLampShadows): six faces of 512 by 512, 4
+            // bytes a texel, 6 MB each in the card's memory
             lampCubeDepth = device.CreateDepthStencilSurface(LampMapSize, LampMapSize, DepthFormat.D24S8,
                 MultiSampleType.None, 0, true);
-            PluginCore.LogFile($"[lamps] cube shadow maps made, {LampsWithShadows} of {LampMapSize} a face");
+            PluginCore.LogFile($"[lamps] cube shadow maps ready, up to {MostShadowSlots} of {LampMapSize} a face");
         }
 
         private void TearDownLampShadows() {
-            for (var k = 0; k < LampsWithShadows; k++) {
+            for (var k = 0; k < MostShadowSlots; k++) {
                 lampCubes[k]?.Dispose();
                 lampCubes[k] = null;
                 cubeLamp[k] = null;
+                lampShadowShares[k] = 0;
             }
 
-            lampShares.Clear();
 
             lampCubeDepth?.Dispose();
             lampCubeDepth = null;

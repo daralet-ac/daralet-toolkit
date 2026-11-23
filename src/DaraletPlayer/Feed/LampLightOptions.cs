@@ -32,6 +32,31 @@ namespace DaraletPlayer.Feed {
         public int ClampedReach => Reach < 100 ? 100 : Reach > 300 ? 300 : Reach;
 
         /// <summary>
+        /// How far from the camera lamps are lit, in meters, fading out over the last fifth (the user's call, November
+        /// 2026: "increase the distance that lighting appears, or make a slider for it"). Every lamp within it is the
+        /// plugin's, up to DepthShading's MostLit, each easing in and out: the game lights only its eight nearest, and a
+        /// lamp leaving those took its light off a whole building at once.
+        /// </summary>
+        [DataMember(Name = "distance")] public int Distance;
+
+        public const int LeastDistance = 50;
+        public const int MostDistance = 400;
+
+        public int ClampedDistance => Distance < LeastDistance ? LeastDistance
+            : Distance > MostDistance ? MostDistance : Distance;
+
+        /// <summary>
+        /// How many lamps nearest you cast shadows (with Shadows), each with a cube shadow map: up to 12, the texture
+        /// slots a Direct3D 9 shader has room for beside the depth (the user's call, November 2026: more than six).
+        /// </summary>
+        [DataMember(Name = "shadowedLamps")] public int ShadowedLamps;
+
+        public const int MostShadowedLamps = 12;
+
+        public int ClampedShadowedLamps => ShadowedLamps < 0 ? 0
+            : ShadowedLamps > MostShadowedLamps ? MostShadowedLamps : ShadowedLamps;
+
+        /// <summary>
         /// How much darker everything is at night, in percent (0 off): ground, objects, characters and sky, outdoors,
         /// so the game's lights stand out (the user's call, November 2026: more immersive nights). By the sun's height.
         /// </summary>
@@ -54,7 +79,8 @@ namespace DaraletPlayer.Feed {
         public int ClampedStrength => Strength < 0 ? 0 : Strength > 200 ? 200 : Strength;
 
         public string Summary() {
-            return On ? $"lamps {ClampedStrength}%" + (Shadows ? " with shadows" : "") + $", reach {ClampedReach}%"
+            return On ? $"lamps {ClampedStrength}%" + (Shadows ? $" with shadows on {ClampedShadowedLamps}" : "")
+                + $", reach {ClampedReach}%, to {ClampedDistance} m"
                 + (ClampedNightDarkness > 0 ? $", nights {ClampedNightDarkness}% darker, lamps {ClampedNightGlow}%" : "")
                 : "lamps off";
         }
@@ -72,6 +98,8 @@ namespace DaraletPlayer.Feed {
             NightGlow = 200;
             Reach = 150;
             FireLight = true;
+            Distance = 200;
+            ShadowedLamps = 8;
         }
     }
 }

@@ -15,6 +15,8 @@ namespace DaraletPlayer.Ui {
         private int? draggingNightDarkness;
         private int? draggingNightGlow;
         private int? draggingLampReach;
+        private int? draggingLampDistance;
+        private int? draggingShadowedLamps;
 
         private void RenderShading() {
             var options = ShadingSettings;
@@ -80,6 +82,40 @@ namespace DaraletPlayer.Ui {
                 Changed();
             }
 
+            Form.Label("Distance", "How far away lamps are lit. Further costs a little more.");
+            var distance = draggingLampDistance ?? options.ClampedDistance;
+
+            if (DragSlider("##lamps-distance", ref distance, Feed.LampLightOptions.LeastDistance,
+                Feed.LampLightOptions.MostDistance, "%d m", ref draggingLampDistance, SliderWithCost)) {
+                options.Distance = distance;
+                Changed();
+            }
+
+            // the lamp light's whole cost, beside each of its sliders
+            CostNote(LampCost(true, options.Shadows, distance, options.ClampedShadowedLamps));
+
+            ImGui.BeginDisabled(!options.Shadows);
+            Form.Label("Shadowed lamps", "How many of the lamps nearest you cast shadows. More costs more.");
+            var shadowed = draggingShadowedLamps ?? options.ClampedShadowedLamps;
+
+            if (DragSlider("##lamps-shadowed", ref shadowed, 0, Feed.LampLightOptions.MostShadowedLamps,
+                shadowed == 0 ? "None" : "%d lamps", ref draggingShadowedLamps, SliderWithCost)) {
+                options.ShadowedLamps = shadowed;
+                Changed();
+            }
+
+            CostNote(LampCost(true, true, options.ClampedDistance, shadowed));
+
+            // the lamp shader the card took (DepthShading.EnsureLampShader) may have fewer maps than asked for
+            var taken = DepthShading.LampShadowMapsTaken;
+
+            if (taken > 0 && shadowed > taken) {
+                ImGui.SameLine();
+                Widgets.TextDisabled($"(your card: up to {taken})");
+            }
+
+            ImGui.EndDisabled();
+
             Form.Label("Night", "Outdoors at night everything is darker (ground, objects, characters, sky) and the lamps "
                 + "stronger, so torches and campfires stand out. Follows the sun: none by day.");
             var darkness = draggingNightDarkness ?? options.ClampedNightDarkness;
@@ -124,10 +160,12 @@ namespace DaraletPlayer.Ui {
             var distance = draggingSunDistance ?? options.ClampedDistance;
 
             if (DragSlider("##sun-shadows-distance", ref distance, Feed.SunShadowOptions.MinDistance,
-                Feed.SunShadowOptions.MaxDistance, "%d m", ref draggingSunDistance)) {
+                Feed.SunShadowOptions.MaxDistance, "%d m", ref draggingSunDistance, SliderWithCost)) {
                 options.Distance = distance;
                 Changed();
             }
+
+            CostNote(Feed.GraphicsCost.SunShadows(true, distance));
 
             Form.Label("Softness", "How soft the shadows' edges are.");
             var softness = draggingSunSoftness ?? options.ClampedSoftness;

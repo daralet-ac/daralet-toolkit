@@ -20,6 +20,11 @@ namespace DaraletPlayer.Ui {
         /// <summary>How far a fire reaches before the Reach setting, as a game lamp's falloff.</summary>
         private const float FireFalloff = 6;
 
+        /// <summary>The fires' warm colour, before the flicker.</summary>
+        public const float Red = 1f;
+        public const float Green = 0.55f;
+        public const float Blue = 0.25f;
+
         private static readonly List<(int Id, uint Cell, float X, float Y, float Z)> found =
             new List<(int, uint, float, float, float)>();
 
@@ -39,16 +44,23 @@ namespace DaraletPlayer.Ui {
 
             foreach (var f in found) {
                 var (east, north) = RenderOrigin.InFrame(f.Cell >> 16, f.X, f.Y);
-                // a flame's flicker: three slow waves at odd rates, a different phase each fire, never below 80%
-                var phase = (f.Id & 0xFFFF) * 0.37f;
-                var flicker = 0.9f + 0.05f * (float)Math.Sin(seconds * 7.3 + phase)
-                    + 0.03f * (float)Math.Sin(seconds * 13.1 + phase * 2) + 0.02f * (float)Math.Sin(seconds * 23.7 + phase);
+                var flicker = Flicker(f.Id, seconds);
                 lights.Add(new GameLight {
                     Type = 0, Cell = f.Cell, East = east, North = north, Height = f.Z + 1,
-                    Red = 1f * flicker, Green = 0.55f * flicker, Blue = 0.25f * flicker, Intensity = 100,
+                    Red = Red * flicker, Green = Green * flicker, Blue = Blue * flicker, Intensity = 100,
                     Falloff = FireFalloff,
                 });
             }
+        }
+
+        /// <summary>
+        /// A flame's flicker: three slow waves at odd rates, a different phase for each seed, never below 80%. Shared with
+        /// the dats' fire surfaces (PlacedLights.Fires.cs).
+        /// </summary>
+        public static float Flicker(int seed, float seconds) {
+            var phase = (seed & 0xFFFF) * 0.37f;
+            return 0.9f + 0.05f * (float)Math.Sin(seconds * 7.3 + phase)
+                + 0.03f * (float)Math.Sin(seconds * 13.1 + phase * 2) + 0.02f * (float)Math.Sin(seconds * 23.7 + phase);
         }
 
         private static void Look() {

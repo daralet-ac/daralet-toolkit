@@ -32,7 +32,42 @@ namespace DaraletPlayer.Ui {
     /// Untested in the game when written.
     /// </summary>
     internal sealed partial class DrawDistance {
-        private const int BlocksAFrame = 6;
+        /// <summary>
+        /// How long a frame may spend working out blocks' scenery. It was 6 blocks a frame, but a block takes only 0.05 to
+        /// 0.07 ms (read, buildings and SceneryLayout, measured on Daralet's dats round Hebian-to, November 2026), so 3,300
+        /// blocks waited about 550 frames, 9 seconds, for 0.2 seconds of work: the cap, not the work, was the load time.
+        /// </summary>
+        private const double WorkOutBudgetMs = 4;
+
+        /// <summary>The longest the far scenery waits for the draw distance to finish stepping up.</summary>
+        private const double HoldForStepSeconds = 30;
+
+        private DateTime holdingSince = DateTime.MinValue;
+
+        /// <summary>
+        /// While the draw distance is still stepping up (not AtTarget), the far scenery (billboards, 3D trees, far
+        /// buildings, the far land) isn't built yet: on arriving it was built for the game's own landscape (3 rings,
+        /// 2,796 blocks at Hebian-to), then all again for the setting's (8, 3,631 blocks), and the first build's hitches
+        /// held back the step itself, whose frames must run smooth first (LoadSettled), 19 seconds in log.txt (November
+        /// 2026). Held at most HoldForStepSeconds, in case the step never comes.
+        /// </summary>
+        public bool HoldBuilds {
+            get {
+                if (AtTarget) {
+                    holdingSince = DateTime.MinValue;
+                    return false;
+                }
+
+                if (holdingSince == DateTime.MinValue) {
+                    holdingSince = DateTime.UtcNow;
+                }
+
+                return (DateTime.UtcNow - holdingSince).TotalSeconds < HoldForStepSeconds;
+            }
+        }
+
+        /// <summary>The current work-out's totals, logged once its queue is empty.</summary>
+        private readonly WorkTimer workOut = new WorkTimer();
 
         /// <summary>Two crossed pictures, two triangles each.</summary>
         private const int VerticesABillboard = 12;
@@ -94,13 +129,18 @@ namespace DaraletPlayer.Ui {
                     PluginCore.LogFile("[billboards] off");
                 }
 
+                // nothing coming for the loading bar to wait for (in portal space they're still to come)
+                if (!inPortalSpace) {
+                    LoadPieces.Ready(LoadPieces.Trees);
+                }
+
                 billboardKey = null;
                 return;
             }
 
             // nothing worked out or made while the game loads the place: billboards built 7 s after a teleport, reading
             // the dats and making textures for 2,376 blocks, were followed by a crash in the game's cache (0x58712F)
-            if (Arriving) {
+            if (Arriving || HoldBuilds) {
                 return;
             }
 
@@ -109,12 +149,14 @@ namespace DaraletPlayer.Ui {
             // edge is a landblock away
             var home = unchecked((uint)CoreManager.Current.Actions.Landcell) >> 16;
 
-            // indoors (a dungeon's cells) there's no landscape to stand billboards on
-            if ((unchecked((uint)CoreManager.Current.Actions.Landcell) & 0xFFFF) >= 0x100) {
+            // in a dungeon there's no landscape to stand billboards on; a building's rooms see out (OutdoorView), and
+            // going by the cell number alone dropped them in every doorway and rebuilt them all on stepping out
+            if (!OutdoorView.Now) {
                 if (billboardBuffer != null) {
                     ClearBillboards();
                 }
 
+                LoadPieces.Ready(LoadPieces.Trees);
                 billboardKey = null;
                 return;
             }
@@ -124,6 +166,11 @@ namespace DaraletPlayer.Ui {
                 + Options.Billboards + " " + Options.FarBuildings + " " + FarLandBillboardRings + " " + FarLandTakesOver;
 
             if (key == billboardKey) {
+                // already built for where you are
+                if (!billboardsToBuild && blocksToWorkOut.Count == 0) {
+                    LoadPieces.Ready(LoadPieces.Trees);
+                }
+
                 return;
             }
 
@@ -182,6 +229,10 @@ namespace DaraletPlayer.Ui {
         /// drawn.</summary>
         private void BillboardFrame() {
             if (billboardKey == null || billboardsFailed) {
+                if (placing) {
+                    AbortPlacing();
+                }
+
                 return;
             }
 
@@ -195,8 +246,12 @@ namespace DaraletPlayer.Ui {
 
                 region = region ?? portal.ReadFromDat<ACE.DatLoader.FileTypes.RegionDesc>(RegionId);
 
-                for (var i = 0; i < BlocksAFrame && blocksToWorkOut.Count > 0; i++) {
+                var frameClock = System.Diagnostics.Stopwatch.StartNew();
+                var thisFrame = 0;
+
+                while (blocksToWorkOut.Count > 0 && frameClock.Elapsed.TotalMilliseconds < WorkOutBudgetMs) {
                     var block = blocksToWorkOut.Dequeue();
+                    thisFrame++;
                     var id = block << 16;
                     var land = cells.ReadFromDat<ACE.DatLoader.FileTypes.CellLandblock>(id | 0xFFFF);
                     blockHeights[block] = land?.Height.ToList();
@@ -206,14 +261,30 @@ namespace DaraletPlayer.Ui {
                             sceneId => ObjectsOf(portal, sceneId), appliedDensity, BuildingCells(cells, id));
                 }
 
+                workOut.Add(thisFrame, frameClock.Elapsed);
+
+                if (blocksToWorkOut.Count == 0 && workOut.Finish("[billboards] blocks worked out:") is string done) {
+                    PluginCore.LogFile(done);
+                }
+
                 var device = UBService.Huds.D3Ddevice;
 
                 if (device == null) {
                     return;
                 }
 
+                // a new set of blocks (another crossing) mid-placing: placed again from the start
+                if (billboardsToBuild && placing) {
+                    AbortPlacing();
+                }
+
                 if (blocksToWorkOut.Count == 0 && billboardsToBuild) {
-                    BuildBillboards(device, portal);
+                    BeginPlacing();
+                }
+
+                // placed a slice a frame, the old billboards drawn till the new are built (DrawDistance.Placing.cs)
+                if (placing) {
+                    PlaceSome(device, portal);
                 }
 
                 // drawn inside the game's frame, before its see-through things, when that's hooked (Ui/WorldPass.cs)
@@ -223,6 +294,7 @@ namespace DaraletPlayer.Ui {
             }
             catch (Exception ex) {
                 billboardsFailed = true;
+                LoadPieces.Ready(LoadPieces.Trees);
                 PluginCore.LogFile("[billboards] stopped for the session: " + ex);
             }
         }
@@ -242,89 +314,25 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>The crossed pictures of every far object, grouped by model, into one vertex buffer.</summary>
-        private void BuildBillboards(Device device, ACE.DatLoader.DatDatabase portal) {
-            billboardsToBuild = false;
-            var byModel = new Dictionary<(BillboardModel Model, bool Far), int>();
-            usedModels.Clear();
-            billboardPlaces.Clear();
-            var farByModel = new Dictionary<FarTreeModel, List<FarTreeInstance>>();
-            var farLandByModel = new Dictionary<FarTreeModel, List<FarTreeInstance>>();
-            var showBillboards = Options.Billboards;
-            var hx = (int)(pendingHome >> 8);
-            var hy = (int)(pendingHome & 0xFF);
-            var objects = 0;
-            farBuildingCount = 0;
-
-            foreach (var block in billboardBlocks) {
-                if (!blockScenery.TryGetValue(block, out var placed)) {
-                    continue;
-                }
-
-                var offsetX = ((int)(block >> 8) - hx) * SceneryLayout.BlockSize;
-                var offsetY = ((int)(block & 0xFF) - hy) * SceneryLayout.BlockSize;
-
-                // stood on the ground as the game draws this block, in less detail the further out it is: on the true
-                // ground, trees on a hump floated over the flattened ridge the game draws
-                var ring = Math.Max(Math.Abs((int)(block >> 8) - hx), Math.Abs((int)(block & 0xFF) - hy));
-                // past the game's landscape, on the far land, which is drawn in full detail (Ui/FarLand.cs)
-                var beyond = ring > billboardLandscape;
-                // and with the far land taking over the game's coarse rings, on its full-detail ground there too
-                var step = beyond || FarLandTakesOver ? 1 : SceneryLayout.DetailStep(ring, patchedRadius);
-                blockHeights.TryGetValue(block, out var heights);
-
-                var farRing = !beyond && IsFarTreeRing(ring);
-
-                // on the far land too, drawn in its pass with its camera: with a low landscape, far towns were gone
-                if (Options.FarBuildings && ring > patchedRadius) {
-                    AddFarBuildings(block, step, heights, offsetX, offsetY, portal, device,
-                        beyond ? farLandByModel : farByModel);
-                }
-
-                foreach (var p in placed) {
-                    if (farRing) {
-                        // the game's own model, drawn by the plugin (DrawDistance.FarTrees.cs)
-                        var tree = farTreeModels.Get(p.Model, portal, device);
-                        usedModels.Add(p.Model);
-
-                        if (tree == null) {
-                            continue;
-                        }
-
-                        if (!farByModel.TryGetValue(tree, out var copies)) {
-                            copies = new List<FarTreeInstance>();
-                            farByModel[tree] = copies;
-                        }
-
-                        var treeZ = heights == null || step == 1 ? p.Z : SceneryLayout.Ground(block << 16, heights,
-                            region.LandDefs.LandHeightTable, p.X, p.Y, step).Z;
-                        copies.Add(FarTree(offsetX + p.X, offsetY + p.Y, treeZ, p.Yaw, p.Scale));
-                        continue;
-                    }
-
-                    if (!showBillboards) {
-                        continue;
-                    }
-
-                    var model = billboardModels.Get(p.Model, portal, device);
-                    usedModels.Add(p.Model);
-
-                    if (model == null) {
-                        continue;
-                    }
-
-                    var z = heights == null || step == 1 ? p.Z : SceneryLayout.Ground(block << 16, heights,
-                        region.LandDefs.LandHeightTable, p.X, p.Y, step).Z;
-                    byModel.TryGetValue((model, beyond), out var count);
-                    byModel[(model, beyond)] = count + 1;
-                    billboardPlaces.Add((model, offsetX + p.X, offsetY + p.Y, z, p.Yaw, p.Scale, beyond));
-                    objects++;
-                }
-            }
-
+        /// <summary>
+        /// Once every block is placed (DrawDistance.Placing.cs): the old billboards, trees and far buildings let go, and the
+        /// new built: the 3D trees' instances, then the crossed pictures of every far object, by model, in one vertex buffer.
+        /// </summary>
+        private void FinishBillboards(Device device, ACE.DatLoader.DatDatabase portal) {
+            // how long each step takes, in the log line, to see which holds the game up at a landblock crossing
+            var stepClock = System.Diagnostics.Stopwatch.StartNew();
+            var steps = new List<string> { "placing " + placeTimer.Finish("") };
+            var byModel = placeByModel;
+            var objects = placeObjects;
             ClearBillboards();
-            billboardHome = pendingHome;
-            BuildFarTrees(device, farByModel, farLandByModel);
+            billboardHome = placeHome;
+            BuildFarTrees(device, placeFarByModel, placeFarLandByModel);
+            placeByModel = null;
+            placeFarByModel = null;
+            placeFarLandByModel = null;
+            placeBlocks = null;
+            steps.Add($"3D trees {stepClock.ElapsedMilliseconds} ms");
+            stepClock.Restart();
             ForgetScenerySeen();
             var modelsGone = billboardModels.KeepOnly(usedModels) + farTreeModels.KeepOnly(usedModels);
 
@@ -335,6 +343,7 @@ namespace DaraletPlayer.Ui {
             if (objects == 0) {
                 billboardPlaces.Clear();
                 PluginCore.LogFile("[billboards] nothing to draw");
+                LoadPieces.Ready(LoadPieces.Trees);
                 return;
             }
 
@@ -360,7 +369,10 @@ namespace DaraletPlayer.Ui {
 
             billboardBuffer = new VertexBuffer(typeof(CustomVertex.PositionNormalTextured), start, device,
                 Usage.WriteOnly, BillboardFormat, ScenePool.Buffers);
+            steps.Add($"buffer {stepClock.ElapsedMilliseconds} ms");
+            stepClock.Restart();
             WriteBillboards(billboardBuffer, first);
+            steps.Add($"writing {stepClock.ElapsedMilliseconds} ms");
             billboardPlaces.Clear();
 
             // a list grown past its use keeps its room: let a big one go, so a far view seen once isn't held for good
@@ -377,8 +389,9 @@ namespace DaraletPlayer.Ui {
             PluginCore.LogFile($"[billboards] {objects} billboards ({farLandBillboardCount} on the far land) in "
                 + $"{billboardBatches.Count + farLandBatches.Count} runs, "
                 + $"{start / 3} triangles, {FreeMegabytes()} MB free, plugin {GC.GetTotalMemory(false) >> 20} MB, "
-                + $"{blockScenery.Count} blocks' scenery kept");
+                + $"{blockScenery.Count} blocks' scenery kept; " + string.Join(", ", steps));
             TeleportTimeline.Note("billboards");
+            LoadPieces.Ready(LoadPieces.Trees);
         }
 
         /// <summary>Every billboard placed this build, written into the buffer at its model's run.</summary>

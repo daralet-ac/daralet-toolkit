@@ -37,17 +37,33 @@ namespace DaraletPlayer.Ui {
             device.SamplerState[1].AddressU = TextureAddress.Clamp;
             device.SamplerState[1].AddressV = TextureAddress.Clamp;
 
-            // what glows, a quarter the size
+            // what glows, a quarter the size; with the lamp pass's copies (DepthShading.LampCopies.cs), what the plugin's
+            // lamp light made bright doesn't
             CopyFrame(device, back, width, height);
+            var copies = lampCopiesReady && beforeLamps != null && afterLamps != null;
+            lampCopiesReady = false;
             state.AlphaBlendEnable = false;
             device.SetRenderTarget(0, glowASurface);
             device.Viewport = new Viewport { X = 0, Y = 0, Width = quarterWidth, Height = quarterHeight, MaxZ = 1 };
             VertexTexel(device, quarterWidth, quarterHeight);
             device.SetTexture(1, frameCopy);
+            device.SetTexture(2, copies ? beforeLamps : null);
+            device.SetTexture(3, copies ? afterLamps : null);
+
+            for (var stage = 2; stage <= 3; stage++) {
+                device.SamplerState[stage].MinFilter = TextureFilter.Linear;
+                device.SamplerState[stage].MagFilter = TextureFilter.Linear;
+                device.SamplerState[stage].MipFilter = TextureFilter.None;
+                device.SamplerState[stage].AddressU = TextureAddress.Clamp;
+                device.SamplerState[stage].AddressV = TextureAddress.Clamp;
+            }
+
             Slot<SetShaderCall>(device, SetPixelShaderSlot)(com, glowBrightShader);
             Slot<SetConstantsCall>(device, SetPixelShaderConstantSlot)(com, 0,
-                new[] { GlowThreshold, 1f / width, 1f / height, 0 }, 1);
+                new[] { GlowThreshold, 1f / width, 1f / height, copies ? 1 : 0 }, 1);
             device.DrawUserPrimitives(PrimitiveType.TriangleStrip, 2, Quad);
+            device.SetTexture(2, null);
+            device.SetTexture(3, null);
 
             // blurred across
             device.SetTexture(1, null);

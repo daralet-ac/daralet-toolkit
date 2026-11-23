@@ -182,7 +182,9 @@ namespace DaraletPlayer.Ui {
                     LampOptions.On && LampOptions.Shadows);
 
                 var needsDepth = Options.On || settings.Data.Water.On || SunOptions.On || LampOptions.On;
-                var image = settings.Data.Image.Any;
+                // the night's change taken back behind see-through things is an image pass of its own
+                // (DepthShading.SeeThrough.cs), wanted whenever the lamp pass made its copies this frame
+                var image = settings.Data.Image.Any || seeThroughReady;
 
                 if (!needsDepth && !image) {
                     if (depthTexture != null || frameCopy != null) {
@@ -453,7 +455,7 @@ namespace DaraletPlayer.Ui {
                     // the game's own lights, per pixel and blocked by what's between (DepthShading.Lamps.cs)
                     if (depthReady && LampOptions.On && (DebugView == 0 || DebugView >= 4)) {
                         device.SetTexture(0, depthTexture);
-                        DrawLamps(device, view, projection);
+                        DrawLamps(device, view, projection, back, width, height);
                     }
 
                     // last, so the edges of the water and the billboards are smoothed too
@@ -468,8 +470,9 @@ namespace DaraletPlayer.Ui {
                     device.SetTexture(0, null);
                     device.SetTexture(1, null);
                     device.SetTexture(2, null);
-                    // up to six lamp maps from 1: nothing of ours left bound, or the device can't reset
-                    for (var stage = 3; stage <= 6; stage++) {
+                    // up to twelve lamp maps from 1 and the frame's copy at 13: nothing of ours left bound, or the device
+                    // can't reset
+                    for (var stage = 3; stage <= FrameSampler; stage++) {
                         device.SetTexture(stage, null);
                     }
 
@@ -503,6 +506,7 @@ namespace DaraletPlayer.Ui {
             TearDownShadows();
             TearDownGlow();
             TearDownLampShadows();
+            TearDownLampCopies();
             savedState?.Dispose();
             savedState = null;
             boundForThisFrame = false;
@@ -576,6 +580,7 @@ namespace DaraletPlayer.Ui {
             GameLampSwitch.Release();
             FireLights.Clear();
             PlacedLights.Clear();
+            OutdoorView.Clear();
 
             // the device's own calls back first: a hook left in after the plugin's gone would crash the game
             try {
@@ -595,6 +600,7 @@ namespace DaraletPlayer.Ui {
                 ReleaseShadowShaders();
                 ReleaseLampShader();
                 ReleaseGlowShaders();
+                ReleaseSeeThroughShader();
                 ReleaseLampShadowShaders();
                 antiAliasShader = IntPtr.Zero;
                 sharpenShader = IntPtr.Zero;

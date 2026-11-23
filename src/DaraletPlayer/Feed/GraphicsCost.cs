@@ -119,13 +119,36 @@ namespace DaraletPlayer.Feed {
         }
 
         // the screen passes, measured on and off at the desert overlook (2560x1440, 83 fps): each within the noise
-        // (about 0.3 ms), their textures in video memory, not the game's address space. Sun shadows cost with the draws
-        // they copy: 107 fps to 93 among Holtburg's trees, 1.4 ms
-        public static Item SunShadows(bool on) => new Item("Sun shadows", on ? 5 : 0, on ? 1.4 : 0);
+        // (about 0.3 ms), their textures in video memory, not the game's address space
+
+        /// <summary>
+        /// Sun shadows cost with the draws they copy: 107 fps to 93 among Holtburg's trees at 150 m, 1.4 ms. Scaled by
+        /// the distance (the user's call, November 2026: the lighting's settings should move the frame rate estimate):
+        /// the hooks and the near and close maps, about 0.8 ms, are the same at any distance, and the far map's casters
+        /// grow with how far it reaches, 0.6 ms each 150 m. Only the 150 m figure is measured.
+        /// </summary>
+        public static Item SunShadows(bool on, int distance = 150) {
+            var reach = Math.Max(40, distance);
+            return new Item("Sun shadows", on ? 5 : 0, on ? 0.8 + 0.6 * reach / 150.0 : 0, rough: on && distance != 150);
+        }
+
         public static Item Shading(bool on) => new Item("Shading", on ? 2 : 0, on ? 0.3 : 0);
         public static Item Water(bool on) => new Item("Water", on ? 3 : 0, on ? 0.3 : 0);
-        public static Item Lamps(bool on, bool shadows) =>
-            new Item("Lamp light", on ? 2 : 0, on ? (shadows ? 0.5 : 0.3) : 0, rough: true);
+
+        /// <summary>
+        /// Lamp light, none of it measured on its own: a base for the pass, a little for each lamp lit (about one each 10
+        /// m of the Distance in a town, up to 32), and with shadows the cube maps' redraws (three a frame, whatever the
+        /// count) and the lookups for each shadowed lamp (as many as the card's shader has, `shadowed` given so).
+        /// </summary>
+        public static Item Lamps(bool on, bool shadows, int distance = 200, int shadowed = 8) {
+            if (!on) {
+                return new Item("Lamp light", 0, 0, rough: true);
+            }
+
+            var lit = Math.Min(32, distance / 10.0);
+            var ms = 0.2 + 0.015 * lit + (shadows ? 0.3 + 0.06 * Math.Max(0, shadowed) : 0);
+            return new Item("Lamp light", 2, ms, rough: true);
+        }
         public static Item Grass(bool on) => new Item("Grass", on ? 10 : 0, on ? 1.0 : 0, rough: true);
         public static Item AntiAlias(bool on) => new Item("Anti-aliasing", on ? 2 : 0, on ? 0.3 : 0);
         public static Item Sharpen(int amount) => new Item("Sharpen", amount > 0 ? 2 : 0, amount > 0 ? 0.1 : 0);

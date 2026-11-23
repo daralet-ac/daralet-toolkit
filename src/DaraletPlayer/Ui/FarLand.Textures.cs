@@ -57,8 +57,6 @@ namespace DaraletPlayer.Ui {
         /// <summary>The furthest ring drawn from the mid atlas: with the ring past it baked too, 31, unique mod 64.</summary>
         private const int MidMaxRing = 30;
 
-        private const double BakeBudgetMs = 4;
-
         /// <summary>
         /// How far toward a road vertex the blend must be for road: the game's roads are about half a cell wide.
         /// </summary>
@@ -206,6 +204,12 @@ namespace DaraletPlayer.Ui {
                     toBuild = true;
                 }
 
+                // a build part way has buffers of its own, in the default pool too: let go, and started again
+                if (Building) {
+                    AbortBuild();
+                    toBuild = true;
+                }
+
                 PluginCore.LogFile("[far-land] atlases let go for a device reset");
             }
             catch (Exception ex) {
@@ -223,12 +227,12 @@ namespace DaraletPlayer.Ui {
 
             atlasReady = false;
             bakesQueued = false;
-            toBake.Clear();
+            ForgetBakes();
         }
 
         /// <summary>The blocks wanted whose slot holds something else, queued to be baked, each into its tiers.</summary>
         private void QueueBakes() {
-            toBake.Clear();
+            ForgetBakes();
 
             foreach (var kv in blocks) {
                 if (kv.Value.Heights == null || !bakedTiers.TryGetValue(kv.Key, out var tiers)) {
@@ -242,7 +246,7 @@ namespace DaraletPlayer.Ui {
                 }
             }
 
-            if (toBake.Count == 0) {
+            if (!BakesPending) {
                 atlasReady = atlases[MidTier] != null;
             }
         }
@@ -252,55 +256,8 @@ namespace DaraletPlayer.Ui {
             return (int)((block >> 8) & (slots - 1)) * slots + (int)(block & (slots - 1));
         }
 
-        /// <summary>A few blocks baked into the atlases, within the frame's budget.</summary>
-        private void BakeSome(Device device) {
-            if (atlases[MidTier] == null || toBake.Count == 0) {
-                return;
-            }
-
-            var clock = Stopwatch.StartNew();
-
-            while (toBake.Count > 0 && clock.Elapsed.TotalMilliseconds < BakeBudgetMs) {
-                var (block, tier) = toBake.Dequeue();
-
-                if (blocks.TryGetValue(block, out var land) && land.Heights != null) {
-                    Bake(device, block, land, tier);
-                }
-            }
-
-            if (toBake.Count == 0) {
-                atlasReady = true;
-            }
-        }
-
-        private void Bake(Device device, uint block, LandBlock land, int tier) {
-            var clock = Stopwatch.StartNew();
-            var blockPixels = TierBlockPixels[tier];
-            var pixels = BakePixels(land, tier);
-            var levels = MipChainOf(pixels, blockPixels);
-            var slot = SlotOf(block, tier);
-            var slotX = slot / TierSlots[tier];
-            var slotY = slot % TierSlots[tier];
-
-            for (var level = 0; level < TierLevels[tier]; level++) {
-                var size = blockPixels >> level;
-                FillStaging(stagings[tier], level, levels[level], size);
-
-                using (var source = stagings[tier].GetSurfaceLevel(level))
-                using (var target = atlases[tier].GetSurfaceLevel(level)) {
-                    device.UpdateSurface(source, new Rectangle(0, 0, size, size), target,
-                        new Point(slotX * size, slotY * size));
-                }
-            }
-
-            slotHolds[tier][slot] = block;
-
-            if (bakesLogged[tier] < 2) {
-                bakesLogged[tier]++;
-                PluginCore.LogFile($"[far-land] baked {block:X4} {TierNames[tier]} in slot {slotX},{slotY} in "
-                    + $"{clock.ElapsedMilliseconds} ms, averaging {Feed.GrassPicture.Average(pixels):X8}");
-            }
-        }
+        /// <summary>The copying in's totals, logged once nothing's left to bake, to see what loading waits on.</summary>
+        private readonly WorkTimer bakeTimer = new WorkTimer();
 
         /// <summary>
         /// The block's picture in a tier, its pixels square, ARGB: row by north (y), column by east (x), as the
@@ -442,27 +399,6 @@ namespace DaraletPlayer.Ui {
             }
 
             return levels;
-        }
-
-        /// <summary>A level of a staging texture filled, ARGB packed into R5G6B5.</summary>
-        private static unsafe void FillStaging(DxTexture into, int level, uint[] pixels, int size) {
-            var stream = into.LockRectangle(level, LockFlags.None, out var pitch);
-
-            try {
-                var at = (byte*)stream.InternalDataPointer;
-
-                for (var y = 0; y < size; y++) {
-                    var row = (ushort*)(at + y * pitch);
-
-                    for (var x = 0; x < size; x++) {
-                        var p = pixels[y * size + x];
-                        row[x] = (ushort)(((p >> 19) & 0x1F) << 11 | ((p >> 10) & 0x3F) << 5 | ((p >> 3) & 0x1F));
-                    }
-                }
-            }
-            finally {
-                into.UnlockRectangle(level);
-            }
         }
 
         private void DisposeAtlas() {

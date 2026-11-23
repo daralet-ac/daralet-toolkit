@@ -15,8 +15,21 @@ namespace DaraletPlayer.Ui {
     /// Only 32-bit back buffers (X8R8G8B8, A8R8G8B8), the game's at 32-bit colour. Untested in the game when written.
     /// </summary>
     internal static class GameScreenshot {
-        /// <summary>Saves the picture to path; the problem in words, or null.</summary>
+        /// <summary>
+        /// Saves the picture to path; the problem in words, or null. Never throws: a shot that threw (Direct3D's
+        /// UnlockRectangle, once, November 2026) stopped the whole test run, and the settings its later steps would have
+        /// put back stayed changed in the player's game.
+        /// </summary>
         public static string Save(string path) {
+            try {
+                return SaveOrThrow(path);
+            }
+            catch (Exception ex) {
+                return ex.GetType().Name + ": " + ex.Message;
+            }
+        }
+
+        private static string SaveOrThrow(string path) {
             var device = UBService.Huds.D3Ddevice;
 
             if (device == null) {

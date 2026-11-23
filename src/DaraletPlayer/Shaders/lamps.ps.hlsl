@@ -1,4 +1,4 @@
-// Light from the game's own lights (Ui/DepthShading.Lamps.cs): up to eight point lights near the camera, read from the
+// Light from the game's own lights (Ui/DepthShading.Lamps.cs): up to forty point lights near the camera, read from the
 // client's own lists, brightening what's round them per pixel. The light pass gives how much brighter a pixel gets (0
 // none), blended as destination times (1 + source), so a surface keeps its own colour and is lit by the light's; the
 // shadow pass before it, how much of the game's own light is left where something blocks a lamp (a character on the
@@ -14,15 +14,35 @@ samplerCUBE lampMap2 : register(s3);
 samplerCUBE lampMap3 : register(s4);
 samplerCUBE lampMap4 : register(s5);
 samplerCUBE lampMap5 : register(s6);
+samplerCUBE lampMap6 : register(s7);
+samplerCUBE lampMap7 : register(s8);
+samplerCUBE lampMap8 : register(s9);
+samplerCUBE lampMap9 : register(s10);
+samplerCUBE lampMap10 : register(s11);
+samplerCUBE lampMap11 : register(s12);
+// the frame as drawn before this pass, at night only (the brightest parts are spared the night's darkening)
+sampler frame : register(s13);
 
+// how many shadow maps this build of the shader looks up (build.cmd makes 12, 8 and 6): a card takes a pixel shader of only
+// so many instructions, and with all twelve, about 5,000, one refused it and the lamps gave no light (the user,
+// November 2026); DepthShading.Lamps.cs uses the biggest the card takes
+#ifndef MAPS
+#define MAPS 12
+#endif
+
+// the C# side (DepthShading.Lamps.cs) writes these in this order
+#define MOST_LIT 40
 float4 projection : register(c0);  // M33, M43, M11, M22
 float4 settings : register(c1);    // strength, shadows (1 or 0), light count, mode (0 light, 1 shadow)
-float4 lamps[16] : register(c2);   // per light: view-space place (xyz) and reach (m); colour (rgb) and casts shadows
-float4 viewToWorld[3] : register(c18); // rows: a direction in view space to the device's world
-float4 shadowed : register(c21);   // which lights have the first four cube maps (-1 for none)
-float4 night : register(c22);      // how much darker (0 day, up to 0.8), lamps times this, the sky's share, replacing (w)
-float4 shadowedMore : register(c23); // which lights have the last two maps
-float4 mapLamps[6] : register(c24); // each map's lamp: view-space place (xyz) and reach (m, 0 for none)
+// per light: view-space place (xyz) and reach (m); colour (rgb, eased in and faded by distance already) and its cube
+// map (0 to 11), -1 for none. Two arrays, each indexed by the loop's counter alone: read as lamps[i * 2], the compiler
+// copied the whole array into temporary registers, which 16 entries fitted and 80 didn't
+float4 lampPlaces[MOST_LIT] : register(c2);
+float4 lampColours[MOST_LIT] : register(c42);
+float4 viewToWorld[3] : register(c82); // rows: a direction in view space to the device's world
+float4 night : register(c85);      // how much darker (0 day, up to 0.8), lamps times this, the sky's share, replacing (w)
+float4 mapLamps[12] : register(c86); // each map's lamp: view-space place (xyz) and reach (m, 0 for none)
+float4 mapShares[3] : register(c98); // how much of each map's shadow shows, eased in and out (0 to 1)
 
 float ViewZ(float d) {
     return projection.y / (d - projection.x);
@@ -44,9 +64,15 @@ float Seen(samplerCUBE map, float3 fromLamp, float distance, float reach, float 
     float bias = 0.03 + distance * 0.004;
     // the samples turned by a hash of the place, so the map's texels, stretched across the ground, don't show as steps
     // (your shadow looked blocky, the user, November 2026)
-    float turn = frac(sin(dot(fromLamp, float3(12.9898, 78.233, 37.719))) * 43758.5453) * 6.2832;
-    float3 side2 = side * cos(turn) + other * sin(turn);
-    other = other * cos(turn) - side * sin(turn);
+    // A hash with no sine or cosine in it (each costs eight of the card's instruction slots, and this runs twice a
+    // map): with them the eight-map shader grew past what the user's card takes (November 2026). Half a turn is
+    // enough, the samples coming in opposite pairs, so its cosine is the hash and its sine follows
+    float3 mixed = frac(fromLamp * 97.13);
+    mixed += dot(mixed, mixed.zyx + 31.32);
+    float turnCos = frac((mixed.x + mixed.y) * mixed.z) * 2 - 1;
+    float turnSin = sqrt(1 - turnCos * turnCos);
+    float3 side2 = side * turnCos + other * turnSin;
+    other = other * turnCos - side * turnSin;
     side = side2;
     // what blocks the lamp round about, averaged over a wide search: from the ray alone, a place just outside a shadow
     // found no blocker, got the narrowest edge, and the shadow of the wall over the door stayed hard (the user)
@@ -98,6 +124,44 @@ float3 FacingCamera(float3 n, float3 p) {
     return dot(n, p) > 0 ? -n : n;
 }
 
+float3 PlaceAt(float2 uv) {
+    return ViewPlace(uv, ViewZ(min(tex2Dlod(depthBuffer, float4(uv, 0, 0)).r, 0.9999)));
+}
+
+// How much a place off to one side counts as this surface (0 to 1): by how far it stands off the pixel's own facet
+// against how far to the side it was looked for (span, meters). A curve's next facet leaves it a little off; a crease
+// (a wall's foot), or something in front of the surface or behind it, a lot. Judged against its own distance instead,
+// something in front (a sword over the ground, your arm) passed, being off mostly along the line of sight, and the
+// ground's way tilted round it: a dark outline round the character and the weapon (the user's screenshots, November
+// 2026)
+float SameSurface(float3 q, float3 p, float3 n, float span) {
+    return 1 - smoothstep(0.3, 0.6, abs(dot(q - p, n)) / span);
+}
+
+// The way a surface faces, smoothed: from places about 6 cm off each way, not the next pixel's. The depth only gives
+// each triangle's own way, and the game shades a character smoothly between its corners' normals, so lit by a lamp a
+// face and armour showed every facet as a hard-edged patch (the user's screenshot by a bonfire, November 2026). Six
+// centimetres spans a facet or two near you; past a few meters it's less than a pixel, and this is the narrow way again.
+// A side that isn't this surface (a crease, another object's edge) is left out, the other side's taken alone
+float3 SmoothNormal(float2 uv, float3 p, float3 n, float3 alongX, float3 alongY, float2 pixel) {
+    float2 wide = clamp(0.06 * projection.zw / (2 * p.z), pixel, pixel * 16);
+    float3 qR = PlaceAt(uv + float2(wide.x, 0));
+    float3 qL = PlaceAt(uv - float2(wide.x, 0));
+    float3 qD = PlaceAt(uv + float2(0, wide.y));
+    float3 qU = PlaceAt(uv - float2(0, wide.y));
+    // how far to the side each way was looked, in meters (6 cm, unless held to a pixel or sixteen)
+    float2 span = wide * 2 * p.z / projection.zw;
+    float wR = SameSurface(qR, p, n, span.x);
+    float wL = SameSurface(qL, p, n, span.x);
+    float wD = SameSurface(qD, p, n, span.y);
+    float wU = SameSurface(qU, p, n, span.y);
+    float3 ax = (qR - p) * wR + (p - qL) * wL;
+    float3 ay = (qD - p) * wD + (p - qU) * wU;
+    ax = lerp(normalize(alongX), ax / max(length(ax), 1e-6), saturate(wR + wL));
+    ay = lerp(normalize(alongY), ay / max(length(ay), 1e-6), saturate(wD + wU));
+    return FacingCamera(normalize(cross(ax, ay)), p);
+}
+
 float MapSeen(samplerCUBE map, float4 lamp, float3 p, float3 n, float toward) {
     float3 toLight = lamp.xyz - p;
     float distance = length(toLight);
@@ -132,6 +196,9 @@ float MapSeen(samplerCUBE map, float4 lamp, float3 p, float3 n, float toward) {
     return seen;
 }
 
+// a map's lookup, or 1 (nothing blocked) past the maps this build has
+#define LOOKUP(k) (k < MAPS ? MapSeen(lampMap##k, mapLamps[k], p, n, toward) : 1.0)
+
 float4 main(float2 uv : TEXCOORD0) : COLOR {
     float d = tex2Dlod(depthBuffer, float4(uv, 0, 0)).r;
 
@@ -159,7 +226,13 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
     float3 n3 = FacingCamera(normalize(cross(pR - p, p - pU)), p);
     float3 n4 = FacingCamera(normalize(cross(p - pL, pD - p)), p);
     // the light pass is blended as the picture times twice this (0.5 leaves it be): the night darkens it, the lamps lift it
-    float sky = (1 - night.x * night.z) * 0.5;
+    // the night spares what's bright already: at night nearly all of that is a light source (a crystal's flame, a
+    // lamp's glass, a fire, the moon), which the game draws self-lit, and darkened with the rest they lost their glow
+    // (the user, November 2026: Hebian-to's crystals 40% dimmer at 80% night); everything else darkens as before
+    float3 picture = tex2Dlod(frame, float4(uv, 0, 0)).rgb;
+    float spare = night.x > 0 ? smoothstep(0.55, 0.9, max(max(picture.r, picture.g), picture.b)) : 0;
+    float darkness = night.x * (1 - spare);
+    float sky = (1 - darkness * night.z) * 0.5;
     float nothing = settings.w > 0.5 ? 1 : sky;
 
     if (d >= 0.99999) {
@@ -170,16 +243,27 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
         n = -n;
     }
 
+    // where the four narrow ways disagree by more than about 75 degrees, the pixel is on a crease (a wall's foot), and
+    // takes the least light any of them gives (below); on a character's facets they agree near enough, and the smoothed
+    // way alone decides, so no facet's edge shows as a line
+    float agree = min(min(dot(n1, n2), dot(n3, n4)), min(dot(n1, n3), dot(n2, n4)));
+    float crease = 1 - smoothstep(0.1, 0.35, agree);
+    // the smoothed way for the light, the shadow maps' lookups and the shadow pass alike
+    n = SmoothNormal(uv, p, n, alongX, alongY, float2(stepX.x, stepY.y));
+
     float3 added = 0;
     float dark = 0;
     float4 seenA = 1;
-    float2 seenB = 1;
+    float4 seenB = 1;
+    float4 seenC = 1;
 
+    // each map's shadow as much as it shows (mapShares, eased in when a lamp gains a map and out before it gives one
+    // up, so a lamp's shadows never appear or vanish at once), looked up once each; a map with no lamp (reach 0) is 1
     [branch]
     if (settings.y > 0.5) {
-        seenA = float4(MapSeen(lampMap0, mapLamps[0], p, n, toward), MapSeen(lampMap1, mapLamps[1], p, n, toward),
-            MapSeen(lampMap2, mapLamps[2], p, n, toward), MapSeen(lampMap3, mapLamps[3], p, n, toward));
-        seenB = float2(MapSeen(lampMap4, mapLamps[4], p, n, toward), MapSeen(lampMap5, mapLamps[5], p, n, toward));
+        seenA = lerp(1, float4(LOOKUP(0), LOOKUP(1), LOOKUP(2), LOOKUP(3)), mapShares[0]);
+        seenB = lerp(1, float4(LOOKUP(4), LOOKUP(5), LOOKUP(6), LOOKUP(7)), mapShares[1]);
+        seenC = lerp(1, float4(LOOKUP(8), LOOKUP(9), LOOKUP(10), LOOKUP(11)), mapShares[2]);
     }
 
     float firstSeen = seenA.x;
@@ -188,19 +272,21 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
     float mostAt = -1;
 
     [loop]
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < MOST_LIT; i++) {
         if (i >= settings.z) {
             break;
         }
 
-        float4 place = lamps[i * 2];
-        float3 colour = lamps[i * 2 + 1].rgb;
+        float4 place = lampPlaces[i];
+        float3 colour = lampColours[i].rgb;
+        float map = lampColours[i].w;
         float3 toLight = place.xyz - p;
         float distance = length(toLight);
 
         if (distance < place.w && distance > 0.01) {
             toLight /= distance;
-            float faces = min(min(dot(n1, toLight), dot(n2, toLight)), min(dot(n3, toLight), dot(n4, toLight)));
+            float least = min(min(dot(n1, toLight), dot(n2, toLight)), min(dot(n3, toLight), dot(n4, toLight)));
+            float faces = lerp(dot(n, toLight), least, crease);
             float facing = saturate(faces);
             // how a face turns counts for little: the game lights a character smoothly between its corners' normals, but
             // the depth only gives each triangle's own, and its armour showed every facet (the user, November 2026). A
@@ -211,22 +297,19 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
             float amount = turned * fade * fade;
             float seen = 1;
 
-            float4 inA = shadowed == i;
-            float2 inB = shadowedMore.xy == i;
-            float mapped = dot(inA, 1) + dot(inB, 1);
-
-            if (mapped > 0.5) {
-                seen = dot(inA, seenA) + dot(inB, seenB);
+            // a lamp with a map: how much of it this place sees. One without lights unshadowed, as the game's own lamps
+            // always did: lighting nothing (the first way, when only the six nearest were the plugin's) left a lamp's
+            // light to the game, which lights only its eight nearest, and a lamp leaving those took its light off a
+            // whole building at once (the user, November 2026)
+            if (map > -0.5) {
+                float4 inA = map == float4(0, 1, 2, 3);
+                float4 inB = map == float4(4, 5, 6, 7);
+                float4 inC = map == float4(8, 9, 10, 11);
+                seen = dot(inA, seenA) + dot(inB, seenB) + dot(inC, seenC);
 
                 // a shadow takes away some of the game's own light from it, which it gives everything in reach in
                 // full: so by how near the light is, not the fade added light has
-                if (lamps[i * 2 + 1].w > 0.5) {
-                    dark = max(dark, (1 - seen) * facing * saturate(1.5 - 1.5 * distance / place.w));
-                }
-            }
-            else if (night.w > 0.5 && lamps[i * 2 + 1].w > 0.5) {
-                // replacing the game's lamps, one without a map lights nothing: it would light through walls
-                seen = 0;
+                dark = max(dark, (1 - seen) * facing * saturate(1.5 - 1.5 * distance / place.w));
             }
 
             added += colour * amount * seen;
@@ -243,9 +326,10 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
         float3 hues[8] = { float3(1, 0, 0), float3(0, 1, 0), float3(0, 0, 1), float3(1, 1, 0), float3(1, 0, 1),
             float3(0, 1, 1), float3(1, 0.5, 0), float3(1, 1, 1) };
         float3 shown = 0;
+        float hue = mostAt - floor(mostAt / 8) * 8;
 
         for (int k = 0; k < 8; k++) {
-            shown += k == mostAt ? hues[k] : 0;
+            shown += mostAt >= 0 && k == hue ? hues[k] : 0;
         }
 
         return float4(shown * saturate(most * 4), 1);
@@ -262,6 +346,6 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
     }
 
     // the light pass: darker by the night, brighter by the lamps (stronger at night), as the picture times twice it
-    float3 factor = (1 - night.x) + added * settings.x * night.y;
+    float3 factor = (1 - darkness) + added * settings.x * night.y;
     return float4(saturate(factor * 0.5), 1);
 }

@@ -34,9 +34,8 @@ namespace DaraletPlayer.Ui {
         private WaterOptions Water => settings.Data.Water;
 
         private unsafe void DrawWater(Device device, Surface back, Matrix view, Matrix projection, int width, int height) {
-            var landcell = unchecked((uint)CoreManager.Current.Actions.Landcell);
-
-            if ((landcell & 0xFFFF) >= 0x100) {
+            // outdoors, or in a building's room that sees out
+            if (!OutdoorView.Now) {
                 return;
             }
 

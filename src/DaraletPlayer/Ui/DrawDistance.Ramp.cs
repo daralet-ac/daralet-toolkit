@@ -131,6 +131,7 @@ namespace DaraletPlayer.Ui {
                     }
 
                     TeleportTimeline.Left(pieces);
+                    ExpectPieces();
                 }
 
                 if (inPortalSpace) {

@@ -42,17 +42,24 @@ namespace DaraletPlayer.Ui {
         private List<GraphicsCost.Item> AllCosts(bool waiting) {
             var d = settings.Data;
             var items = GraphicsCost.DrawDistance(waiting ? Previewed() : d.DrawDistance, drawDistance.GameLandscape);
-            items.Add(GraphicsCost.SunShadows((waiting ? SunShadowSettings : d.SunShadows).On));
+            var sun = waiting ? SunShadowSettings : d.SunShadows;
+            items.Add(GraphicsCost.SunShadows(sun.On, sun.ClampedDistance));
             items.Add(GraphicsCost.Shading((waiting ? ShadingSettings : d.Shading).On));
             items.Add(GraphicsCost.Water((waiting ? WaterSettings : d.Water).On));
             var lamps = waiting ? LampLightSettings : d.LampLight;
-            items.Add(GraphicsCost.Lamps(lamps.On, lamps.Shadows));
+            items.Add(LampCost(lamps.On, lamps.Shadows, lamps.ClampedDistance, lamps.ClampedShadowedLamps));
             items.Add(GraphicsCost.Grass((waiting ? GrassSettings : d.Grass).On));
             var image = waiting ? ImageSettings : d.Image;
             items.Add(GraphicsCost.AntiAlias(image.AntiAlias));
             items.Add(GraphicsCost.Sharpen(image.Sharpen));
             items.Add(GraphicsCost.Glow(image.Glow));
             return items;
+        }
+
+        /// <summary>Lamp light's cost, its shadowed lamps no more than the card's lamp shader has (once it's made).</summary>
+        private static GraphicsCost.Item LampCost(bool on, bool shadows, int distance, int shadowed) {
+            var taken = DepthShading.LampShadowMapsTaken;
+            return GraphicsCost.Lamps(on, shadows, distance, taken > 0 ? Math.Min(shadowed, taken) : shadowed);
         }
 
         private void RenderBudget() {
@@ -105,20 +112,50 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>
+        /// The overall presets, at the top (the user's call, November 2026): each sets the landscape and the lighting
+        /// presets of its name together, lit while both are it.
+        /// </summary>
         private void RenderPresets() {
-            var options = DrawDistanceSettings;
-            var matching = GraphicsPresets.Matching(options);
+            var landscape = GraphicsPresets.Matching(DrawDistanceSettings);
+            var lighting = LightingPresets.Matching(ShadingSettings, SunShadowSettings, LampLightSettings);
+            var matching = landscape != null && lighting != null && landscape.Name == lighting.Name ? landscape.Name : null;
+
+            PresetRow("graphics-preset", matching, i => {
+                GraphicsPresets.Apply(GraphicsPresets.All[i], DrawDistanceSettings);
+                LightingPresets.Apply(LightingPresets.All[i], ShadingSettings, SunShadowSettings, LampLightSettings);
+            }, i => $"The landscape and the lighting both {GraphicsPresets.All[i].Name}. Landscape: "
+                + $"{GraphicsPresets.All[i].Tip} Lighting: {LightingPresets.All[i].Tip}");
+        }
+
+        /// <summary>The landscape's presets, at the top of View Distance: the draw distance, far land and trees.</summary>
+        private void RenderLandscapePresets() {
+            var matching = GraphicsPresets.Matching(DrawDistanceSettings);
+            PresetRow("landscape-preset", matching?.Name, i => GraphicsPresets.Apply(GraphicsPresets.All[i],
+                DrawDistanceSettings), i => GraphicsPresets.All[i].Tip);
+        }
+
+        /// <summary>The lighting's presets, at the top of Lighting: shading, sun shadows and lamp light.</summary>
+        private void RenderLightingPresets() {
+            var matching = LightingPresets.Matching(ShadingSettings, SunShadowSettings, LampLightSettings);
+            PresetRow("lighting-preset", matching?.Name, i => LightingPresets.Apply(LightingPresets.All[i],
+                ShadingSettings, SunShadowSettings, LampLightSettings), i => LightingPresets.All[i].Tip);
+        }
+
+        /// <summary>A row of the presets' names (the same in every row), the matching one lit, else "Custom".</summary>
+        private void PresetRow(string id, string matching, Action<int> apply, Func<int, string> tip) {
             var first = true;
 
-            foreach (var preset in GraphicsPresets.All) {
-                Form.Flow(ref first, ImGui.CalcTextSize(preset.Name).X + ImGui.GetStyle().FramePadding.X * 2);
+            for (var i = 0; i < GraphicsPresets.All.Length; i++) {
+                var name = GraphicsPresets.All[i].Name;
+                Form.Flow(ref first, ImGui.CalcTextSize(name).X + ImGui.GetStyle().FramePadding.X * 2);
 
-                if (Form.LitButton(preset.Name + "##graphics-preset", preset == matching)) {
-                    GraphicsPresets.Apply(preset, options);
+                if (Form.LitButton(name + "##" + id, name == matching)) {
+                    apply(i);
                     Changed();
                 }
 
-                Widgets.Tip(preset.Tip);
+                Widgets.Tip(tip(i));
             }
 
             if (matching == null) {
