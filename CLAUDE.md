@@ -2435,15 +2435,27 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   character once: edit the script, don't append to it from bash). Untested in the game when written. The ideas
   judged doubtful or left out (colour grading, real sun shadows, bloom, god rays, depth of field) are to be tried as
   experiments, each off by default, sunlight first (the user's call).
-- **Grass and reeds** (`Ui/Grass.cs`, `Feed/GrassLayout.cs`, `Feed/GrassPicture.cs`, `Feed/GrassClump.cs`,
-  `Feed/GrassOptions.cs`, `Shaders/grass.vs.hlsl` and `grass.ps.hlsl`, `SettingsData.Grass`, `grass`, off to start; the
-  Graphics tab's Grass section, `OptionsPanel.Grass.cs`: Density, Distance 15 to 80 m, Height, Reeds on marsh, Wind;
-  test steps `set grass|grassdensity|grassdistance|grassheight|reeds|wind`; the user's call, November 2026: "frill",
-  grass growing out of Asheron's Call's own ground). On the grass terrains only (Lush Grass fullest, Grassland,
-  Patchy Grassland), reeds on Marsh (the user's call); never on a road, in a building's cell or on a slope steeper
-  than about 40 degrees. A jittered 0.6 m grid fixed to each landblock, kept by hash under the terrain's share and the
-  density, so a clump is always in the same place; heights from the full-detail ground. Built round you (the blocks
-  the radius reaches) once you've moved 3 m, a managed vertex buffer of crossed pictures. The pictures are made in
+- **Grass and reeds** (`Ui/Grass.cs`, `Ui/Grass.Chunks.cs`, `Ui/Grass.Buildings.cs`, `Ui/GrassChunk.cs`,
+  `Feed/GrassLayout.cs`, `Feed/GrassPicture.cs`, `Feed/GrassAtlas.cs`, `Feed/GrassClump.cs`, `Feed/GrassOptions.cs`,
+  `Shaders/grass.vs.hlsl` and `grass.ps.hlsl`, `SettingsData.Grass`, `grass`, off to start; the Graphics tab's Grass
+  section, `OptionsPanel.Grass.cs`: Density, Distance 15 to 200 m, Grass height, Reed height, Reeds on marsh, Wind;
+  test steps `set grass|grassdensity|grassdistance|grassheight|reedheight|reeds|wind`; the user's call, November 2026:
+  "frill", grass growing out of Asheron's Call's own ground). On the grass terrains only (Lush Grass fullest,
+  Grassland, Patchy Grassland), reeds on Marsh (the user's call); never on a road, under a building or on a slope
+  steeper than about 40 degrees.
+  **Roads** are the client's own test (`SceneryLayout.OnRoadExact`, `CLandBlock::on_road` as daralet-ACE's physics
+  `Landblock.OnRoad` has it: a cell's four corners' road bits, a road 5 m wide from each marked corner and edge);
+  ACE's simple road bits, which the scenery uses, left grass on the road's edges. **Buildings** are their model's box
+  across the ground, turned and placed as the building is, half a meter more (`Grass.Buildings.cs`, LandblockInfo's
+  Buildings, the model's vertices, a Setup's parts by their first frame): the game's rule for trees, no cell with a
+  building's origin, left bare 24 m squares round every house in Hebian-to (the user's screenshot, November 2026).
+  **Reeds come in a mix** (`GrassLayout.ReedScale`: 45% short, 30% middling, 25% tall, wildness adding only a
+  tenth; Reed height its own slider, 80% to start): all tall, and over 2 m in the wilds, they were a wall you couldn't
+  see a character through (the user's call, November 2026). But in **stands** (`GrassLayout.ReedPatch`, smooth noise
+  over 8 m, high in about a tenth of a marsh) they grow tall and thick, 1 to 1.35 times the old full height, so some
+  still rise well above the grass (the user's call). A jittered 0.6 m grid fixed to each landblock, kept by hash under the terrain's share and the
+  density, so a clump is always in the same place; heights from the full-detail ground. Each clump two crossed
+  pictures. The pictures are made in
   code, near white and darker at the base, and **coloured by the ground they grow from**: each grass terrain's own
   texture (the region's `TerrainInfo.LandSurfaces.TexMerge.TerrainDesc`, `TerrainTex.TexGID`) averaged, `[grass]`
   lines in log.txt giving each. Lit as the ground is (the ambient plus the sun on ground facing up, both times 1.15, `Grass.GroundLight`): lit with the billboards' share of the sun, it came out near black against the ground (seen in the game, November 2026); the blades' bases are 72% of their tips. The vertex shader
@@ -2458,8 +2470,36 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (90 and 350) in the map's places (`locations.xml`, as the World tab reads it, map units back to world meters,
   (EW + 102) * 240). Kept ground takes 60% of the grid's squares and grows 0.55 times as tall and even; wild ground
   takes all of them and grows 1.35 times as tall and uneven; between, a blend, so no line shows where a town's lawn
-  ends. Kept clumps (wildness under a half) are drawn with their own picture, upright and even as mown, wild ones
+  ends. Kept clumps (wildness under a half) are drawn with their own pictures, upright and even as mown, wild ones
   with leaning, uneven blades.
+  **Made a chunk at a time, thinned far off** (`Ui/Grass.Chunks.cs`, `Ui/GrassChunk.cs`; the user, November 2026:
+  "grass is causing heavy fps loss"). Measured on the dats (a throwaway benchmark running `GrassLayout` round a
+  place): at 80 m and 100% density, 18,300 clumps at the Holtburg overlook and 31,000 to 44,000 in the wilds, up to
+  177,000 cut-out triangles a frame, four in five past 40 m where a clump is a few pixels; and every 3 m you moved all
+  of it was laid out again (about 30 ms), copied through three lists and uploaded as one new 16 MB buffer, about 35 MB
+  of garbage each time, about once a second at a run. Now each of a landblock's 24 m cells is a chunk of its own
+  (`GrassLayout.PlaceCell`, the same clumps as `Place`, a test checks), made once within 2 ms a frame, nearest first,
+  when it comes within the radius (about 0.8 ms a chunk), and let go 24 m past it; its clumps are sorted by a rank
+  fixed to each (`GrassClump.Rank`), so far off only a share from the start is drawn, every clump to 20 m and
+  (20 / distance) to the 1.2 past it, a fifth at 75 m (`ThinFrom`, `ThinPower`); the vertex shader sinks the clumps
+  near the share's edge, their rank in the colour's alpha, so none pops. Chunks out of view aren't drawn (`InView`,
+  the view's pyramid), and the rest go nearest first, so near grass hides what's behind it. A clump is 8 vertices
+  from one shared index buffer, not 12, and a chunk's offset is a shader constant (c8), so chunks outlive a change of
+  landblock. In the wilds about 30,000 clumps are sent and about 15,000 put down pixels, before culling. The
+  pictures were in the default pool and nothing let them go before a device reset; the atlas, index and vertex
+  buffers are managed now. `[grass]` every 10 s says the chunks kept and drawn a frame. **More pictures**
+  (`Feed/GrassAtlas.cs`; the user's call): 6 wild tufts (dense and leaning, thin and tall, short and full,
+  wide-bladed, sparse, low and tangled), 3 gone to seed or with a few blossoms (15% of wild clumps), 3 kept and 2
+  reeds, by each clump's hash (`GrassClump.Variety`), all near white so the ground colours them: seed heads and
+  blossoms are a warm near white, a pale tint of the ground's own colour. One 256 atlas, each picture's mips made
+  alone (`MipChain`) and its blades kept off its edges, so a far clump takes in none of its neighbour's. Tried in the
+  game (Hebian-to's square, running round it): with the old grass about 30 fps (the user's count), with the new 65
+  to 76, against 70 to 74 with it off; 11 to 13 chunks and about 4,400 clumps drawn a frame, the 64 round you made
+  in 38 ms all told. Standing still the old grass had cost nothing to see (62.7 against 63.1 fps): its cost was the
+  rebuilds as you moved.
+  **Out to 200 m** (the user's call): a chunk keeps only the share of its clumps it would draw a cell nearer
+  (`GrassChunk.KeptShare`, `KeepShareAt`) and is made again with more as you come near, so far chunks hold a few
+  hundred clumps each; the blocks round you are read once (`lands`, 30 at most). Untested in the game when written.
 - **Billboards, stages 2 and 3: pictures and drawing** (`Feed/TextureDecode.cs`, `Feed/ImpostorRaster.cs`,
   `Ui/BillboardModels.cs`, `Ui/BillboardModel.cs`, `Ui/DrawDistance.Billboards.cs`; Billboards in the Draw Distance
   rows, `DrawDistanceOptions.Billboards`, `billboards`, off to start; the test step `set billboards 1`). Each scenery

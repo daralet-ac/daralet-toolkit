@@ -7,7 +7,7 @@ namespace DaraletPlayer.Feed {
     [DataContract]
     public class GrassOptions {
         public const int MinDistance = 15;
-        public const int MaxDistance = 80;
+        public const int MaxDistance = 200;
 
         [DataMember(Name = "on")] public bool On;
 
@@ -17,8 +17,14 @@ namespace DaraletPlayer.Feed {
         /// <summary>How far out from you it grows, in meters.</summary>
         [DataMember(Name = "distance")] public int Distance;
 
-        /// <summary>How tall, in percent of the usual (half a meter, reeds a meter and a half).</summary>
+        /// <summary>How tall the grass grows, in percent of the usual (half a meter).</summary>
         [DataMember(Name = "height")] public int Height;
+
+        /// <summary>
+        /// How tall the reeds grow, in percent of the usual (a meter and a half): its own setting, since with the grass's
+        /// they stood over 2 m in the wilds, a wall across the marsh (the user's screenshot, November 2026).
+        /// </summary>
+        [DataMember(Name = "reedHeight")] public int ReedHeight;
 
         /// <summary>Reeds on marsh.</summary>
         [DataMember(Name = "reeds")] public bool Reeds;
@@ -39,10 +45,12 @@ namespace DaraletPlayer.Feed {
 
         public int ClampedHeight => Height < 25 ? 25 : Height > 250 ? 250 : Height;
 
+        public int ClampedReedHeight => ReedHeight < 25 ? 25 : ReedHeight > 250 ? 250 : ReedHeight;
+
         public string Summary() {
             return !On ? "grass off"
                 : $"grass {ClampedDensity}% to {ClampedDistance} m, {ClampedHeight}% tall"
-                + (Reeds ? ", reeds" : "") + (Wind ? ", wind" : "") + (KeptNearTowns ? ", kept near towns" : "");
+                + (Reeds ? $", reeds {ClampedReedHeight}% tall" : "") + (Wind ? ", wind" : "") + (KeptNearTowns ? ", kept near towns" : "");
         }
 
         [OnDeserializing]
@@ -55,6 +63,7 @@ namespace DaraletPlayer.Feed {
             Density = 50;
             Distance = 40;
             Height = 100;
+            ReedHeight = 80;
             Reeds = true;
             Wind = true;
             KeptNearTowns = true;

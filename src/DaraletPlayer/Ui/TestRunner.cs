@@ -570,6 +570,9 @@ namespace DaraletPlayer.Ui {
                 case "grassheight":
                     settings.Data.Grass.Height = value;
                     break;
+                case "reedheight":
+                    settings.Data.Grass.ReedHeight = value;
+                    break;
                 case "reeds":
                     settings.Data.Grass.Reeds = value != 0;
                     break;

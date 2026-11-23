@@ -174,6 +174,50 @@ namespace DaraletPlayer.Feed {
             return (terrain[cellX * VertexDim + cellY] & 0x3) != 0;
         }
 
+        /// <summary>How far a road reaches from its vertex's edge of a cell, in meters (the client's, and ACE's RoadWidth).</summary>
+        public const float RoadWidth = 5;
+
+        /// <summary>
+        /// Whether a place is on a road as the client tells it (CLandBlock::on_road, 0x530D30; daralet-ACE's
+        /// Physics Landblock.OnRoad): by the road bits at all four of the cell's corners, a road reaching RoadWidth from
+        /// the cell's edges or across its diagonal. OnRoad, the simple test, takes the whole cell from its south-west
+        /// corner alone, so grass stood on roads through a cell's other corners and was gone from cells beside one
+        /// (the user's screenshot in Hebian-to, November 2026).
+        /// </summary>
+        public static bool OnRoadExact(IReadOnlyList<ushort> terrain, float x, float y) {
+            var cellX = Math.Min(VertexDim - 2, Math.Max(0, (int)Math.Floor(x / CellSize)));
+            var cellY = Math.Min(VertexDim - 2, Math.Max(0, (int)Math.Floor(y / CellSize)));
+            bool Road(int vx, int vy) => (terrain[vx * VertexDim + vy] & 0x3) != 0;
+            var r0 = Road(cellX, cellY);
+            var r1 = Road(cellX, cellY + 1);
+            var r2 = Road(cellX + 1, cellY);
+            var r3 = Road(cellX + 1, cellY + 1);
+
+            if (!r0 && !r1 && !r2 && !r3) {
+                return false;
+            }
+
+            var dx = x - cellX * CellSize;
+            var dy = y - cellY * CellSize;
+            const float near = RoadWidth;
+            const float far = CellSize - RoadWidth;
+
+            if (r0) {
+                if (r1) {
+                    return r2 ? r3 || dx < near || dy < near : r3 ? dx < near || dy > far : dx < near;
+                }
+
+                return r2 ? r3 ? dx > far || dy < near : dy < near : r3 ? Math.Abs(dx - dy) < near : dx + dy < near;
+            }
+
+            if (r1) {
+                return r2 ? r3 ? dx > far || dy > far : Math.Abs(dx + dy - CellSize) < near
+                    : r3 ? dy > far : CellSize + dx - dy < near;
+            }
+
+            return r2 ? r3 ? dx > far : CellSize - dx + dy < near : r3 && CellSize * 2 - dx - dy < near;
+        }
+
         /// <summary>
         /// Whether a cell's split runs north-west to south-east (true) or north-east to south-west
         /// (LandblockMesh.GetSplitDir,

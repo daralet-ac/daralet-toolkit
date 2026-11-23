@@ -34,7 +34,7 @@ namespace DaraletPlayer.Ui {
                 Changed();
             }
 
-            Form.Label("Height", "How tall it grows.");
+            Form.Label("Grass height", "How tall the grass grows.");
             var height = draggingGrassHeight ?? options.ClampedHeight;
 
             if (DragSlider("##grass-height", ref height, 25, 250, "%d%%", ref draggingGrassHeight)) {

@@ -16,23 +16,40 @@ using DatTexture = ACE.DatLoader.FileTypes.Texture;
 namespace DaraletPlayer.Ui {
     /// <summary>
     /// Grass, and reeds on marsh, near you (the user's call, November 2026: "frill", grass that grows out of Asheron's
-    /// Call's own ground). Where: Feed/GrassLayout.cs, from the cell dat's terrain round you, made again once you've
-    /// moved a few meters. What: each clump a pair of crossed upright pictures (Feed/GrassPicture.cs, near white),
-    /// coloured by its terrain's own texture (the region's TexMerge, each grass terrain's texture averaged), lit by the
-    /// game's ambient and sun as the billboards are, swaying in the wind and sinking into the ground toward the radius's
-    /// edge (Shaders/grass.vs.hlsl, grass.ps.hlsl). Drawn on Decal's RenderFrame after the billboards and before the
+    /// Call's own ground). Where: Feed/GrassLayout.cs, from the cell dat's terrain, made a 24-meter chunk at a time
+    /// (Ui/Grass.Chunks.cs). What: each clump a pair of crossed upright pictures from one atlas of varied blades
+    /// (Feed/GrassAtlas.cs, near white), coloured by its terrain's own texture (the region's TexMerge, each grass
+    /// terrain's texture averaged), lit by the game's ambient and sun, swaying in the wind and sinking into the ground
+    /// toward the radius's edge (Shaders/grass.vs.hlsl, grass.ps.hlsl). Far off only a share of the clumps is drawn
+    /// (ThinFrom, ThinPower), chunks out of view aren't drawn, and the rest go nearest first, so near grass hides what's
+    /// behind it before it's shaded. Drawn inside the game's frame (Ui/WorldPass.cs) after the billboards and before the
     /// depth shading, so the occlusion darkens the clumps' bases; with the depth test, so walls and hills hide it.
-    /// Outdoors only. The vertex buffer and pictures are in the managed pool and no state block is kept between frames,
-    /// so a device reset leaves nothing in the way. `[grass]` lines in log.txt. Untested in the game when written.
+    /// Outdoors only. The vertex buffers, index buffer and atlas are in the managed pool, and no state block is kept
+    /// between frames, so a device reset leaves nothing in the way. `[grass]` lines in log.txt.
     /// </summary>
-    internal sealed class Grass : IDisposable {
+    internal sealed partial class Grass : IDisposable {
         private const float GrassHeight = 0.5f;
         private const float ReedHeight = 1.5f;
         private const float BlockSize = 192;
         private const uint RegionId = 0x13000000;
 
-        /// <summary>Meters you move before the clumps round you are made again.</summary>
-        private const float RebuildAfter = 3;
+        /// <summary>A clump is two pictures of four corners, drawn from the shared index buffer.</summary>
+        private const int VerticesAClump = 8;
+
+        /// <summary>The most clumps a chunk can hold: a cell's every square (GrassLayout.SquaresPerCell squared).</summary>
+        private const int MostClumps = GrassLayout.SquaresPerCell * GrassLayout.SquaresPerCell;
+
+        /// <summary>
+        /// Every clump is drawn out to this many meters; past it the share drawn falls as (ThinFrom / distance) to the
+        /// ThinPower, a fifth of them at 75 m. A clump far off is a few pixels, and all of them were drawn before: up to
+        /// 177,000 cut-out triangles in the wilds at 80 m, four in five of them past 40 m.
+        /// </summary>
+        private const float ThinFrom = 20;
+
+        private const float ThinPower = 1.2f;
+
+        /// <summary>How much of the share a clump at its edge takes to sink away, so none pops.</summary>
+        private const float ThinBand = 0.1f;
 
         /// <summary>
         /// Grass is lit as the ground it grows from: the ambient plus the sun on a surface facing up, times this, which
@@ -49,25 +66,25 @@ namespace DaraletPlayer.Ui {
         /// <summary>Kept so the same one can be taken out of WorldPass.</summary>
         private readonly Action<Device> inWorldPass;
         private readonly Dictionary<int, uint> tints = new Dictionary<int, uint>();
+        private readonly List<GrassChunk> visible = new List<GrassChunk>();
+        private readonly float[] frameConstants = new float[40];
+        private readonly float[] offsetConstant = new float[4];
         private bool disposed;
         private bool failed;
 
         private IntPtr vertexShader;
         private IntPtr pixelShader;
-        private DxTexture grassPicture;
-        private DxTexture keptPicture;
+        private DxTexture atlas;
+        private IndexBuffer indices;
         private Wildness wildness;
-        private DxTexture reedPicture;
-        private VertexBuffer buffer;
-        private int keptTriangles;
-        private int grassTriangles;
-        private int reedTriangles;
         private RegionDesc region;
-
-        private uint builtHome = uint.MaxValue;
-        private float builtX;
-        private float builtY;
         private string builtKey;
+
+        // for the 10-second log line: what was drawn, and the chunks made and how long that took
+        private DateTime nextReport = DateTime.MinValue;
+        private int framesDrawn;
+        private long clumpsDrawn;
+        private long chunksDrawn;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct GrassVertex {
@@ -81,14 +98,14 @@ namespace DaraletPlayer.Ui {
             this.settings = settings;
             CoreManager.Current.RenderFrame += Core_RenderFrame;
             inWorldPass = DrawInWorldPass;
-            WorldPass.Add(inWorldPass, () => !failed && buffer != null && Options.On);
+            WorldPass.Add(inWorldPass, () => !failed && chunks.Count > 0 && Options.On);
         }
 
         private GrassOptions Options => settings.Data.Grass;
 
         /// <summary>For a test run's results.</summary>
-        public string State => failed ? "grass stopped (see log.txt)" : buffer == null ? "no grass"
-            : $"{(keptTriangles + grassTriangles + reedTriangles) / 4} clumps of grass";
+        public string State => failed ? "grass stopped (see log.txt)" : chunks.Count == 0 ? "no grass"
+            : $"{chunks.Values.Sum(c => c.Clumps)} clumps of grass in {chunks.Count} chunks";
 
         private void Core_RenderFrame(object sender, EventArgs e) {
             if (disposed || failed) {
@@ -101,8 +118,8 @@ namespace DaraletPlayer.Ui {
                 }
 
                 if (!Options.On) {
-                    if (buffer != null) {
-                        ClearBuffer();
+                    if (chunks.Count > 0) {
+                        ClearChunks();
                         PluginCore.LogFile("[grass] off");
                     }
 
@@ -121,7 +138,7 @@ namespace DaraletPlayer.Ui {
             catch (Exception ex) {
                 failed = true;
                 PluginCore.LogFile("[grass] stopped for the session: " + ex);
-                ClearBuffer();
+                ClearChunks();
             }
         }
 
@@ -138,16 +155,9 @@ namespace DaraletPlayer.Ui {
                 pixelShader = DeviceCalls.PixelShader(device, "grass.ps.cso");
             }
 
-            if (grassPicture == null) {
-                grassPicture = BillboardModels.MakeTexture(device, GrassPicture.Make(64, 64, 14, 7, false), 64, 64);
-                reedPicture = BillboardModels.MakeTexture(device, GrassPicture.Make(64, 128, 7, 11, true), 64, 128);
-                // kept: upright and even, as mown
-                keptPicture = BillboardModels.MakeTexture(device, GrassPicture.Make(64, 64, 18, 5, false, 0.2, 0.75), 64,
-                    64);
-            }
-
+            atlas = atlas ?? MakeAtlas(device);
+            indices = indices ?? MakeIndices(device);
             region = region ?? portal.ReadFromDat<RegionDesc>(RegionId);
-
             wildness = wildness ?? LoadWildness();
 
             if (tints.Count == 0) {
@@ -156,32 +166,31 @@ namespace DaraletPlayer.Ui {
 
             // you in the device's world, measured from the camera's landblock (RenderOrigin)
             var you = RenderOrigin.Player();
-            var x = you.X;
-            var y = you.Z;
             var options = Options;
-            var key = $"{options.ClampedDensity} {options.ClampedDistance} {options.ClampedHeight} {options.Reeds} "
-                + options.KeptNearTowns;
-            var movedX = x - builtX;
-            var movedY = y - builtY;
+            var key = $"{options.ClampedDensity} {options.ClampedHeight} "
+                + $"{options.ClampedReedHeight} {options.Reeds} {options.KeptNearTowns}";
 
-            if (!DrawDistance.QuietNow && (home != builtHome || key != builtKey
-                || movedX * movedX + movedY * movedY > RebuildAfter * RebuildAfter)) {
-                Build(device, cells, home, x, y);
-                builtHome = home;
-                builtX = x;
-                builtY = y;
+            // a setting that changes what's in a chunk makes them all again; the distance only changes which are wanted
+            if (key != builtKey) {
+                ClearChunks();
                 builtKey = key;
             }
 
+            if (!DrawDistance.QuietNow) {
+                MakeChunks(device, cells, home, you.X, you.Z);
+            }
+
+            Report();
+
             // drawn inside the game's frame, before its see-through things, when that's hooked (Ui/WorldPass.cs)
             if (!WorldPass.Hooked) {
-                Draw(device, x, y, you.Y);
+                Draw(device, home, you.X, you.Z, you.Y);
             }
         }
 
         /// <summary>The grass drawn from inside the game's frame (Ui/WorldPass.cs).</summary>
         private void DrawInWorldPass(Device device) {
-            if (disposed || failed || buffer == null || !Options.On) {
+            if (disposed || failed || chunks.Count == 0 || !Options.On) {
                 return;
             }
 
@@ -191,12 +200,32 @@ namespace DaraletPlayer.Ui {
                 }
 
                 var you = RenderOrigin.Player();
-                Draw(device, you.X, you.Z, you.Y);
+                Draw(device, RenderOrigin.Landblock, you.X, you.Z, you.Y);
             }
             catch (Exception ex) {
                 failed = true;
                 PluginCore.LogFile("[grass] stopped for the session: " + ex);
             }
+        }
+
+        private void Report() {
+            if (DateTime.UtcNow < nextReport) {
+                return;
+            }
+
+            if (nextReport != DateTime.MinValue && (framesDrawn > 0 || chunksMade > 0)) {
+                var frames = Math.Max(1, framesDrawn);
+                PluginCore.LogFile($"[grass] {chunks.Count} chunks of {chunks.Values.Sum(c => c.Clumps)} clumps; drawn a "
+                    + $"frame: {chunksDrawn / frames} chunks, {clumpsDrawn / frames} clumps, {clumpsDrawn * 4 / frames} "
+                    + $"triangles; {chunksMade} chunks made in 10 s, {chunkMs:0} ms");
+            }
+
+            nextReport = DateTime.UtcNow.AddSeconds(10);
+            framesDrawn = 0;
+            clumpsDrawn = 0;
+            chunksDrawn = 0;
+            chunksMade = 0;
+            chunkMs = 0;
         }
 
         /// <summary>Each grass terrain's colour: its texture in the region's TexMerge, averaged.</summary>
@@ -210,7 +239,7 @@ namespace DaraletPlayer.Ui {
 
                 try {
                     var id = desc.TerrainTex.TexGID;
-                    var textureId = id >> 24 == 6 ? id : LargestOf(portal.ReadFromDat<SurfaceTexture>(id));
+                    var textureId = id >> 24 == 6 ? id : portal.ReadFromDat<SurfaceTexture>(id).Textures[0];
                     var image = portal.ReadFromDat<DatTexture>(textureId);
                     var pixels = TextureDecode.Decode((uint)image.Format, image.SourceData, image.Width, image.Height, null);
                     var average = pixels == null ? 0xFF6A8040u : GrassPicture.Average(pixels);
@@ -222,84 +251,6 @@ namespace DaraletPlayer.Ui {
                     PluginCore.LogFile($"[grass] terrain {type:X}'s texture couldn't be read: {ex.Message}");
                 }
             }
-        }
-
-        private static uint LargestOf(SurfaceTexture images) {
-            return images.Textures[0];
-        }
-
-        private void Build(Device device, DatDatabase cells, uint home, float x, float y) {
-            var options = Options;
-            var radius = options.ClampedDistance;
-            var density = options.ClampedDensity / 100f;
-            var heightScale = options.ClampedHeight / 100f;
-            var hx = (int)(home >> 8);
-            var hy = (int)(home & 0xFF);
-            var kept = new List<GrassVertex>();
-            var grass = new List<GrassVertex>();
-            var reeds = new List<GrassVertex>();
-
-            for (var dx = -1; dx <= 1; dx++) {
-                for (var dy = -1; dy <= 1; dy++) {
-                    // only the blocks the circle reaches
-                    var nearestX = Math.Max(dx * BlockSize, Math.Min(x, (dx + 1) * BlockSize));
-                    var nearestY = Math.Max(dy * BlockSize, Math.Min(y, (dy + 1) * BlockSize));
-
-                    if ((nearestX - x) * (nearestX - x) + (nearestY - y) * (nearestY - y) > radius * radius) {
-                        continue;
-                    }
-
-                    var bx = hx + dx;
-                    var by = hy + dy;
-
-                    if (bx < 0 || by < 0 || bx > 0xFE || by > 0xFE) {
-                        continue;
-                    }
-
-                    var id = (uint)(bx << 8 | by) << 16;
-                    var land = cells.ReadFromDat<CellLandblock>(id | 0xFFFF);
-
-                    if (land == null) {
-                        continue;
-                    }
-
-                    // kept near towns, wild away from them; without, every clump halfway
-                    var block = (uint)(bx << 8 | by);
-                    Func<float, float, float> wildnessAt = null;
-
-                    if (options.KeptNearTowns && wildness.Places > 0) {
-                        wildnessAt = (px, py) => {
-                            var (wx, wy) = Wildness.WorldMeters(block, px, py);
-                            return wildness.At(wx, wy);
-                        };
-                    }
-
-                    var clumps = GrassLayout.Place(id, land.Terrain, land.Height, region.LandDefs.LandHeightTable, density,
-                        BuildingCells(cells, id), x - dx * BlockSize, y - dy * BlockSize, radius + 2, wildnessAt);
-
-                    foreach (var clump in clumps) {
-                        if (clump.Reeds && !options.Reeds) {
-                            continue;
-                        }
-
-                        var list = clump.Reeds ? reeds : clump.Wildness < 0.5f ? kept : grass;
-                        AddClump(list, clump, dx * BlockSize, dy * BlockSize, heightScale, id);
-                    }
-                }
-            }
-
-            ClearBuffer();
-            var all = kept.Concat(grass).Concat(reeds).ToArray();
-
-            if (all.Length == 0) {
-                return;
-            }
-
-            buffer = new VertexBuffer(typeof(GrassVertex), all.Length, device, Usage.WriteOnly, Format, Pool.Managed);
-            buffer.SetData(all, 0, LockFlags.None);
-            keptTriangles = kept.Count / 3;
-            grassTriangles = grass.Count / 3;
-            reedTriangles = reeds.Count / 3;
         }
 
         /// <summary>
@@ -315,37 +266,55 @@ namespace DaraletPlayer.Ui {
             return found;
         }
 
-        /// <summary>Two upright pictures through the clump at right angles, in the device's world (x, height, y).</summary>
-        private void AddClump(List<GrassVertex> vertices, GrassClump clump, float offsetX, float offsetY,
-            float heightScale, uint block) {
-            var height = (clump.Reeds ? ReedHeight : GrassHeight) * clump.Scale * heightScale;
-            var half = height * (clump.Reeds ? 0.35f : 0.6f);
-            var x = offsetX + clump.X;
-            var y = offsetY + clump.Y;
-            var bottom = clump.Z - 0.05f;
-            var top = bottom + height;
-            var tint = tints.TryGetValue(clump.TerrainType, out var found) ? found : 0xFF6A8040u;
+        /// <summary>Every blade picture in one texture, its levels made picture by picture (Feed/GrassAtlas.cs).</summary>
+        private static DxTexture MakeAtlas(Device device) {
+            var levels = GrassAtlas.Make();
+            var texture = new DxTexture(device, GrassAtlas.Size, GrassAtlas.Size, levels.Count, Usage.None,
+                Microsoft.DirectX.Direct3D.Format.A8R8G8B8, Pool.Managed);
 
-            // a little variety, as no two tufts are the same green
-            var hash = GrassLayout.Hash(block, (int)(clump.X * 7), (int)(clump.Y * 7), 9);
-            var shade = 0.85f + GrassLayout.Fraction(hash) * 0.3f;
-            var colour = Shade(tint, shade);
-            var phase = GrassLayout.Fraction(hash * 31) * 6.2831853f;
-            var cos = (float)Math.Cos(clump.Yaw);
-            var sin = (float)Math.Sin(clump.Yaw);
+            for (var level = 0; level < levels.Count; level++) {
+                var (pixels, side) = levels[level];
+                var stream = texture.LockRectangle(level, LockFlags.None, out var pitch);
 
-            foreach (var (dx, dy) in new[] { (cos, sin), (-sin, cos) }) {
-                var bl = Vertex(x - dx * half, bottom, y - dy * half, colour, 0, 1, 0, phase);
-                var br = Vertex(x + dx * half, bottom, y + dy * half, colour, 1, 1, 0, phase);
-                var tl = Vertex(x - dx * half, top, y - dy * half, colour, 0, 0, height, phase);
-                var tr = Vertex(x + dx * half, top, y + dy * half, colour, 1, 0, height, phase);
-                vertices.Add(bl);
-                vertices.Add(tl);
-                vertices.Add(tr);
-                vertices.Add(bl);
-                vertices.Add(tr);
-                vertices.Add(br);
+                try {
+                    var row = new int[side];
+
+                    for (var y = 0; y < side; y++) {
+                        for (var x = 0; x < side; x++) {
+                            row[x] = unchecked((int)pixels[y * side + x]);
+                        }
+
+                        Marshal.Copy(row, 0, stream.InternalData + y * pitch, side);
+                    }
+                }
+                finally {
+                    texture.UnlockRectangle(level);
+                }
             }
+
+            PluginCore.LogFile($"[grass] {GrassAtlas.Wild.Length + GrassAtlas.Flowering.Length + GrassAtlas.Kept.Length} "
+                + $"grass and {GrassAtlas.Reeds.Length} reed pictures");
+            return texture;
+        }
+
+        /// <summary>Two triangles a picture, the same for every chunk: corners bottom left, top left, top right, bottom right.</summary>
+        private static IndexBuffer MakeIndices(Device device) {
+            var quads = MostClumps * 2;
+            var list = new short[quads * 6];
+
+            for (var q = 0; q < quads; q++) {
+                var corner = (short)(q * 4);
+                list[q * 6] = corner;
+                list[q * 6 + 1] = (short)(corner + 1);
+                list[q * 6 + 2] = (short)(corner + 2);
+                list[q * 6 + 3] = corner;
+                list[q * 6 + 4] = (short)(corner + 2);
+                list[q * 6 + 5] = (short)(corner + 3);
+            }
+
+            var buffer = new IndexBuffer(typeof(short), list.Length, device, Usage.WriteOnly, Pool.Managed);
+            buffer.SetData(list, 0, LockFlags.None);
+            return buffer;
         }
 
         private static GrassVertex Vertex(float x, float height, float y, int colour, float u, float v, float up,
@@ -358,23 +327,30 @@ namespace DaraletPlayer.Ui {
             return unchecked((int)(0xFF000000u | (uint)(Channel(16) << 16 | Channel(8) << 8 | Channel(0))));
         }
 
-        private static HashSet<int> BuildingCells(DatDatabase cells, uint landblock) {
-            var found = new HashSet<int>();
-            var info = cells.ReadFromDat<LandblockInfo>((landblock & 0xFFFF0000) | 0xFFFE);
-
-            if (info == null) {
-                return found;
-            }
-
-            foreach (var building in info.Buildings) {
-                found.Add(SceneryLayout.CellOf(building.Frame.Origin.X) * 8 + SceneryLayout.CellOf(building.Frame.Origin.Y));
-            }
-
-            return found;
+        /// <summary>The share of a chunk's clumps drawn at a distance: all near, fewer far (the shader's own sum).</summary>
+        private static float ShareAt(float distance) {
+            return distance <= ThinFrom ? 1 : (float)Math.Pow(ThinFrom / distance, ThinPower);
         }
 
-        private unsafe void Draw(Device device, float x, float y, float z) {
-            if (buffer == null) {
+        /// <summary>
+        /// Whether a sphere is in the view, by the four sides of the view's pyramid and its near plane, from the view and
+        /// projection together (rows as Direct3D multiplies them).
+        /// </summary>
+        private static bool InView(Matrix m, float x, float y, float z, float radius) {
+            bool Inside(float a, float b, float c, float d) {
+                var length = (float)Math.Sqrt(a * a + b * b + c * c);
+                return a * x + b * y + c * z + d >= -radius * length;
+            }
+
+            return Inside(m.M14 + m.M11, m.M24 + m.M21, m.M34 + m.M31, m.M44 + m.M41)
+                && Inside(m.M14 - m.M11, m.M24 - m.M21, m.M34 - m.M31, m.M44 - m.M41)
+                && Inside(m.M14 + m.M12, m.M24 + m.M22, m.M34 + m.M32, m.M44 + m.M42)
+                && Inside(m.M14 - m.M12, m.M24 - m.M22, m.M34 - m.M32, m.M44 - m.M42)
+                && Inside(m.M13, m.M23, m.M33, m.M43);
+        }
+
+        private unsafe void Draw(Device device, uint home, float x, float y, float z) {
+            if (chunks.Count == 0 || atlas == null || indices == null) {
                 return;
             }
 
@@ -387,14 +363,59 @@ namespace DaraletPlayer.Ui {
 
             var m = view * projection;
             var options = Options;
+            var radius = options.ClampedDistance;
+            var hx = (int)(home >> 8);
+            var hy = (int)(home & 0xFF);
+
+            // the chunks within the radius and in view, nearest first
+            visible.Clear();
+
+            foreach (var chunk in chunks.Values) {
+                if (chunk.Buffer == null) {
+                    continue;
+                }
+
+                var left = ((int)(chunk.Block >> 8) - hx) * BlockSize + chunk.CellX * CellSize;
+                var bottom = ((int)(chunk.Block & 0xFF) - hy) * BlockSize + chunk.CellY * CellSize;
+                chunk.Distance = DistanceTo(x, y, left, bottom);
+
+                if (chunk.Distance > radius) {
+                    continue;
+                }
+
+                var middle = (chunk.LowestZ + chunk.HighestZ) / 2;
+                var halfHeight = (chunk.HighestZ - chunk.LowestZ) / 2;
+                var reach = (float)Math.Sqrt(2 * (CellSize / 2) * (CellSize / 2) + halfHeight * halfHeight) + 1;
+
+                if (!InView(m, left + CellSize / 2, middle, bottom + CellSize / 2, reach)) {
+                    continue;
+                }
+
+                visible.Add(chunk);
+            }
+
+            if (visible.Count == 0) {
+                return;
+            }
+
+            visible.Sort((a, b) => a.Distance.CompareTo(b.Distance));
             var seconds = (System.Environment.TickCount & 0x3FFFFFFF) % 3600000 / 1000f;
             float F(uint at) => *(float*)at;
-            var sx = F(0x8682C8);
-            var sy = F(0x8682CC);
-            var sz = F(0x8682D0);
             // the sun on ground facing up: the vector's upward part, its length being the sun's strength
-            var share = Math.Max(0, sz) * GroundLight;
-            var ambientLight = GroundLight;
+            var share = Math.Max(0, F(0x8682D0)) * GroundLight;
+            var c = frameConstants;
+            c[0] = m.M11; c[1] = m.M12; c[2] = m.M13; c[3] = m.M14;
+            c[4] = m.M21; c[5] = m.M22; c[6] = m.M23; c[7] = m.M24;
+            c[8] = m.M31; c[9] = m.M32; c[10] = m.M33; c[11] = m.M34;
+            c[12] = m.M41; c[13] = m.M42; c[14] = m.M43; c[15] = m.M44;
+            c[16] = x; c[17] = z; c[18] = y; c[19] = radius;
+            c[20] = seconds; c[21] = options.Wind ? 1 : 0; c[22] = 0.8f; c[23] = 0.6f;
+            c[24] = F(0x8682B0) * GroundLight; c[25] = F(0x8682B4) * GroundLight; c[26] = F(0x8682B8) * GroundLight;
+            c[27] = 0;
+            c[28] = F(0x8682BC) * share; c[29] = F(0x8682C0) * share; c[30] = F(0x8682C4) * share; c[31] = 0;
+            // c8 is each chunk's offset; c9 the thinning
+            c[32] = 0; c[33] = 0; c[34] = 0; c[35] = 0;
+            c[36] = ThinFrom; c[37] = ThinPower; c[38] = ThinBand; c[39] = 0;
 
             // made and let go each frame: a state block alive at a device reset hangs the game
             using (var saved = new StateBlock(device, StateBlockType.All)) {
@@ -416,35 +437,31 @@ namespace DaraletPlayer.Ui {
                     device.SamplerState[0].AddressU = TextureAddress.Clamp;
                     device.SamplerState[0].AddressV = TextureAddress.Clamp;
                     device.VertexFormat = Format;
-                    device.SetStreamSource(0, buffer, 0);
+                    device.Indices = indices;
+                    device.SetTexture(0, atlas);
                     DeviceCalls.UseShaders(device, vertexShader, pixelShader);
-                    DeviceCalls.VertexConstants(device, 0, new[] {
-                        m.M11, m.M12, m.M13, m.M14,
-                        m.M21, m.M22, m.M23, m.M24,
-                        m.M31, m.M32, m.M33, m.M34,
-                        m.M41, m.M42, m.M43, m.M44,
-                        x, z, y, options.ClampedDistance,
-                        seconds, options.Wind ? 1 : 0, 0.8f, 0.6f,
-                        F(0x8682B0) * ambientLight, F(0x8682B4) * ambientLight, F(0x8682B8) * ambientLight, 0,
-                        F(0x8682BC) * share, F(0x8682C0) * share, F(0x8682C4) * share, 0,
-                    });
+                    DeviceCalls.VertexConstants(device, 0, c);
 
-                    // the buffer holds kept grass, then wild, then reeds
-                    if (keptTriangles > 0) {
-                        device.SetTexture(0, keptPicture);
-                        device.DrawPrimitives(PrimitiveType.TriangleList, 0, keptTriangles);
+                    foreach (var chunk in visible) {
+                        // the share drawn is the nearest clump's, and the shader sinks those past their own
+                        var count = Math.Min(chunk.Clumps,
+                            (int)Math.Ceiling(chunk.Total * Math.Min(1, ShareAt(chunk.Distance) + ThinBand)));
+
+                        if (count <= 0) {
+                            continue;
+                        }
+
+                        offsetConstant[0] = ((int)(chunk.Block >> 8) - hx) * BlockSize;
+                        offsetConstant[2] = ((int)(chunk.Block & 0xFF) - hy) * BlockSize;
+                        DeviceCalls.VertexConstants(device, 8, offsetConstant);
+                        device.SetStreamSource(0, chunk.Buffer, 0);
+                        device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, count * VerticesAClump, 0,
+                            count * 4);
+                        clumpsDrawn += count;
+                        chunksDrawn++;
                     }
 
-                    if (grassTriangles > 0) {
-                        device.SetTexture(0, grassPicture);
-                        device.DrawPrimitives(PrimitiveType.TriangleList, keptTriangles * 3, grassTriangles);
-                    }
-
-                    if (reedTriangles > 0) {
-                        device.SetTexture(0, reedPicture);
-                        device.DrawPrimitives(PrimitiveType.TriangleList, (keptTriangles + grassTriangles) * 3,
-                            reedTriangles);
-                    }
+                    framesDrawn++;
                 }
                 finally {
                     DeviceCalls.UseShaders(device, IntPtr.Zero, IntPtr.Zero);
@@ -452,15 +469,6 @@ namespace DaraletPlayer.Ui {
                     saved.Apply();
                 }
             }
-        }
-
-        private void ClearBuffer() {
-            buffer?.Dispose();
-            buffer = null;
-            keptTriangles = 0;
-            grassTriangles = 0;
-            reedTriangles = 0;
-            builtHome = uint.MaxValue;
         }
 
         public void Dispose() {
@@ -473,10 +481,9 @@ namespace DaraletPlayer.Ui {
             WorldPass.Remove(inWorldPass);
 
             try {
-                ClearBuffer();
-                grassPicture?.Dispose();
-                keptPicture?.Dispose();
-                reedPicture?.Dispose();
+                ClearChunks();
+                atlas?.Dispose();
+                indices?.Dispose();
                 DeviceCalls.Release(vertexShader);
                 DeviceCalls.Release(pixelShader);
             }

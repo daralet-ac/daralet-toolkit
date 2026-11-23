@@ -31,6 +31,13 @@ namespace DaraletPlayer.Feed {
         private const float BlockSize = 192;
         private const float CellSize = 24;
 
+        /// <summary>Where a stand of tall reeds begins, and how far it takes to grow from the mix to tall.</summary>
+        private const float PatchFrom = 0.6f;
+        private const float PatchBlend = 0.15f;
+
+        /// <summary>How far across the stands go, in meters.</summary>
+        private const float PatchSize = 8;
+
         /// <summary>How full a terrain grows, 0 to 1.</summary>
         public static float Share(int terrainType) {
             switch (terrainType) {
@@ -72,6 +79,43 @@ namespace DaraletPlayer.Feed {
             var lastX = Math.Min(squares - 1, (int)Math.Floor((centreX + radius) / Spacing));
             var firstY = Math.Max(0, (int)Math.Floor((centreY - radius) / Spacing));
             var lastY = Math.Min(squares - 1, (int)Math.Floor((centreY + radius) / Spacing));
+            AddClumps(clumps, landblock, terrain, heights, heightTable, density, buildingCells, firstX, lastX, firstY,
+                lastY, (x, y) => {
+                    var dx = x - centreX;
+                    var dy = y - centreY;
+                    return dx * dx + dy * dy <= radius * radius;
+                }, wildnessAt, null);
+            return clumps;
+        }
+
+        /// <summary>Squares in one of the block's 24-meter cells (CellsAcross by CellsAcross): Ui/Grass.cs's chunks.</summary>
+        public const int SquaresPerCell = 40;
+
+        /// <summary>
+        /// The clumps in one cell of the block (cellX, cellY from 0 to 7), every square of it, in the block's meters: a
+        /// chunk of grass, made once and kept while you're near (Ui/Grass.cs).
+        /// </summary>
+        public static List<GrassClump> PlaceCell(uint landblock, IReadOnlyList<ushort> terrain,
+            IReadOnlyList<byte> heights, IReadOnlyList<float> heightTable, float density, ISet<int> buildingCells,
+            int cellX, int cellY, Func<float, float, float> wildnessAt = null,
+            Func<float, float, bool> covered = null) {
+            var clumps = new List<GrassClump>();
+
+            if (terrain == null || terrain.Count < 81 || density <= 0) {
+                return clumps;
+            }
+
+            var firstX = cellX * SquaresPerCell;
+            var firstY = cellY * SquaresPerCell;
+            AddClumps(clumps, landblock, terrain, heights, heightTable, density, buildingCells, firstX,
+                firstX + SquaresPerCell - 1, firstY, firstY + SquaresPerCell - 1, null, wildnessAt, covered);
+            return clumps;
+        }
+
+        private static void AddClumps(List<GrassClump> clumps, uint landblock, IReadOnlyList<ushort> terrain,
+            IReadOnlyList<byte> heights, IReadOnlyList<float> heightTable, float density, ISet<int> buildingCells,
+            int firstX, int lastX, int firstY, int lastY, Func<float, float, bool> within,
+            Func<float, float, float> wildnessAt, Func<float, float, bool> covered) {
             var block = landblock >> 16;
 
             for (var sx = firstX; sx <= lastX; sx++) {
@@ -83,10 +127,7 @@ namespace DaraletPlayer.Feed {
                         continue;
                     }
 
-                    var dx = x - centreX;
-                    var dy = y - centreY;
-
-                    if (dx * dx + dy * dy > radius * radius) {
+                    if (within != null && !within(x, y)) {
                         continue;
                     }
 
@@ -103,7 +144,8 @@ namespace DaraletPlayer.Feed {
 
                     var cell = (int)(x / CellSize) * 8 + (int)(y / CellSize);
 
-                    if (SceneryLayout.OnRoad(terrain, x, y) || buildingCells != null && buildingCells.Contains(cell)) {
+                    if (SceneryLayout.OnRoadExact(terrain, x, y) || buildingCells != null && buildingCells.Contains(cell)
+                        || covered != null && covered(x, y)) {
                         continue;
                     }
 
@@ -117,11 +159,15 @@ namespace DaraletPlayer.Feed {
                     // short and even near towns, tall and uneven in the wilds
                     var spread = 0.2f + 0.5f * wild;
                     var scale = (0.55f + 0.8f * wild) * (1 + (Fraction(Hash(block, sx, sy, 5)) - 0.5f) * spread);
-                    clumps.Add(new GrassClump(x, y, ground.Z, yaw, scale, type, type == MarshSparseSwamp, wild));
+
+                    if (type == MarshSparseSwamp) {
+                        scale = ReedScale(Fraction(Hash(block, sx, sy, 8)), Fraction(Hash(block, sx, sy, 5)), wild,
+                            ReedPatch(block, x, y));
+                    }
+                    clumps.Add(new GrassClump(x, y, ground.Z, yaw, scale, type, type == MarshSparseSwamp, wild,
+                        Fraction(Hash(block, sx, sy, 6)), Hash(block, sx, sy, 7)));
                 }
             }
-
-            return clumps;
         }
 
         /// <summary>A well-mixed number from a block, a square and which number it is (no pattern a player would see).</summary>
@@ -140,6 +186,39 @@ namespace DaraletPlayer.Feed {
         /// <summary>A hash as a fraction from 0 up to 1.</summary>
         public static float Fraction(uint hash) {
             return (hash >> 8) / 16777216f;
+        }
+
+        /// <summary>
+        /// A reed clump's size: a mix, mostly short or middling with a few tall, so a marsh isn't a wall you can't see a
+        /// character through (the user's screenshot, November 2026: every reed over 2 m in the wilds). Wildness adds only a
+        /// little, where it raised grass a third. In a stand (ReedPatch high) they're tall instead.
+        /// </summary>
+        public static float ReedScale(float pick, float jitter, float wild, float patch = 0) {
+            var (low, high) = pick < 0.45f ? (0.25f, 0.45f) : pick < 0.75f ? (0.5f, 0.75f) : (0.8f, 1f);
+            var mixed = (low + (high - low) * jitter) * (0.9f + 0.2f * wild);
+            // in a stand, tall and thick: most from a meter and a half to two, a few short ones among them
+            var tall = pick < 0.15f ? mixed : 1 + 0.35f * jitter;
+            var t = Math.Max(0, Math.Min(1, (patch - PatchFrom) / PatchBlend));
+            t = t * t * (3 - 2 * t);
+            return mixed + (tall - mixed) * t;
+        }
+
+        /// <summary>
+        /// Smooth noise over a block, 0 to 1, changing over PatchSize meters: where it's high, the reeds stand tall
+        /// (`ReedScale`), so a marsh has a few tall stands among the short mix (the user's call, November 2026).
+        /// </summary>
+        public static float ReedPatch(uint block, float x, float y) {
+            var gx = x / PatchSize;
+            var gy = y / PatchSize;
+            var ix = (int)Math.Floor(gx);
+            var iy = (int)Math.Floor(gy);
+            var u = gx - ix;
+            var v = gy - iy;
+            u = u * u * (3 - 2 * u);
+            v = v * v * (3 - 2 * v);
+            float At(int cx, int cy) => Fraction(Hash(block, cx, cy, 10));
+            return (At(ix, iy) * (1 - u) + At(ix + 1, iy) * u) * (1 - v)
+                + (At(ix, iy + 1) * (1 - u) + At(ix + 1, iy + 1) * u) * v;
         }
     }
 }
