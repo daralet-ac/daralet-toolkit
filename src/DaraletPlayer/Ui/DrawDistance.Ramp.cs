@@ -23,7 +23,7 @@ namespace DaraletPlayer.Ui {
         /// the place, and nothing of the plugin's should load beside it (FarLand waits).
         /// </summary>
         public bool Arriving => inPortalSpace
-            || (DateTime.UtcNow - arrivedAt).TotalSeconds < DrawDistanceRamp.ArrivalQuietSeconds;
+            || (DateTime.UtcNow - arrivedAt).TotalSeconds < DrawDistanceRamp.ArrivalQuietSeconds(arrivedByPortal);
 
         /// <summary>Arriving, for what isn't this class's (the water map, the dats' lights, grass), set each frame.</summary>
         public static bool QuietNow;
@@ -33,6 +33,9 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>When you last logged in or came out of a portal: steps are small for a while after.</summary>
         private DateTime arrivedAt = DateTime.UtcNow;
+
+        /// <summary>Whether the last arrival was out of portal space (a shorter wait) or a login or the plugin starting.</summary>
+        private bool arrivedByPortal;
 
         private bool wasLoggedIn;
 
@@ -155,6 +158,7 @@ namespace DaraletPlayer.Ui {
                     // arrived: the same gentle start as at login before the rings step back up
                     cacheFlushWanted = "a teleport";
                     arrivedAt = DateTime.UtcNow;
+                    arrivedByPortal = true;
                     nextStepAt = arrivedAt.AddSeconds(DrawDistanceRamp.CautiousWaitSeconds);
                     Soon();
                 }
@@ -169,6 +173,7 @@ namespace DaraletPlayer.Ui {
                 // out of portal space, the place you've come to loads at the game's size first, then steps up, gently
                 // while the world streams in (DrawDistanceRamp.Cautious...)
                 arrivedAt = DateTime.UtcNow;
+                arrivedByPortal = true;
                 nextStepAt = arrivedAt.AddSeconds(DrawDistanceRamp.CautiousWaitSeconds);
                 PluginCore.LogFile(inPortal ? "[draw-distance] portal space: the game's own until you're out"
                     : "[draw-distance] out of portal space: stepping up again");
@@ -198,6 +203,7 @@ namespace DaraletPlayer.Ui {
 
             if (loggedIn && !wasLoggedIn) {
                 arrivedAt = now;
+                arrivedByPortal = false;
                 nextStepAt = now.AddSeconds(DrawDistanceRamp.CautiousWaitSeconds);
                 PluginCore.LogFile("[draw-distance] logged in: stepping up gently");
             }
@@ -207,7 +213,8 @@ namespace DaraletPlayer.Ui {
             // just in (logged in, or out of a portal): nothing changes either way while the game's own load runs. The cut
             // from the game's landscape 15 to a lower one went through 4 seconds after login, a reload in the middle of
             // the game's own, and 10 seconds later the game crashed emptying its cache (0x58712F, November 2026)
-            if (loggedIn && !inPortalSpace && (now - arrivedAt).TotalSeconds < DrawDistanceRamp.ArrivalQuietSeconds) {
+            if (loggedIn && !inPortalSpace
+                && (now - arrivedAt).TotalSeconds < DrawDistanceRamp.ArrivalQuietSeconds(arrivedByPortal)) {
                 return (scenery, landscape);
             }
 

@@ -663,6 +663,9 @@ namespace DaraletPlayer.Ui {
                 case "objectlog":
                     ObjectWatch.Enable(value != 0);
                     break;
+                case "arrivalwait":
+                    DrawDistanceRamp.PortalQuietSeconds = Math.Max(0, value);
+                    break;
                 case "alphadefer":
                     WorldPass.DeferEarly = value != 0;
                     break;

@@ -18,6 +18,14 @@ namespace DaraletPlayer.Ui {
         private static double leftAt = -1;
         private static bool running;
 
+        // the game's own load after arriving: the last frame over HitchSeconds, and whether a SmoothSeconds run of frames
+        // without one has come since leaving portal space ("game settled", the moment the run began)
+        private const double HitchSeconds = 0.1;
+        private const double SmoothSeconds = 1;
+        private const string Settled = "game settled";
+        private static double lastFrameAt = -1;
+        private static double lastHitchAt = -1;
+
         /// <summary>The pieces to wait for after arriving, as they're on: the line waits for each named here.</summary>
         private static readonly HashSet<string> wanted = new HashSet<string>();
 
@@ -30,6 +38,7 @@ namespace DaraletPlayer.Ui {
             wanted.Clear();
             clock.Restart();
             leftAt = -1;
+            lastFrameAt = -1;
             running = true;
         }
 
@@ -40,6 +49,8 @@ namespace DaraletPlayer.Ui {
 
             leftAt = clock.Elapsed.TotalSeconds;
             stages.Add(("portal", leftAt));
+            lastHitchAt = leftAt;
+            wanted.Add(Settled);
 
             foreach (var piece in pieces) {
                 wanted.Add(piece);
@@ -59,8 +70,29 @@ namespace DaraletPlayer.Ui {
             Check();
         }
 
-        /// <summary>From a frame: gives up on pieces that never came.</summary>
+        /// <summary>
+        /// From each of the game's frames: notes when the game's own load has settled (a second of frames none over 100 ms,
+        /// the same test the draw distance's steps wait for), and gives up on pieces that never came.
+        /// </summary>
         public static void Frame() {
+            var now = clock.Elapsed.TotalSeconds;
+
+            if (running && leftAt >= 0 && wanted.Contains(Settled)) {
+                if (lastFrameAt >= 0 && now - lastFrameAt > HitchSeconds) {
+                    lastHitchAt = now;
+                }
+
+                if (now - lastHitchAt >= SmoothSeconds) {
+                    wanted.Remove(Settled);
+                    stages.Add((Settled, lastHitchAt));
+                    lastFrameAt = now;
+                    Check();
+                    return;
+                }
+            }
+
+            lastFrameAt = now;
+
             if (running && leftAt >= 0 && clock.Elapsed.TotalSeconds - leftAt > GiveUpSeconds) {
                 Write($"{string.Join(", ", wanted)} not back in {GiveUpSeconds:0} s");
             }

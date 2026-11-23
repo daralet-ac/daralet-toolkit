@@ -411,7 +411,19 @@ namespace DaraletPlayer.Ui {
                     }
 
                     if (depthReady && (options.On || sunReady)) {
-                        state.AlphaBlendEnable = DebugView == 0;
+                        // drawn into a texture of its own and blurred onto the picture after (DepthShading.ShadeBlur.cs);
+                        // the debug views straight onto the picture
+                        var blurred = DebugView == 0;
+                        var target = blurred ? device.GetRenderTarget(0) : null;
+
+                        if (blurred) {
+                            device.SetRenderTarget(0, ShadeTarget(device, width, height));
+                            device.Viewport = new Viewport {
+                                X = 0, Y = 0, Width = width, Height = height, MinZ = 0, MaxZ = 1,
+                            };
+                        }
+
+                        state.AlphaBlendEnable = false;
                         state.SourceBlend = Blend.Zero;
                         state.DestinationBlend = Blend.SourceColor;
                         Slot<SetShaderCall>(device, SetPixelShaderSlot)(com, pixelShader);
@@ -450,6 +462,20 @@ namespace DaraletPlayer.Ui {
                         device.SamplerState[3].AddressU = TextureAddress.Clamp;
                         device.SamplerState[3].AddressV = TextureAddress.Clamp;
                         device.DrawUserPrimitives(PrimitiveType.TriangleStrip, 2, Quad);
+
+                        if (blurred) {
+                            // back to the picture the game was drawing, the grey averaged and multiplied onto it
+                            try {
+                                device.SetRenderTarget(0, target);
+                                device.Viewport = new Viewport {
+                                    X = 0, Y = 0, Width = width, Height = height, MinZ = 0, MaxZ = 1,
+                                };
+                                DrawShadeBlur(device, projection, width, height);
+                            }
+                            finally {
+                                target.Dispose();
+                            }
+                        }
                     }
 
                     // the game's own lights, per pixel and blocked by what's between (DepthShading.Lamps.cs)
@@ -507,6 +533,7 @@ namespace DaraletPlayer.Ui {
             TearDownGlow();
             TearDownLampShadows();
             TearDownLampCopies();
+            TearDownShade();
             savedState?.Dispose();
             savedState = null;
             boundForThisFrame = false;
@@ -601,6 +628,7 @@ namespace DaraletPlayer.Ui {
                 ReleaseLampShader();
                 ReleaseGlowShaders();
                 ReleaseSeeThroughShader();
+                ReleaseShadeBlurShader();
                 ReleaseLampShadowShaders();
                 antiAliasShader = IntPtr.Zero;
                 sharpenShader = IntPtr.Zero;

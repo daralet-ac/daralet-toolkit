@@ -89,9 +89,19 @@ float Shadowed(sampler map, float4 s, float facing, float texelMeters, float spi
     return shadowed / 9;
 }
 
-// a different turn of the sample kernel for each pixel in a 4 by 4 block, so the noise is fine and even
-float Hash(float2 pixel) {
-    return frac(sin(dot(floor(pixel), float2(12.9898, 78.233))) * 43758.5453);
+// Each pixel's turn of the sample kernel, one of 16 by its place in a 4 by 4 block (in Bayer order, so neighbours
+// differ most), 0 to 1: the blur after (shadeblur.ps.hlsl) averages every 4 by 4 block, all 16 turns, so the noise goes.
+// A random turn a pixel (a hash of the pixel), never blurred, left dots on characters, whose own bodies close in much of
+// the occlusion's reach (the user's screenshots, November 2026)
+float Bayer2(float2 c) {
+    return 2 * c.x + 3 * c.y - 4 * c.x * c.y;
+}
+
+float Interleaved(float2 pixel) {
+    float2 cell = fmod(floor(pixel), 4);
+    float2 low = fmod(cell, 2);
+    float2 high = floor(cell / 2);
+    return (4 * Bayer2(low) + Bayer2(high) + 0.5) / 16;
 }
 
 static const float3 Kernel[12] = {
@@ -136,7 +146,7 @@ float4 main(float2 uv : TEXCOORD0, float2 pixel : VPOS) : COLOR {
     float aoFade = saturate(1 - z / occlusion.z);
 
     if (occlusion.y > 0 && aoFade > 0) {
-        float angle = Hash(pixel) * 6.2831853;
+        float angle = Interleaved(pixel) * 6.2831853;
         float s = sin(angle);
         float c = cos(angle);
         float closed = 0;
@@ -177,7 +187,7 @@ float4 main(float2 uv : TEXCOORD0, float2 pixel : VPOS) : COLOR {
     if (sunShadow.x > 0) {
         float facing = saturate(dot(n, sun.xyz));
         // each pixel's turn of the soft edges' disc
-        float spin = Hash(pixel + 17) * 6.2831853;
+        float spin = Interleaved(pixel + 1) * 6.2831853;
 
         // The ground is lit by how it faces the sun, so ground turned away is lit by the ambient alone already. But the
         // game lights characters and things evenly all round (a share of the sun whichever way they face), so a

@@ -248,8 +248,11 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
     // way alone decides, so no facet's edge shows as a line
     float agree = min(min(dot(n1, n2), dot(n3, n4)), min(dot(n1, n3), dot(n2, n4)));
     float crease = 1 - smoothstep(0.1, 0.35, agree);
-    // the smoothed way for the light, the shadow maps' lookups and the shadow pass alike
-    n = SmoothNormal(uv, p, n, alongX, alongY, float2(stepX.x, stepY.y));
+    // the smoothed way only for how much light a surface turned toward a lamp takes; the shadow maps are looked up off
+    // the triangle's own way (n), as before it: off the smoothed way, a lookup on a low-poly face or armour plate could
+    // stay too near its own triangle, half blocked by the character's own body, and the samples' turn (a hash of the
+    // place, fixed in the world) showed as dots the character moved through (the user's screenshot, November 2026)
+    float3 smooth = SmoothNormal(uv, p, n, alongX, alongY, float2(stepX.x, stepY.y));
 
     float3 added = 0;
     float dark = 0;
@@ -286,7 +289,7 @@ float4 main(float2 uv : TEXCOORD0) : COLOR {
         if (distance < place.w && distance > 0.01) {
             toLight /= distance;
             float least = min(min(dot(n1, toLight), dot(n2, toLight)), min(dot(n3, toLight), dot(n4, toLight)));
-            float faces = lerp(dot(n, toLight), least, crease);
+            float faces = lerp(dot(smooth, toLight), least, crease);
             float facing = saturate(faces);
             // how a face turns counts for little: the game lights a character smoothly between its corners' normals, but
             // the depth only gives each triangle's own, and its armour showed every facet (the user, November 2026). A

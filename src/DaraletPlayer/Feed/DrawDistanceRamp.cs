@@ -45,8 +45,25 @@ namespace DaraletPlayer.Feed {
         /// </summary>
         public const double CautiousWaitSeconds = 4;
 
-        /// <summary>Seconds after logging in or leaving portal space before the draw distance changes at all, down too.</summary>
-        public const double ArrivalQuietSeconds = 12;
+        /// <summary>
+        /// Seconds after logging in (or the plugin starting) before the draw distance changes at all, down too, and the
+        /// plugin's far land, water map, grass and lights wait: the cut that crashed the game came 4 seconds after a
+        /// login, and a login loads far more than a teleport.
+        /// </summary>
+        public const double LoginQuietSeconds = 12;
+
+        /// <summary>
+        /// The same after leaving portal space. Timed in the game (November 2026, eight teleports between the Holtburg
+        /// overlook and Hebian-to): the game's own load shows as slow frames entering portal space and the second you
+        /// come out, none after, so it's done 1 to 2 seconds after arriving; with 4 here the far land came 8 s after
+        /// arriving instead of 16 to 19, and none crashed (the user's call: 4). A test run's `set arrivalwait N` sets it.
+        /// </summary>
+        public static double PortalQuietSeconds = 4;
+
+        /// <summary>The wait after arriving: by portal, or by logging in.</summary>
+        public static double ArrivalQuietSeconds(bool byPortal) {
+            return byPortal ? PortalQuietSeconds : LoginQuietSeconds;
+        }
 
         public const double CautiousSeconds = 38;
 

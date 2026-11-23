@@ -29,7 +29,7 @@ namespace DaraletPlayer.Feed {
                 "softshore", "antialias", "sharpen", "grass", "grassdensity", "grassdistance", "grassheight", "reeds",
                 "keptnear", "wind", "sunshadows", "sunstrength", "sundistance", "sunreplay", "fartrees", "farbuildings",
                 "ground", "portalreload", "portalrings", "lamps", "lampstrength", "lampshadows", "glow", "sunsoftness", "charsoftness", "farland", "farlandnear", "farlanddebug", "farlandfine", "lighttrace", "night", "nightglow", "timeofday", "walkmode", "worldpasshook", "objectlog",
-                "lampreach", "firelight", "prelogin", "lampdistance", "shadowedlamps", "alphadefer" };
+                "lampreach", "firelight", "prelogin", "lampdistance", "shadowedlamps", "alphadefer", "arrivalwait" };
 
         /// <summary>Each step in order; a line it can't read is a step of kind "bad", which the run reports and stops on.</summary>
         public static List<TestStep> Parse(IEnumerable<string> lines) {
