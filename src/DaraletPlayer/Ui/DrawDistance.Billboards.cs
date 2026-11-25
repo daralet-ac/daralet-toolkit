@@ -77,8 +77,8 @@ namespace DaraletPlayer.Ui {
         /// copied again into one array (three copies of 76,000 billboards' vertices, every landblock crossed, in the large
         /// object heap, which a 32-bit game doesn't easily get back).
         /// </summary>
-        private readonly List<(BillboardModel Model, float X, float Y, float Z, float Yaw, float Scale, bool Far)>
-            billboardPlaces = new List<(BillboardModel, float, float, float, float, float, bool)>();
+        private readonly List<(int Run, float X, float Y, float Z, float Yaw, float Scale)>
+            billboardPlaces = new List<(int, float, float, float, float, float)>();
 
         /// <summary>
         /// The billboards standing on the far land (Ui/FarLand.cs), past the game's landscape: drawn by FarLand with its
@@ -229,7 +229,7 @@ namespace DaraletPlayer.Ui {
         /// drawn.</summary>
         private void BillboardFrame() {
             if (billboardKey == null || billboardsFailed) {
-                if (placing) {
+                if (placing || writing) {
                     AbortPlacing();
                 }
 
@@ -274,7 +274,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 // a new set of blocks (another crossing) mid-placing: placed again from the start
-                if (billboardsToBuild && placing) {
+                if (billboardsToBuild && (placing || writing)) {
                     AbortPlacing();
                 }
 
@@ -285,6 +285,10 @@ namespace DaraletPlayer.Ui {
                 // placed a slice a frame, the old billboards drawn till the new are built (DrawDistance.Placing.cs)
                 if (placing) {
                     PlaceSome(device, portal);
+                }
+                // then written a slice a frame (DrawDistance.Writing.cs)
+                else if (writing) {
+                    WriteSome(device);
                 }
 
                 // drawn inside the game's frame, before its see-through things, when that's hooked (Ui/WorldPass.cs)
@@ -311,105 +315,6 @@ namespace DaraletPlayer.Ui {
             catch (Exception ex) {
                 billboardsFailed = true;
                 PluginCore.LogFile("[billboards] stopped for the session: " + ex);
-            }
-        }
-
-        /// <summary>
-        /// Once every block is placed (DrawDistance.Placing.cs): the old billboards, trees and far buildings let go, and the
-        /// new built: the 3D trees' instances, then the crossed pictures of every far object, by model, in one vertex buffer.
-        /// </summary>
-        private void FinishBillboards(Device device, ACE.DatLoader.DatDatabase portal) {
-            // how long each step takes, in the log line, to see which holds the game up at a landblock crossing
-            var stepClock = System.Diagnostics.Stopwatch.StartNew();
-            var steps = new List<string> { "placing " + placeTimer.Finish("") };
-            var byModel = placeByModel;
-            var objects = placeObjects;
-            ClearBillboards();
-            billboardHome = placeHome;
-            BuildFarTrees(device, placeFarByModel, placeFarLandByModel);
-            placeByModel = null;
-            placeFarByModel = null;
-            placeFarLandByModel = null;
-            placeBlocks = null;
-            steps.Add($"3D trees {stepClock.ElapsedMilliseconds} ms");
-            stepClock.Restart();
-            ForgetScenerySeen();
-            var modelsGone = billboardModels.KeepOnly(usedModels) + farTreeModels.KeepOnly(usedModels);
-
-            if (modelsGone > 0) {
-                PluginCore.LogFile($"[billboards] {modelsGone} models no longer in sight let go");
-            }
-
-            if (objects == 0) {
-                billboardPlaces.Clear();
-                PluginCore.LogFile("[billboards] nothing to draw");
-                LoadPieces.Ready(LoadPieces.Trees);
-                return;
-            }
-
-            // each model's run in the buffer (the game's camera's first, then the far land's), then every billboard
-            // written once, straight into it
-            var first = new Dictionary<(BillboardModel Model, bool Far), int>();
-            var start = 0;
-            farLandBillboardCount = 0;
-
-            foreach (var far in new[] { false, true }) {
-                foreach (var kv in byModel) {
-                    if (kv.Key.Far != far) {
-                        continue;
-                    }
-
-                    first[kv.Key] = start;
-                    (far ? farLandBatches : billboardBatches).Add((kv.Key.Model.Texture, start,
-                        kv.Value * VerticesABillboard / 3));
-                    start += kv.Value * VerticesABillboard;
-                    farLandBillboardCount += far ? kv.Value : 0;
-                }
-            }
-
-            billboardBuffer = new VertexBuffer(typeof(CustomVertex.PositionNormalTextured), start, device,
-                Usage.WriteOnly, BillboardFormat, ScenePool.Buffers);
-            steps.Add($"buffer {stepClock.ElapsedMilliseconds} ms");
-            stepClock.Restart();
-            WriteBillboards(billboardBuffer, first);
-            steps.Add($"writing {stepClock.ElapsedMilliseconds} ms");
-            billboardPlaces.Clear();
-
-            // a list grown past its use keeps its room: let a big one go, so a far view seen once isn't held for good
-            if (billboardPlaces.Capacity > 50000 && objects < billboardPlaces.Capacity / 2) {
-                billboardPlaces.Capacity = 0;
-            }
-
-            billboardCount = objects;
-            if (farBuildingCount > 0) {
-                PluginCore.LogFile($"[far-buildings] {farBuildingCount} buildings and placed objects past ring "
-                    + $"{patchedRadius}");
-            }
-
-            PluginCore.LogFile($"[billboards] {objects} billboards ({farLandBillboardCount} on the far land) in "
-                + $"{billboardBatches.Count + farLandBatches.Count} runs, "
-                + $"{start / 3} triangles, {FreeMegabytes()} MB free, plugin {GC.GetTotalMemory(false) >> 20} MB, "
-                + $"{blockScenery.Count} blocks' scenery kept; " + string.Join(", ", steps));
-            TeleportTimeline.Note("billboards");
-            LoadPieces.Ready(LoadPieces.Trees);
-        }
-
-        /// <summary>Every billboard placed this build, written into the buffer at its model's run.</summary>
-        private unsafe void WriteBillboards(VertexBuffer buffer, Dictionary<(BillboardModel Model, bool Far), int> first) {
-            var stream = buffer.Lock(0, 0, LockFlags.None);
-
-            try {
-                var vertices = (CustomVertex.PositionNormalTextured*)stream.InternalDataPointer;
-                var next = new Dictionary<(BillboardModel Model, bool Far), int>(first);
-
-                foreach (var (model, x, y, z, yaw, scale, far) in billboardPlaces) {
-                    var at = next[(model, far)];
-                    next[(model, far)] = at + VerticesABillboard;
-                    WriteCrossedQuads(vertices + at, model, x, y, z, yaw, scale);
-                }
-            }
-            finally {
-                buffer.Unlock();
             }
         }
 
@@ -591,6 +496,11 @@ namespace DaraletPlayer.Ui {
                 device.SamplerState[0].MipFilter = TextureFilter.Linear;
 
                 foreach (var batch in runs) {
+                    // a model whose picture couldn't be drawn (BillboardModels) has none
+                    if (batch.Texture == null) {
+                        continue;
+                    }
+
                     device.SetTexture(0, batch.Texture);
                     device.DrawPrimitives(PrimitiveType.TriangleList, batch.Start, batch.Triangles);
                 }
@@ -608,6 +518,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private void ClearBillboards() {
+            AbortWriting();
             ClearFarTrees();
             billboardBuffer?.Dispose();
             billboardBuffer = null;

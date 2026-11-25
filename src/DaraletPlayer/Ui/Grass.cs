@@ -108,6 +108,8 @@ namespace DaraletPlayer.Ui {
             : $"{chunks.Values.Sum(c => c.Clumps)} clumps of grass in {chunks.Count} chunks";
 
         private void Core_RenderFrame(object sender, EventArgs e) {
+            using var hitch = HitchLog.Measure("grass");
+
             if (disposed || failed) {
                 return;
             }

@@ -78,6 +78,8 @@ namespace DaraletPlayer.Ui {
         private IntPtr vertexShader;
         private IntPtr pixelShader;
         private RegionDesc region;
+        /// <summary>The terrains' pictures and alpha maps made (StartTerrain, on a worker).</summary>
+        private volatile bool terrainReady;
         private VertexBuffer vertices;
         private IndexBuffer indices;
         private int vertexCount;
@@ -142,6 +144,8 @@ namespace DaraletPlayer.Ui {
         }
 
         private void Core_RenderFrame(object sender, EventArgs e) {
+            using var hitch = HitchLog.Measure("far land");
+
             if (disposed || failed) {
                 if (failed) {
                     LoadPieces.Ready(LoadPieces.FarLand);
@@ -235,8 +239,12 @@ namespace DaraletPlayer.Ui {
 
             if (region == null) {
                 region = portal.ReadFromDat<RegionDesc>(RegionId);
-                FindColours(portal);
-                LoadShapes(portal);
+                StartTerrain(portal);
+            }
+
+            // the terrains' pictures and the alpha maps are made on a worker at first (StartTerrain)
+            if (!terrainReady) {
+                return;
             }
 
             NoteCoarseRings(home);
@@ -413,19 +421,88 @@ namespace DaraletPlayer.Ui {
             return new LandBlock { Heights = land.Height.ToArray(), Terrain = land.Terrain.ToArray() };
         }
 
-        /// <summary>Each terrain's colour: its texture in the region's TexMerge, averaged (as Grass does).</summary>
-        private void FindColours(DatDatabase portal) {
+        /// <summary>
+        /// The terrains' textures and the alpha maps read on the game's thread (the dat readers aren't safe on another),
+        /// then decoded and shrunk for every tier on a worker, terrainReady once they're done: all on the game's thread,
+        /// the first frame at login took 594 ms (November 2026).
+        /// </summary>
+        private void StartTerrain(DatDatabase portal) {
+            var colourSources = ReadColourSources(portal);
+            var shapeSources = ReadShapeSources(portal);
+
+            System.Threading.Tasks.Task.Run(() => {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+
+                try {
+                    FindColours(colourSources);
+                    LoadShapes(shapeSources);
+                    PluginCore.LogFile($"[far-land] terrain pictures and alpha maps made in "
+                        + $"{clock.Elapsed.TotalMilliseconds:0} ms on a worker");
+                }
+                catch (Exception ex) {
+                    PluginCore.LogFile("[far-land] terrain pictures couldn't be made: " + ex);
+                }
+                finally {
+                    terrainReady = true;
+                }
+            });
+        }
+
+        /// <summary>A terrain's texture as read from the dats, for the worker; Error if it couldn't be.</summary>
+        private sealed class ColourSource {
+            public ACE.DatLoader.Entity.TMTerrainDesc Desc;
+            public int Type;
+            public uint TextureId;
+            public DatTexture Image;
+            public string Error;
+        }
+
+        private List<ColourSource> ReadColourSources(DatDatabase portal) {
+            var sources = new List<ColourSource>();
+            var seen = new HashSet<int>();
+
             foreach (var desc in region.TerrainInfo.LandSurfaces.TexMerge.TerrainDesc) {
                 var type = (int)desc.TerrainType;
+
+                if (!seen.Add(type)) {
+                    continue;
+                }
+
+                var source = new ColourSource { Desc = desc, Type = type };
+
+                try {
+                    var id = desc.TerrainTex.TexGID;
+                    source.TextureId = id >> 24 == 6 ? id : portal.ReadFromDat<SurfaceTexture>(id).Textures[0];
+                    source.Image = portal.ReadFromDat<DatTexture>(source.TextureId);
+                }
+                catch (Exception ex) {
+                    source.Error = ex.Message;
+                }
+
+                sources.Add(source);
+            }
+
+            return sources;
+        }
+
+        /// <summary>Each terrain's colour: its texture in the region's TexMerge, averaged (as Grass does).</summary>
+        private void FindColours(List<ColourSource> sources) {
+            foreach (var source in sources) {
+                var type = source.Type;
+                var desc = source.Desc;
 
                 if (colours.ContainsKey(type)) {
                     continue;
                 }
 
                 try {
+                    if (source.Error != null) {
+                        throw new InvalidOperationException(source.Error);
+                    }
+
                     var id = desc.TerrainTex.TexGID;
-                    var textureId = id >> 24 == 6 ? id : portal.ReadFromDat<SurfaceTexture>(id).Textures[0];
-                    var image = portal.ReadFromDat<DatTexture>(textureId);
+                    var textureId = source.TextureId;
+                    var image = source.Image;
                     var pixels = TextureDecode.Decode((uint)image.Format, image.SourceData, image.Width, image.Height,
                         null);
                     var average = pixels == null ? 0xFF6A8040u : GrassPicture.Average(pixels);

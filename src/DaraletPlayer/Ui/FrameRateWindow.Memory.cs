@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using DaraletPlayer.Feed;
 using ImGuiNET;
 
@@ -31,34 +32,80 @@ namespace DaraletPlayer.Ui {
         private double nextLargest;
         private long largestFreeMb;
 
+        /// <summary>A reading made off the game's thread, waiting to be added on it (MemoryHistory isn't shared).</summary>
+        private MemorySample? readySample;
+        private readonly object readyLock = new object();
+        private int readingMemory;
+
+        /// <summary>
+        /// Every MemoryEvery seconds a reading, made on a thread of the pool: the address space walk (VirtualQuery over
+        /// 4 GB) and the process's sizes (Process.Refresh, which on .NET Framework asks Windows about every process on
+        /// the computer) ran on the game's thread, likely the frame of about 40 ms every 10 seconds in the frame rate log
+        /// (November 2026, the user's "lag spikes while running around").
+        /// </summary>
         private void SampleMemory(double now) {
-            if (now < nextMemorySample) {
+            MemorySample? ready;
+
+            lock (readyLock) {
+                ready = readySample;
+                readySample = null;
+            }
+
+            if (ready != null) {
+                memory.Add(ready.Value);
+            }
+
+            if (now < nextMemorySample || Volatile.Read(ref readingMemory) != 0) {
                 return;
             }
 
             nextMemorySample = now + MemoryEvery;
+            var walk = now >= nextLargest;
 
-            if (now >= nextLargest) {
+            if (walk) {
                 nextLargest = now + LargestEvery;
+            }
+
+            readingMemory = 1;
+            ThreadPool.QueueUserWorkItem(_ => {
+                try {
+                    var sample = ReadMemory(now, walk);
+
+                    lock (readyLock) {
+                        readySample = sample;
+                    }
+                }
+                catch (Exception ex) {
+                    PluginCore.LogFile("[memory] " + ex.Message);
+                }
+                finally {
+                    Volatile.Write(ref readingMemory, 0);
+                }
+            });
+        }
+
+        /// <summary>One reading, on a thread of the pool (one at a time); null if Windows wouldn't say.</summary>
+        private MemorySample? ReadMemory(double now, bool walk) {
+            if (walk) {
                 largestFreeMb = FreePieces().Largest / (1024 * 1024);
             }
 
             var status = new MemoryStatusEx { Length = (uint)Marshal.SizeOf<MemoryStatusEx>() };
 
             if (!GlobalMemoryStatusEx(ref status)) {
-                return;
+                return null;
             }
 
             process = process ?? Process.GetCurrentProcess();
             process.Refresh();
             var total = (long)(status.TotalVirtual / (1024 * 1024));
             var free = (long)(status.AvailVirtual / (1024 * 1024));
-            memory.Add(new MemorySample {
+            return new MemorySample {
                 At = now, TotalMb = total, UsedMb = total - free, LargestFreeMb = largestFreeMb,
                 PrivateMb = process.PrivateMemorySize64 / (1024 * 1024),
                 WorkingSetMb = process.WorkingSet64 / (1024 * 1024),
                 ManagedMb = GC.GetTotalMemory(false) / (1024 * 1024),
-            });
+            };
         }
 
         private void RenderMemory(double now) {

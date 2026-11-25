@@ -64,16 +64,20 @@ namespace DaraletPlayer.Ui {
                 }
             }
 
+            // walked on a thread of the pool, as the memory readings are (FrameRateWindow.Memory.cs): on the game's thread
+            // it was likely half of the frame of about 40 ms every 10 seconds; the line says how long it took
             if (now >= nextSpaceLine) {
                 nextSpaceLine = now + 10;
-
-                try {
-                    PluginCore.LogFile("[device] " + AddressSpace());
-                }
-                catch (Exception ex) {
-                    // never at the frame rate log's cost: it's written after this
-                    PluginCore.LogFile("[device] can't read the address space: " + ex.Message);
-                }
+                System.Threading.ThreadPool.QueueUserWorkItem(_ => {
+                    try {
+                        var clock = System.Diagnostics.Stopwatch.StartNew();
+                        var line = AddressSpace();
+                        PluginCore.LogFile($"[device] {line} (walked in {clock.Elapsed.TotalMilliseconds:0.0} ms)");
+                    }
+                    catch (Exception ex) {
+                        PluginCore.LogFile("[device] can't read the address space: " + ex.Message);
+                    }
+                });
             }
         }
 

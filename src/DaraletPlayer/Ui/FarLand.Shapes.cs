@@ -23,39 +23,85 @@ namespace DaraletPlayer.Ui {
             public int[] Corners = new int[4];
         }
 
-        private void LoadShapes(DatDatabase portal) {
+        /// <summary>An alpha map as read from the dats on the game's thread, for the worker (StartTerrain).</summary>
+        private sealed class ShapeSource {
+            public List<AlphaShape> Into;
+            public int Code;
+            public uint Id;
+            public string Kind;
+            public List<uint> Candidates;
+            public uint TextureId;
+            public DatTexture Image;
+            public string Error;
+        }
+
+        private List<ShapeSource> ReadShapeSources(DatDatabase portal) {
             var merge = region.TerrainInfo.LandSurfaces.TexMerge;
+            var sources = new List<ShapeSource>();
 
             foreach (var map in merge.CornerTerrainMaps) {
-                AddShape(portal, cornerShapes, (int)map.TCode, map.TexGID, "corner");
+                sources.Add(ReadShape(portal, cornerShapes, (int)map.TCode, map.TexGID, "corner"));
             }
 
             foreach (var map in merge.SideTerrainMaps) {
-                AddShape(portal, sideShapes, (int)map.TCode, map.TexGID, "side");
+                sources.Add(ReadShape(portal, sideShapes, (int)map.TCode, map.TexGID, "side"));
             }
 
             foreach (var map in merge.RoadMaps) {
-                AddShape(portal, roadShapes, (int)map.RCode, map.RoadTexGID, "road");
+                sources.Add(ReadShape(portal, roadShapes, (int)map.RCode, map.RoadTexGID, "road"));
             }
+
+            return sources;
         }
 
-        private static void AddShape(DatDatabase portal, List<AlphaShape> into, int code, uint id, string kind) {
-            var shape = new AlphaShape { Code = code };
+        private static ShapeSource ReadShape(DatDatabase portal, List<AlphaShape> into, int code, uint id, string kind) {
+            var source = new ShapeSource { Into = into, Code = code, Id = id, Kind = kind };
 
             try {
                 // the first of the surface texture's pictures that the portal dat holds (some live in another dat)
-                var candidates = id >> 24 == 6 ? new List<uint> { id } : portal.ReadFromDat<SurfaceTexture>(id).Textures;
-                var textureId = candidates[0];
-                var image = new DatTexture();
+                source.Candidates = id >> 24 == 6 ? new List<uint> { id }
+                    : portal.ReadFromDat<SurfaceTexture>(id).Textures;
+                source.TextureId = source.Candidates[0];
+                source.Image = new DatTexture();
 
-                foreach (var candidate in candidates) {
-                    image = portal.ReadFromDat<DatTexture>(candidate);
-                    textureId = candidate;
+                foreach (var candidate in source.Candidates) {
+                    source.Image = portal.ReadFromDat<DatTexture>(candidate);
+                    source.TextureId = candidate;
 
-                    if (image.SourceData != null && image.SourceData.Length > 0) {
+                    if (source.Image.SourceData != null && source.Image.SourceData.Length > 0) {
                         break;
                     }
                 }
+            }
+            catch (Exception ex) {
+                source.Error = ex.Message;
+            }
+
+            return source;
+        }
+
+        /// <summary>Every alpha map decoded and shrunk for each tier, in its four turns (on a worker).</summary>
+        private static void LoadShapes(List<ShapeSource> sources) {
+            foreach (var source in sources) {
+                AddShape(source);
+            }
+        }
+
+        private static void AddShape(ShapeSource source) {
+            var into = source.Into;
+            var id = source.Id;
+            var kind = source.Kind;
+            var shape = new AlphaShape { Code = source.Code };
+
+            try {
+                if (source.Error != null) {
+                    throw new InvalidOperationException(source.Error);
+                }
+
+                var code = source.Code;
+                var candidates = source.Candidates;
+                var textureId = source.TextureId;
+                var image = source.Image;
                 var pixels = TextureDecode.Decode((uint)image.Format, image.SourceData, image.Width, image.Height, null);
 
                 if (pixels == null) {

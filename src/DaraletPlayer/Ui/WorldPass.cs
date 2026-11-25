@@ -338,7 +338,10 @@ namespace DaraletPlayer.Ui {
 
                     try {
                         foreach (var drawer in drawers.ToArray()) {
-                            drawer.Draw(device);
+                            // timed under the drawer's class name, apart from its RenderFrame work (Ui/HitchLog.cs)
+                            using (HitchLog.Measure(drawer.Draw.Method.DeclaringType?.Name ?? "world pass")) {
+                                drawer.Draw(device);
+                            }
                         }
                     }
                     finally {

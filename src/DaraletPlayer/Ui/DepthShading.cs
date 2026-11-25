@@ -156,6 +156,8 @@ namespace DaraletPlayer.Ui {
             : depthTexture == null ? "shading off" : $"shading on, {framesDrawn} frames drawn, {framesTakenBack} taken back";
 
         private void Core_RenderFrame(object sender, EventArgs e) {
+            using var hitch = HitchLog.Measure("shading");
+
             if (disposed || failed) {
                 return;
             }

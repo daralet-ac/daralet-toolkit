@@ -11,7 +11,8 @@ namespace DaraletPlayer.Ui {
             Middle = middle;
         }
 
-        public Texture Texture { get; }
+        /// <summary>Null until BillboardModels.Collect has made it from the worker's picture.</summary>
+        public Texture Texture { get; set; }
 
         public float Width { get; }
 

@@ -2506,7 +2506,11 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   model is drawn side on once by a small software renderer (a Setup's parts by its first placement frame and default
   scales; every colour format a dat can hold decoded, `TextureDecode.Decode`, so a season's new trees draw too: Daralet
   changes season by a new dat set, and nothing of the billboards is kept between sessions, so they follow it; clip-map surfaces cut out below half alpha) into a 128-pixel-tall
-  A8R8G8B8 texture (managed pool); models under 2 m (the ground scatter) get none. Every block within the landscape
+  A8R8G8B8 texture (managed pool); models under 2 m (the ground scatter) get none. **Drawn on a worker** (November
+  2026: 30 to 170 ms a model on the game's thread, a hitch whenever new trees came into view): the dats are read on
+  the game's thread, the decoding, drawing and smaller copies on up to two pool threads (`BillboardModels.StartDrawing`),
+  and `Collect` makes the textures, 3 ms a frame; the placing isn't done until `Pending` is 0, so the old billboards
+  stay drawn till the new come in whole. Untested in the game when written. Every block within the landscape
   radius outside the full-detail ring has its scenery worked out by `SceneryLayout` (4 ms a frame, `WorkOutBudgetMs`: it was 6 blocks a frame, and a block takes only 0.05 to 0.07 ms, measured on the dats round Hebian-to, so 3,300 blocks waited about 9 seconds for 0.2 seconds of work; a disk cache of the worked-out blocks, the first plan, would have read about as slowly as the work it saved, November 2026), and each object
   becomes two crossed upright quads turned by its yaw and sized by its scale, in one vertex buffer grouped by model,
   made again when you cross a landblock or a setting changes. Drawn inside the game's frame (`Ui/WorldPass.cs`, below), after the solid world and
@@ -2559,7 +2563,13 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   a model and texture, in the game's frame (WorldPass) before the billboards. The shaders place, light (the
   billboards' light: ambient plus the sun's share by strength), cut out and fog (the game's linear fog, which
   shaders get none of: its start, end and colour read from the device). `VertexElement.VertexDeclarationEnd` needs
-  Microsoft.VisualC to compile, so the end is written out. Seen in the game at the plateau overlook: real trees to 3
+  Microsoft.VisualC to compile, so the end is written out. **Textures on a worker** (`FarTreeModels.TextureFor`,
+  `FarTreeTexture`, shared by surface; November 2026: a teleport into a forest spent 2.5 s of the game's thread on
+  them over 527 models, up to 349 ms a model, timed in the `[far-trees] model` lines): the dats are read on the game's
+  thread, the decoding and smaller copies done on up to two pool threads, `Collect` uploading 3 ms a frame; the
+  placing waits for `Pending` as for the billboards, and a part with no texture isn't drawn. The geometry and its
+  buffers are still made on the game's thread (0.8 s over those 527, up to 96 ms a model). Untested in the game when
+  written. Seen in the game at the plateau overlook: real trees to 3
   landblocks 52 fps; real to 2 with billboards 98; real to 2 with 3D trees on ring 3 (1,322 trees) 103, rings 3 to
   6 (8,028 trees, 1.4 million triangles) 104; the 3D ring looked all but the same as the real one.
 - **Budget and presets** (`Ui/OptionsPanel.Budget.cs`, `Feed/GraphicsCost.cs`, `Feed/GraphicsPresets.cs`; the user's call,
@@ -2684,6 +2694,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   Tried in the game (the Holtburg overlook, landscape 11, fog 10%): rings 11 to 24, 1,960 blocks, 376,320 triangles,
   10.4 MB, built in 49 ms; the far snow-capped mountains showed where there had been sky, 90 fps, free memory 90 MB
   less (the buffers' system copies and the build's lists, not collected yet). `[far-land]` lines in log.txt.
+  The terrains' pictures and alpha maps, made once a session for every tier, took a 594 ms frame at login on the
+  game's thread: their dats are read there and the decoding and shrinking done on a worker (`FarLand.StartTerrain`),
+  nothing else of the far land happening till `terrainReady`. Untested in the game when written.
   Water terrains (0x10 to 0x14) are their own blue textures (0x10 `234C6E`, 0x11 teal `154450`, 0x12 to 0x14 darker),
   lit as the ground (with water reflections off, 25, 57, 77 against the game's 27, 57, 74). A fixed
   blue came first, taken for right because the vertex colours had averaged narrow rivers with the grass beside them
@@ -2743,11 +2756,14 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   half a kilometer off) isn't drawn. Tried in the game (landscape 8, rings 3 to 8 taken over, 264 blocks): the river
   keeps its shape, 92 fps, about 6,000 block draws skipped a second. The game still loads those blocks, so this is
   for looks, not memory.
+- **Hitch log** (`Ui/HitchLog.cs`; November 2026, the user's "hitching every few seconds while running around"): every  frame over 40 ms with the game in front gets a `[hitch]` line in log.txt (400 a session): its length, whether a  garbage collection ran in it and the managed heap's size, and the plugin's pieces that took time in it, each timed  with `using var _ = HitchLog.Measure("name")` (the draw distance's RenderFrame as `billboards` and `draw  distance`, `far land`, `grass`, `shading`, and each world-pass drawer by its class name), the rest being the  game's and other plugins'. The frame is the frame rate window's, one RenderFrame to the next. Time anything new  that runs every frame the same way. Untested in the game when written.
 - **Memory** (`Ui/FrameRateWindow.Memory.cs`, `Feed/MemoryHistory.cs`, `MemorySample.cs`; the user's call, November 2026:
   "the client's memory leak is my top concern"): the Frame Rate window's Memory section, every 2 s from login whether
   it shows or not: the 32-bit address space used of its total (GlobalMemoryStatusEx; the real limit), private bytes
   and working set (Process), the managed heap (GC.GetTotalMemory, every plugin and every hot-reloaded copy in it), and
-  every 10 s the largest free piece (the VirtualQuery walk the device lines use, `FreePieces`); growth in MB a minute
+  every 10 s the largest free piece (the VirtualQuery walk the device lines use, `FreePieces`), all read on a
+  thread of the pool (`ReadMemory`), as the device line's walk is, since on the game's thread they were likely a
+  frame of about 40 ms every 10 s (not confirmed; the device line now says how long its walk took); growth in MB a minute
   over 5 and 15 minutes and since login (a fitted line, so one load doesn't decide it), minutes until 512 MB is left
   at that rate, a 15-minute graph with the marks; Clear forgets it. The frame rate log's rows end with used_mb,
   private_mb, working_set_mb, plugin_mb and largest_free_mb. Seen in the game: 2,987 MB used, 2,036 private, the
@@ -2785,7 +2801,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   camera still behind you moved the shadow maps and the far scenery 192 m (the user's screenshots, November 2026). So
   everything drawn in the 3D world measures from `RenderOrigin.Landblock` (billboards, 3D trees, grass, shadow maps,
   the water map, lamps), your place is `RenderOrigin.Player()`, and billboards and 3D trees made for another landblock
-  are drawn shifted by the landblocks between until they're made again, so the far scenery neither jumps nor blinks. **Their memory** (November 2026): each billboard's 12 vertices are written once, straight into the locked buffer (`WriteBillboards`), from a reused list of placements (`billboardPlaces`); the build once grew a list of vertices per model, copied them into one array and that into the buffer, three large copies in the large object heap on every landblock crossed, and kept every block's worked-out scenery ever seen (`ForgetScenerySeen` now drops blocks no longer wanted). At Holtburg with 76,435 billboards a fresh login had 679 MB free before and 1,099 after; the plugin's heap held at about 152 MB through rebuilds. They're built round your character's landblock (the game's full-detail ring is round it), and the centre the drawn buffers are shifted from changes only once the new ones are made (`pendingHome`): set at once, the old ones were drawn a landblock off while the new were worked out, and the far forest vanished at an edge and came back a few steps on (seen in the game).
+  are drawn shifted by the landblocks between until they're made again, so the far scenery neither jumps nor blinks. **Their memory** (November 2026): each billboard's 12 vertices are written once, straight into the locked buffer, from a reused list of placements (`billboardPlaces`, sorted by model run into the reused `writeOrder`); **a slice a frame** (`DrawDistance.Writing.cs`, `WriteSome`, 4 ms, one stretch of the buffer locked each frame, the old billboards drawn till `SwapBillboards`): written whole in one frame, 258,000 billboards (99 MB) took 430 ms, a 450 ms hang at every landblock crossed, the user's "lag spikes while running around" (November 2026, the frame rate log against the `[billboards]` build lines); untested in the game when written; the build once grew a list of vertices per model, copied them into one array and that into the buffer, three large copies in the large object heap on every landblock crossed, and kept every block's worked-out scenery ever seen (`ForgetScenerySeen` now drops blocks no longer wanted). At Holtburg with 76,435 billboards a fresh login had 679 MB free before and 1,099 after; the plugin's heap held at about 152 MB through rebuilds. They're built round your character's landblock (the game's full-detail ring is round it), and the centre the drawn buffers are shifted from changes only once the new ones are made (`pendingHome`): set at once, the old ones were drawn a landblock off while the new were worked out, and the far forest vanished at an edge and came back a few steps on (seen in the game).
   The memory panel's time-left warning waits for five minutes of readings and goes by the 15-minute rate: a minute
   holding a landscape load read +105 MB/min.
 - **Lamp light and glow** (the user's call, November 2026: "lighting/shadows from non-sun light sources, and maybe

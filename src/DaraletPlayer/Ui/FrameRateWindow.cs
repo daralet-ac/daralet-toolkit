@@ -92,6 +92,8 @@ namespace DaraletPlayer.Ui {
                     stats.Add(now, (now - lastFrame) * 1000);
                 }
 
+                HitchLog.FrameEnded(lastFrame >= 0 ? (now - lastFrame) * 1000 : 0, wasInFront != false);
+
                 lastFrame = now;
                 SampleMemory(now);
                 WriteLog(now);

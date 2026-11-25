@@ -117,6 +117,7 @@ namespace DaraletPlayer.Ui {
                 QuietNow = Arriving;
 
                 if (CoreManager.Current.CharacterFilter.LoginStatus == 3) {
+                    using var hitch = HitchLog.Measure("billboards");
                     BillboardFrame();
                 }
 
@@ -126,6 +127,7 @@ namespace DaraletPlayer.Ui {
 
                 // four times a second while stepping up, so a step follows the last as soon as it's settled
                 nextLook = DateTime.UtcNow.AddSeconds(AtTarget ? 1 : 0.25);
+                using var hitchApply = HitchLog.Measure("draw distance");
                 Apply();
             }
             catch (Exception ex) {

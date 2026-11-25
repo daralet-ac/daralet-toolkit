@@ -15,7 +15,7 @@ namespace DaraletPlayer.Ui {
     /// (FarTreeInstance: place, height, size, turn) in one buffer, and one DrawIndexedPrimitive a model and texture.
     /// <para>
     /// Same objects as the billboards (SceneryLayout's, at the density in use, stood on the ground the game draws, as
-    /// FinishBillboards stands them), lit the same (the game's ambient and its share of the sun, by strength), drawn in
+    /// SwapBillboards stands them), lit the same (the game's ambient and its share of the sun, by strength), drawn in
     /// the game's frame before its see-through things (WorldPass) with the device's camera. Shaders (fartree.vs.hlsl,
     /// fartree.ps.hlsl) do the placing, the light, the cut out leaves and the game's linear fog, which the device gives
     /// shaders none of: its start, end and colour are read from the device as the game left them. Stream 0 is the
@@ -43,7 +43,7 @@ namespace DaraletPlayer.Ui {
             return rings > 0 && ring <= TreeRing + rings;
         }
 
-        /// <summary>The far trees' instances, one buffer, in runs by model (from FinishBillboards).</summary>
+        /// <summary>The far trees' instances, one buffer, in runs by model (from SwapBillboards).</summary>
         private void BuildFarTrees(Device device, Dictionary<FarTreeModel, List<FarTreeInstance>> byModel,
             Dictionary<FarTreeModel, List<FarTreeInstance>> onFarLand) {
             ClearFarTrees();
@@ -169,6 +169,11 @@ namespace DaraletPlayer.Ui {
                         device.Indices = batch.Model.Indices;
 
                         foreach (var part in batch.Model.Parts) {
+                            // a surface whose texture couldn't be made (FarTreeModels) has none
+                            if (part.Texture == null) {
+                                continue;
+                            }
+
                             light[3] = part.CutOut ? 1 : 0;
                             DeviceCalls.PixelConstants(device, 0, light);
                             device.SetTexture(0, part.Texture);

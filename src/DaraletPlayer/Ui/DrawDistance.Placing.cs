@@ -10,8 +10,9 @@ namespace DaraletPlayer.Ui {
     /// Each build placed every far object of every block (about 182,000 billboards, 5,000 3D trees and 1,700 far
     /// buildings) in one frame: 123 ms at a crossing, and 1,358 ms the first time in an area, where each model's picture
     /// is made as it's first met. Now the blocks are placed as many a frame as fit in PlacingBudgetMs, the old billboards,
-    /// trees and far buildings drawn meanwhile (they share one home, so they swap together, in FinishBillboards), and a
-    /// new set of blocks (another crossing) starts the placing again.
+    /// trees and far buildings drawn meanwhile (they share one home, so they swap together, in SwapBillboards once the
+    /// buffer is written, a slice a frame too, DrawDistance.Writing.cs), and a new set of blocks (another crossing) starts
+    /// the placing again.
     /// </summary>
     internal sealed partial class DrawDistance {
         private const double PlacingBudgetMs = 4;
@@ -22,7 +23,10 @@ namespace DaraletPlayer.Ui {
         private uint placeHome;
         private bool placeShow;
         private int placeObjects;
+        /// <summary>Each model's run of billboards (the game's camera's or the far land's) by its index in placeRuns.</summary>
         private Dictionary<(BillboardModel Model, bool Far), int> placeByModel;
+        private readonly List<(BillboardModel Model, bool Far)> placeRuns = new List<(BillboardModel, bool)>();
+        private readonly List<int> placeRunCounts = new List<int>();
         private Dictionary<FarTreeModel, List<FarTreeInstance>> placeFarByModel;
         private Dictionary<FarTreeModel, List<FarTreeInstance>> placeFarLandByModel;
         private readonly WorkTimer placeTimer = new WorkTimer();
@@ -39,6 +43,8 @@ namespace DaraletPlayer.Ui {
             placeShow = Options.Billboards;
             placeObjects = 0;
             placeByModel = new Dictionary<(BillboardModel Model, bool Far), int>();
+            placeRuns.Clear();
+            placeRunCounts.Clear();
             placeFarByModel = new Dictionary<FarTreeModel, List<FarTreeInstance>>();
             placeFarLandByModel = new Dictionary<FarTreeModel, List<FarTreeInstance>>();
             farBuildingCount = 0;
@@ -59,10 +65,15 @@ namespace DaraletPlayer.Ui {
             }
 
             placeTimer.Add(done, clock.Elapsed);
+            // the pictures and textures of models first met are made on workers (BillboardModels, FarTreeModels): the
+            // placing is done once they're all textures, so the old scenery stays drawn till then and the new comes in
+            // whole
+            billboardModels.Collect(device);
+            farTreeModels.Collect(device);
 
-            if (placeAt >= placeBlocks.Count) {
+            if (placeAt >= placeBlocks.Count && billboardModels.Pending == 0 && farTreeModels.Pending == 0) {
                 placing = false;
-                FinishBillboards(device, portal);
+                FinishPlacing(device);
             }
         }
 
@@ -117,7 +128,7 @@ namespace DaraletPlayer.Ui {
                     continue;
                 }
 
-                var model = billboardModels.Get(p.Model, portal, device);
+                var model = billboardModels.Get(p.Model, portal);
                 usedModels.Add(p.Model);
 
                 if (model == null) {
@@ -126,15 +137,23 @@ namespace DaraletPlayer.Ui {
 
                 var z = heights == null || step == 1 ? p.Z : SceneryLayout.Ground(block << 16, heights,
                     region.LandDefs.LandHeightTable, p.X, p.Y, step).Z;
-                placeByModel.TryGetValue((model, beyond), out var count);
-                placeByModel[(model, beyond)] = count + 1;
-                billboardPlaces.Add((model, offsetX + p.X, offsetY + p.Y, z, p.Yaw, p.Scale, beyond));
+
+                if (!placeByModel.TryGetValue((model, beyond), out var run)) {
+                    run = placeRuns.Count;
+                    placeByModel[(model, beyond)] = run;
+                    placeRuns.Add((model, beyond));
+                    placeRunCounts.Add(0);
+                }
+
+                placeRunCounts[run]++;
+                billboardPlaces.Add((run, offsetX + p.X, offsetY + p.Y, z, p.Yaw, p.Scale));
                 placeObjects++;
             }
         }
 
         /// <summary>A placing part way dropped (a new set of blocks, the billboards off, a teleport, a device reset).</summary>
         private void AbortPlacing() {
+            AbortWriting();
             placing = false;
             placeBlocks = null;
             placeByModel = null;
