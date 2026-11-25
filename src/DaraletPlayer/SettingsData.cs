@@ -8,9 +8,13 @@ namespace DaraletPlayer {
     /// <summary>
     /// Everything settings.json holds. SetDefaults runs both when one is made and before one is read from the file:
     /// DataContractJsonSerializer runs no constructors or field initialisers, and an older file may not have every setting.
+    /// Settings it doesn't know (the graphics settings, which moved to Horizon) are kept in ExtensionData and written back,
+    /// so Horizon can still bring them over from this file the first time it starts.
     /// </summary>
     [DataContract]
-    public class SettingsData {
+    public class SettingsData : IExtensibleDataObject {
+        public ExtensionDataObject ExtensionData { get; set; }
+
         public const float MinTextScale = 0.5f;
         public const float MaxTextScale = 2.5f;
         public const int MinCombatTextSize = 12;
@@ -408,30 +412,6 @@ namespace DaraletPlayer {
         /// <summary>The Book window (BookPanel).</summary>
         [DataMember(Name = "book")] public BookOptions Book;
 
-        /// <summary>Draw distance past the game's own settings (DrawDistance, the Options window's Config).</summary>
-        [DataMember(Name = "drawDistance")] public DrawDistanceOptions DrawDistance;
-
-        /// <summary>The frame rate the Graphics tab's budget bar is measured against (OptionsPanel.Budget.cs).</summary>
-        [DataMember(Name = "graphicsTargetFps")] public int GraphicsTargetFps;
-
-        /// <summary>Shading from the game's depth buffer (DepthShading, the Options window's Config).</summary>
-        [DataMember(Name = "shading")] public ShadingOptions Shading;
-
-        /// <summary>Water reflections (DepthShading, the Graphics settings).</summary>
-        [DataMember(Name = "water")] public WaterOptions Water;
-
-        /// <summary>Anti-aliasing and sharpening of the 3D world (DepthShading, the Graphics settings).</summary>
-        [DataMember(Name = "image")] public ImageOptions Image;
-
-        /// <summary>Grass and reeds near you (Grass, the Graphics settings).</summary>
-        [DataMember(Name = "grass")] public GrassOptions Grass;
-
-        /// <summary>Shadows cast by the sun (ShadowCasters, DepthShading), the Graphics settings.</summary>
-        [DataMember(Name = "sunShadows")] public SunShadowOptions SunShadows;
-
-        /// <summary>Light from the game's own lights, with shadows (DepthShading.Lamps), the Graphics settings.</summary>
-        [DataMember(Name = "lampLight")] public LampLightOptions LampLight;
-
         /// <summary>The Radar window (RadarPanel).</summary>
         [DataMember(Name = "radar")] public RadarOptions Radar;
 
@@ -603,14 +583,6 @@ namespace DaraletPlayer {
             Indicators = new IndicatorOptions();
             Link = new LinkOptions();
             Book = new BookOptions();
-            DrawDistance = new DrawDistanceOptions();
-            GraphicsTargetFps = 60;
-            Shading = new ShadingOptions();
-            Water = new WaterOptions();
-            Image = new ImageOptions();
-            Grass = new GrassOptions();
-            SunShadows = new SunShadowOptions();
-            LampLight = new LampLightOptions();
             Radar = new RadarOptions();
             Attributes = new AttributesOptions();
             Spellbook = new SpellbookOptions();

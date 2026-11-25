@@ -42,14 +42,6 @@ namespace DaraletPlayer.Ui {
             : base("options", "Options", settings, new uint[0], new Vector2(500, 120), hideWhen: () => false,
                 defaultSize: new Vector2(330, 620)) {
             interceptor = new GamePanelInterceptor("Options", GamePanelId, () => Options.Replace, Window);
-            // works whether or not this window replaces the game's panel: its settings are only drawn here
-            drawDistance = new DrawDistance(settings);
-            frameRate = new FrameRateWindow(settings);
-            // before the shading, so its occlusion darkens the grass too: Decal calls RenderFrame in subscription order
-            grass = new Grass(settings);
-            farLand = new FarLand(settings, drawDistance);
-            depthShading = new DepthShading(settings);
-            testRunner = new TestRunner(settings, drawDistance, Commit);
             CoreManager.Current.RenderFrame += Core_RenderFrame;
         }
 
@@ -150,25 +142,6 @@ namespace DaraletPlayer.Ui {
             }
             catch (Exception ex) {
                 PluginCore.LogFile("[options] " + ex);
-            }
-
-            // the game's own draw distance back first: its code patched while it's in use
-            try {
-                drawDistance.Dispose();
-            }
-            catch (Exception ex) {
-                PluginCore.LogFile("[draw-distance] " + ex);
-            }
-
-            try {
-                grass.Dispose();
-                farLand.Dispose();
-                depthShading.Dispose();
-                testRunner.Dispose();
-                frameRate.Dispose();
-            }
-            catch (Exception ex) {
-                PluginCore.LogFile("[frame-rate] " + ex);
             }
 
             interceptor.Dispose();

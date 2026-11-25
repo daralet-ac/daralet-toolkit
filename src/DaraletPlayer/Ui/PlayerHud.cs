@@ -93,7 +93,7 @@ namespace DaraletPlayer.Ui {
                 ("link", "Link", gamePanels.Get<LinkPanel>().Window),
                 ("book", "Book", gamePanels.Get<BookPanel>().Window));
             configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow, sharedWindow,
-                gamePanels), chatTab, hideGameUi, launcher, borderless, gamePanels.Get<OptionsPanel>());
+                gamePanels), chatTab, hideGameUi, launcher, borderless);
             leaderboardsTab = new LeaderboardsTab(feed, api);
             // its buttons open the plugin's windows where Client UI Override's Windows row has them ticked
             var attributes = gamePanels.Get<AttributesPanel>();

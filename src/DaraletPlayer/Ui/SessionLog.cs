@@ -87,8 +87,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 PluginCore.LogFile($"[session] Daralet Toolkit {typeof(SessionLog).Assembly.GetName().Version}, screen "
-                    + $"{screen}, {DrawDistance.FreeMegabytes()} MB of the game's address space free; graphics: "
-                    + GraphicsSummary.Of(settings.Data));
+                    + $"{screen}");
             }
             catch (Exception ex) {
                 PluginCore.LogFile("[session] " + ex.Message);

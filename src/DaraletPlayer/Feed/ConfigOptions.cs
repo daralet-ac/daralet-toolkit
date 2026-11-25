@@ -8,9 +8,6 @@ namespace DaraletPlayer.Feed {
     /// 0x23000003.
     /// </summary>
     public static class ConfigOptions {
-        /// <summary>The group the plugin's draw distance goes after, beside the game's graphics settings.</summary>
-        public const string RenderingGroup = "Rendering Quality Options";
-
         public static readonly IReadOnlyList<(string Title, IReadOnlyList<ConfigOption> Options)> Groups = new[] {
             ("Sound Options", (IReadOnlyList<ConfigOption>)new[] {
                 new ConfigOption(ConfigKind.List, "Sound Features", 0x8375C8, "Select stereo or mono sound."),
@@ -54,7 +51,7 @@ namespace DaraletPlayer.Feed {
                     + "degrading. Lower settings draw degrades at closer distances, resulting in better performance.",
                     low: "Close", high: "Far"),
             }),
-            (RenderingGroup, new[] {
+            ("Rendering Quality Options", new[] {
                 new ConfigOption(ConfigKind.List, "Landscape Texture Detail", 0x8375F0, "Adjusts the resolution of "
                     + "landscape textures. Higher detail textures require more video memory but greatly increase quality."),
                 new ConfigOption(ConfigKind.List, "Environment Texture", 0x8375F4, "Adjusts the resolution of object "

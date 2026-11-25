@@ -21,9 +21,6 @@ namespace DaraletPlayer {
         private Settings settings;
         private PlayerFeed feed;
         private PlayerHud hud;
-
-        /// <summary>In minimal mode (Test Runs\minimal.txt), the only thing running.</summary>
-        private Ui.TestRunner minimalRunner;
         private UpdateCheck updates;
         private LfgChatLinks lfgLinks;
         private bool updateAnnounced;
@@ -57,19 +54,7 @@ namespace DaraletPlayer {
             try {
                 DataFolder.MoveOldFolder();
                 SessionLog.Start();
-                Ui.CrashDumpWriter.Start();
-                Ui.CrashDumpWriter.WatchMemory();
-                Ui.CrashDumpWriter.HoldForDebugger();
                 settings = new Settings(log: Log);
-
-                // Test Runs\minimal.txt: nothing but the test runner, so a test run shows what the game does with the
-                // plugin doing nothing else (November 2026: teleport crashes on a bare profile still had to be told from
-                // the plugin's own windows, radar reads and calls into the game, which bare still made)
-                if (File.Exists(System.IO.Path.Combine(DataFolder.For("Test Runs"), "minimal.txt"))) {
-                    LogFile("[session] minimal mode: only the test runner (Test Runs\\minimal.txt)");
-                    minimalRunner = new Ui.TestRunner(settings, null, null);
-                    return;
-                }
 
                 // a hot reload starts after login: the character's own profile is in use from the first frame
                 UseCharacterProfile();
@@ -96,7 +81,6 @@ namespace DaraletPlayer {
         /// the replies from chat (the loader swaps builds in a running game).
         /// </summary>
         protected override void Shutdown() {
-            ShutdownStep(() => minimalRunner?.Dispose());
             ShutdownStep(() => {
                 CoreManager.Current.CommandLineText -= Core_CommandLineText;
                 CoreManager.Current.RenderFrame -= Core_RenderFrame;
@@ -108,8 +92,6 @@ namespace DaraletPlayer {
             ShutdownStep(() => updates?.Dispose());
             ShutdownStep(() => settings?.SaveIfChanged());
             ShutdownStep(() => Loot.KnowsScrollSpell = null);
-            ShutdownStep(TimeOfDay.Release);
-            ShutdownStep(Ui.CrashDumpWriter.Stop);
             ShutdownStep(SessionLog.End);
         }
 

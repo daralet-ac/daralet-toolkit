@@ -20,6 +20,23 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void SettingsMovedToHorizonSurviveASave() {
+            // the graphics settings moved to Horizon, which reads them from this file the first time it starts
+            var path = Path.Combine(folder, "settings.json");
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(path, "{\"threatRows\":3,\"drawDistance\":{\"on\":true,\"farLand\":12}}");
+
+            var settings = new Settings(path);
+            settings.Data.ThreatRows = 4;
+            settings.Save();
+
+            var saved = File.ReadAllText(path);
+            StringAssert.Contains(saved, "\"drawDistance\":{");
+            StringAssert.Contains(saved, "\"farLand\":12");
+            Assert.AreEqual(4, new Settings(path).Data.ThreatRows);
+        }
+
+        [TestMethod]
         public void WindowsAndOptionsSurviveASave() {
             var path = Path.Combine(folder, "settings.json");
             var settings = new Settings(path);

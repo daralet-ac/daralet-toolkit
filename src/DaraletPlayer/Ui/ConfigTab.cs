@@ -17,7 +17,6 @@ namespace DaraletPlayer.Ui {
 
         private readonly Settings settings;
         private readonly ClientUiOverride clientUiOverride;
-        private readonly OptionsPanel graphics;
         private readonly ChatTab chatTab;
         private readonly HideGameUi hideGameUi;
         private readonly Launcher launcher;
@@ -41,14 +40,13 @@ namespace DaraletPlayer.Ui {
         private List<string> exportFiles = new List<string>();
 
         public ConfigTab(Settings settings, ClientUiOverride clientUiOverride, ChatTab chatTab, HideGameUi hideGameUi,
-            Launcher launcher, BorderlessWindow borderless, OptionsPanel graphics) {
+            Launcher launcher, BorderlessWindow borderless) {
             this.settings = settings;
             this.clientUiOverride = clientUiOverride;
             this.chatTab = chatTab;
             this.hideGameUi = hideGameUi;
             this.launcher = launcher;
             this.borderless = borderless;
-            this.graphics = graphics;
         }
 
         private static string Me => CoreManager.Current.CharacterFilter.Name;
@@ -77,14 +75,6 @@ namespace DaraletPlayer.Ui {
                 + "each showing what you pick of the game's chat, with sharp text at any size, items linked in chat, "
                 + "copying, and Hide game chat to use them instead of the game's.")) {
                 chatTab.Render();
-                ImGui.EndTabItem();
-            }
-
-            // every graphics setting the plugin adds, here as well as on the Options window's Config page (the user's
-            // call, November 2026)
-            if (Widgets.TabItem("Graphics", "The frame rate tracker, draw distance (scenery, landscape, billboards), fog "
-                + "and lighting.")) {
-                graphics.RenderGraphics();
                 ImGui.EndTabItem();
             }
 
